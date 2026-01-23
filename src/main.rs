@@ -110,6 +110,24 @@ fn run(file: &PathBuf) -> Result<(), String> {
         "parse error".to_string()
     })?;
 
+    // Type check
+    let mut type_checker = TypeChecker::new();
+    if let Err(errors) = type_checker.check(&ast) {
+        for error in &errors {
+            ctx.error(error.span, &format!("{}", error));
+        }
+        return Err(format!("{} type error(s)", errors.len()));
+    }
+
+    // Borrow check
+    let mut borrow_checker = BorrowChecker::new();
+    if let Err(errors) = borrow_checker.check(&ast) {
+        for error in &errors {
+            ctx.error(error.span, &format!("{}", error));
+        }
+        return Err(format!("{} borrow error(s)", errors.len()));
+    }
+
     // Lower to MIR
     let program = Lowerer::new().lower(&ast).map_err(|errors| {
         for e in &errors {

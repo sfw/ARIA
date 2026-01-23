@@ -176,6 +176,33 @@ pub enum Rvalue {
     Array(Vec<Operand>),
     /// Struct construction
     Struct(String, Vec<(String, Operand)>),
+    /// Enum variant construction: `Color::Red` or `Some(42)`
+    ///
+    /// Creates an enum value with the specified type name, variant, and fields.
+    /// - `type_name`: The enum type (e.g., "Option", "Result", "Color")
+    /// - `variant`: The variant name (e.g., "Some", "None", "Ok", "Err")
+    /// - `fields`: Values for tuple-style variants (empty for unit variants)
+    ///
+    /// # Examples
+    /// ```text
+    /// // None -> Enum { type_name: "Option", variant: "None", fields: [] }
+    /// // Some(42) -> Enum { type_name: "Option", variant: "Some", fields: [42] }
+    /// ```
+    Enum {
+        type_name: String,
+        variant: String,
+        fields: Vec<Operand>,
+    },
+    /// Get discriminant (tag) of an enum value for pattern matching.
+    ///
+    /// Returns an integer that uniquely identifies the variant.
+    /// Used to implement match expressions by comparing discriminants.
+    Discriminant(Local),
+    /// Extract a field from an enum variant by index.
+    ///
+    /// Used after matching to extract bound values from variants like `Some(x)`.
+    /// The index is 0-based for the variant's fields.
+    EnumField(Local, usize),
     /// Field access: `operand.field`
     Field(Operand, String),
     /// Tuple field access: `operand.0`
@@ -391,6 +418,22 @@ impl fmt::Display for Rvalue {
                 }
                 write!(f, " }}")
             }
+            Rvalue::Enum { type_name, variant, fields } => {
+                write!(f, "{}::{}", type_name, variant)?;
+                if !fields.is_empty() {
+                    write!(f, "(")?;
+                    for (i, field) in fields.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", field)?;
+                    }
+                    write!(f, ")")?;
+                }
+                Ok(())
+            }
+            Rvalue::Discriminant(local) => write!(f, "discriminant({})", local),
+            Rvalue::EnumField(local, idx) => write!(f, "{}.{}", local, idx),
             Rvalue::Field(op, field) => write!(f, "{}.{}", op, field),
             Rvalue::TupleField(op, idx) => write!(f, "{}.{}", op, idx),
             Rvalue::Index(base, idx) => write!(f, "{}[{}]", base, idx),

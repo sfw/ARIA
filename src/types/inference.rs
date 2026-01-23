@@ -88,6 +88,26 @@ impl TypeEnv {
             },
         );
 
+        // Add Option variant constructors
+        // Some: T -> Option[T]
+        let some_var = TypeVar::fresh();
+        let some_type = Ty::Fn(
+            vec![Ty::Var(some_var)],
+            Box::new(Ty::Option(Box::new(Ty::Var(some_var)))),
+        );
+        env.bindings.insert(
+            "Some".to_string(),
+            TypeScheme { vars: vec![some_var], ty: some_type },
+        );
+
+        // None: Option[T]
+        let none_var = TypeVar::fresh();
+        let none_type = Ty::Option(Box::new(Ty::Var(none_var)));
+        env.bindings.insert(
+            "None".to_string(),
+            TypeScheme { vars: vec![none_var], ty: none_type },
+        );
+
         // Add Result type
         env.types.insert(
             "Result".to_string(),
@@ -98,6 +118,31 @@ impl TypeEnv {
                     ("Err".to_string(), vec![Ty::Var(TypeVar { id: 1 })]),
                 ],
             },
+        );
+
+        // Add Result variant constructors
+        // Ok: T -> Result[T, E]
+        let ok_t = TypeVar::fresh();
+        let ok_e = TypeVar::fresh();
+        let ok_type = Ty::Fn(
+            vec![Ty::Var(ok_t)],
+            Box::new(Ty::Result(Box::new(Ty::Var(ok_t)), Box::new(Ty::Var(ok_e)))),
+        );
+        env.bindings.insert(
+            "Ok".to_string(),
+            TypeScheme { vars: vec![ok_t, ok_e], ty: ok_type },
+        );
+
+        // Err: E -> Result[T, E]
+        let err_t = TypeVar::fresh();
+        let err_e = TypeVar::fresh();
+        let err_type = Ty::Fn(
+            vec![Ty::Var(err_e)],
+            Box::new(Ty::Result(Box::new(Ty::Var(err_t)), Box::new(Ty::Var(err_e)))),
+        );
+        env.bindings.insert(
+            "Err".to_string(),
+            TypeScheme { vars: vec![err_t, err_e], ty: err_type },
         );
 
         env
@@ -143,6 +188,11 @@ impl TypeEnv {
             bindings: self.bindings.clone(),
             types: self.types.clone(),
         }
+    }
+
+    /// Get all defined variable names in the environment.
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        self.bindings.keys().map(|s| s.as_str())
     }
 }
 
@@ -446,6 +496,7 @@ impl InferenceEngine {
             }
             ItemKind::Enum(e) => {
                 let type_params = self.get_type_params(&e.generics);
+                let enum_name = e.name.name.clone();
 
                 let variants = e
                     .variants
@@ -470,8 +521,36 @@ impl InferenceEngine {
                     })
                     .collect::<Result<Vec<_>, TypeError>>()?;
 
+                // Create type variables for each generic parameter
+                let type_var_map: Vec<(String, TypeVar)> = type_params
+                    .iter()
+                    .map(|name| (name.clone(), TypeVar::fresh()))
+                    .collect();
+
+                // Build the enum type with fresh type variables
+                let enum_ty_args: Vec<Ty> = type_var_map.iter().map(|(_, tv)| Ty::Var(*tv)).collect();
+                let enum_ty = Ty::Named(TypeId::new(&enum_name), enum_ty_args);
+
+                // Add constructor bindings for each variant
+                for (variant_name, field_tys) in &variants {
+                    let constructor_type = if field_tys.is_empty() {
+                        // Unit variant: just the enum type
+                        enum_ty.clone()
+                    } else {
+                        // Tuple variant: function from fields to enum type
+                        Ty::Fn(field_tys.clone(), Box::new(enum_ty.clone()))
+                    };
+
+                    let scheme = TypeScheme {
+                        vars: type_var_map.iter().map(|(_, tv)| *tv).collect(),
+                        ty: constructor_type,
+                    };
+
+                    self.env.insert(variant_name.clone(), scheme);
+                }
+
                 self.env.insert_type(
-                    e.name.name.clone(),
+                    enum_name,
                     TypeDef::Enum { type_params, variants },
                 );
             }
@@ -634,10 +713,16 @@ impl InferenceEngine {
                 if let Some(scheme) = self.env.get(&name.name) {
                     Ok(scheme.instantiate())
                 } else {
-                    Err(TypeError::new(
-                        format!("undefined variable: {}", name.name),
-                        expr.span,
-                    ))
+                    // Check for similar variable names to provide helpful suggestions
+                    let msg = if let Some(suggestion) = self.find_similar_name(&name.name) {
+                        format!(
+                            "undefined variable: `{}`. Did you mean `{}`?",
+                            name.name, suggestion
+                        )
+                    } else {
+                        format!("undefined variable: {}", name.name)
+                    };
+                    Err(TypeError::new(msg, expr.span))
                 }
             }
 
@@ -1319,7 +1404,8 @@ impl InferenceEngine {
                 let err_ty = if let Some(e) = err {
                     self.ast_type_to_ty(e)?
                 } else {
-                    Ty::Named(TypeId::new("Error"), vec![])
+                    // Default error type is Str for `T!` syntax
+                    Ty::Str
                 };
                 Ok(Ty::Result(Box::new(ok_ty), Box::new(err_ty)))
             }
@@ -1362,6 +1448,53 @@ impl InferenceEngine {
     /// Get the current environment.
     pub fn env(&self) -> &TypeEnv {
         &self.env
+    }
+
+    /// Find a similar variable name for typo suggestions.
+    fn find_similar_name(&self, name: &str) -> Option<String> {
+        let mut best_match: Option<(String, usize)> = None;
+
+        for existing in self.env.names() {
+            let dist = Self::edit_distance(name, existing);
+            // Only suggest if edit distance is small relative to name length
+            if dist <= 2 && dist < name.len() / 2 + 1 {
+                match &best_match {
+                    None => best_match = Some((existing.to_string(), dist)),
+                    Some((_, best_dist)) if dist < *best_dist => {
+                        best_match = Some((existing.to_string(), dist))
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        best_match.map(|(name, _)| name)
+    }
+
+    /// Simple edit distance (Levenshtein distance) between two strings.
+    fn edit_distance(a: &str, b: &str) -> usize {
+        let a_chars: Vec<char> = a.chars().collect();
+        let b_chars: Vec<char> = b.chars().collect();
+        let m = a_chars.len();
+        let n = b_chars.len();
+
+        if m == 0 { return n; }
+        if n == 0 { return m; }
+
+        let mut dp = vec![vec![0; n + 1]; m + 1];
+        for i in 0..=m { dp[i][0] = i; }
+        for j in 0..=n { dp[0][j] = j; }
+
+        for i in 1..=m {
+            for j in 1..=n {
+                let cost = if a_chars[i - 1] == b_chars[j - 1] { 0 } else { 1 };
+                dp[i][j] = (dp[i - 1][j] + 1)
+                    .min(dp[i][j - 1] + 1)
+                    .min(dp[i - 1][j - 1] + cost);
+            }
+        }
+
+        dp[m][n]
     }
 }
 

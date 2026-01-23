@@ -47,6 +47,8 @@ pub struct Lowerer {
     loop_stack: Vec<LoopContext>,
     /// Errors accumulated during lowering
     errors: Vec<LowerError>,
+    /// Enum variant to (enum_type_name, variant_fields_count) mapping
+    enum_variants: HashMap<String, (String, usize)>,
 }
 
 #[derive(Debug, Clone)]
@@ -65,11 +67,31 @@ impl Lowerer {
             vars: HashMap::new(),
             loop_stack: Vec::new(),
             errors: Vec::new(),
+            enum_variants: HashMap::new(),
         }
     }
 
     /// Lower a source file to MIR.
     pub fn lower(mut self, source: &SourceFile) -> Result<Program, Vec<LowerError>> {
+        // First pass: collect type definitions (enums, structs) so we know about variants
+        for item in &source.items {
+            if let ItemKind::Enum(e) = &item.kind {
+                let enum_name = e.name.name.clone();
+                for variant in &e.variants {
+                    let field_count = match &variant.kind {
+                        crate::parser::VariantKind::Unit => 0,
+                        crate::parser::VariantKind::Tuple(fields) => fields.len(),
+                        crate::parser::VariantKind::Named(fields) => fields.len(),
+                    };
+                    self.enum_variants.insert(
+                        variant.name.name.clone(),
+                        (enum_name.clone(), field_count),
+                    );
+                }
+            }
+        }
+
+        // Second pass: lower items (functions, impls, etc.)
         for item in &source.items {
             self.lower_item(item);
         }
@@ -106,6 +128,21 @@ impl Lowerer {
                             self.program.functions.insert(name, mir_fn);
                         }
                     }
+                }
+            }
+            ItemKind::Enum(e) => {
+                // Collect enum variants for later recognition
+                let enum_name = e.name.name.clone();
+                for variant in &e.variants {
+                    let field_count = match &variant.kind {
+                        crate::parser::VariantKind::Unit => 0,
+                        crate::parser::VariantKind::Tuple(fields) => fields.len(),
+                        crate::parser::VariantKind::Named(fields) => fields.len(),
+                    };
+                    self.enum_variants.insert(
+                        variant.name.name.clone(),
+                        (enum_name.clone(), field_count),
+                    );
                 }
             }
             // Other items don't generate MIR directly
@@ -221,8 +258,55 @@ impl Lowerer {
                 if let Some(&local) = self.vars.get(&ident.name) {
                     Some(Operand::Local(local))
                 } else {
-                    self.error(format!("undefined variable: {}", ident.name), expr.span);
-                    None
+                    // Check if it's a unit enum variant (like None)
+                    match ident.name.as_str() {
+                        "None" => {
+                            let result = self.new_temp(Ty::Option(Box::new(Ty::Unit)));
+                            self.emit(StatementKind::Assign(
+                                result,
+                                Rvalue::Enum {
+                                    type_name: "Option".to_string(),
+                                    variant: "None".to_string(),
+                                    fields: vec![],
+                                },
+                            ));
+                            return Some(Operand::Local(result));
+                        }
+                        _ => {
+                            // Check for user-defined unit enum variants
+                            if let Some((enum_name, field_count)) = self.enum_variants.get(&ident.name).cloned() {
+                                if field_count == 0 {
+                                    // Unit variant
+                                    let result = self.new_temp(Ty::Named(
+                                        crate::types::TypeId::new(&enum_name),
+                                        vec![],
+                                    ));
+                                    self.emit(StatementKind::Assign(
+                                        result,
+                                        Rvalue::Enum {
+                                            type_name: enum_name,
+                                            variant: ident.name.clone(),
+                                            fields: vec![],
+                                        },
+                                    ));
+                                    return Some(Operand::Local(result));
+                                }
+                            }
+
+                            // Check for similar variable names to provide helpful suggestions
+                            let similar = self.find_similar_name(&ident.name);
+                            let msg = if let Some(suggestion) = similar {
+                                format!(
+                                    "undefined variable: `{}`. Did you mean `{}`?",
+                                    ident.name, suggestion
+                                )
+                            } else {
+                                format!("undefined variable: `{}`", ident.name)
+                            };
+                            self.error(msg, expr.span);
+                            None
+                        }
+                    }
                 }
             }
 
@@ -285,7 +369,67 @@ impl Lowerer {
             }
 
             ExprKind::Call(callee, args) => {
-                // Get function name
+                // Check if this is an enum constructor call like Some(x) or Ok(x)
+                if let ExprKind::Ident(ident) = &callee.kind {
+                    let (is_enum, type_name, variant) = match ident.name.as_str() {
+                        "Some" => (true, "Option".to_string(), "Some".to_string()),
+                        "Ok" => (true, "Result".to_string(), "Ok".to_string()),
+                        "Err" => (true, "Result".to_string(), "Err".to_string()),
+                        _ => (false, String::new(), String::new()),
+                    };
+
+                    if is_enum {
+                        // Lower arguments as enum fields
+                        let field_operands: Vec<Operand> = args
+                            .iter()
+                            .filter_map(|arg| self.lower_expr(&arg.value))
+                            .collect();
+
+                        let result = self.new_temp(Ty::Named(
+                            crate::types::TypeId::new(type_name.clone()),
+                            vec![],
+                        ));
+                        self.emit(StatementKind::Assign(
+                            result,
+                            Rvalue::Enum {
+                                type_name,
+                                variant,
+                                fields: field_operands,
+                            },
+                        ));
+                        return Some(Operand::Local(result));
+                    }
+                }
+
+                // Check if callee is a path like EnumType::Variant(args)
+                if let ExprKind::Path(path) = &callee.kind {
+                    if path.segments.len() == 2 {
+                        let type_name = &path.segments[0].name;
+                        let variant = &path.segments[1].name;
+
+                        // Lower arguments as enum fields
+                        let field_operands: Vec<Operand> = args
+                            .iter()
+                            .filter_map(|arg| self.lower_expr(&arg.value))
+                            .collect();
+
+                        let result = self.new_temp(Ty::Named(
+                            crate::types::TypeId::new(type_name.clone()),
+                            vec![],
+                        ));
+                        self.emit(StatementKind::Assign(
+                            result,
+                            Rvalue::Enum {
+                                type_name: type_name.clone(),
+                                variant: variant.clone(),
+                                fields: field_operands,
+                            },
+                        ));
+                        return Some(Operand::Local(result));
+                    }
+                }
+
+                // Regular function call
                 let func_name = match &callee.kind {
                     ExprKind::Ident(ident) => ident.name.clone(),
                     ExprKind::Path(path) => {
@@ -589,12 +733,48 @@ impl Lowerer {
             }
 
             ExprKind::Path(path) => {
-                // Try to resolve as variable
+                // Try to resolve as variable first
                 if path.segments.len() == 1 {
                     let name = &path.segments[0].name;
                     if let Some(&local) = self.vars.get(name) {
                         return Some(Operand::Local(local));
                     }
+                    // Check if it's a unit enum variant (like None)
+                    match name.as_str() {
+                        "None" => {
+                            let result = self.new_temp(Ty::Option(Box::new(Ty::Unit)));
+                            self.emit(StatementKind::Assign(
+                                result,
+                                Rvalue::Enum {
+                                    type_name: "Option".to_string(),
+                                    variant: "None".to_string(),
+                                    fields: vec![],
+                                },
+                            ));
+                            return Some(Operand::Local(result));
+                        }
+                        _ => {}
+                    }
+                }
+                // Check if this is an enum variant path (like Color::Red)
+                if path.segments.len() == 2 {
+                    let type_name = &path.segments[0].name;
+                    let variant = &path.segments[1].name;
+
+                    // Create unit variant
+                    let result = self.new_temp(Ty::Named(
+                        crate::types::TypeId::new(type_name.clone()),
+                        vec![],
+                    ));
+                    self.emit(StatementKind::Assign(
+                        result,
+                        Rvalue::Enum {
+                            type_name: type_name.clone(),
+                            variant: variant.clone(),
+                            fields: vec![],
+                        },
+                    ));
+                    return Some(Operand::Local(result));
                 }
                 self.error(format!("unresolved path: {:?}", path), expr.span);
                 None
@@ -665,73 +845,241 @@ impl Lowerer {
         arms: &[crate::parser::MatchArm],
         _span: Span,
     ) -> Option<Operand> {
-        let scrutinee_val = self.lower_expr(scrutinee)?;
-        let result = self.new_temp(Ty::Int);
+        let scrutinee_op = self.lower_expr(scrutinee)?;
+
+        // Store scrutinee in a local for repeated access
+        let scrut_local = self.new_temp(Ty::Unit);
+        self.emit(StatementKind::Assign(scrut_local, Rvalue::Use(scrutinee_op)));
+
+        let result = self.new_temp(Ty::Unit);
         let exit_block = self.new_block();
 
-        // For now, only handle simple integer patterns
-        let mut targets = Vec::new();
-        let mut default_arm = None;
+        // Collect arm info for processing
+        let mut arm_blocks: Vec<(BlockId, BlockId)> = Vec::new(); // (test_block, body_block)
 
-        for arm in arms {
-            let arm_block = self.new_block();
+        for _ in arms {
+            let test_block = self.new_block();
+            let body_block = self.new_block();
+            arm_blocks.push((test_block, body_block));
+        }
 
-            match &arm.pattern.kind {
-                PatternKind::Literal(Literal { kind: LiteralKind::Int(n), .. }) => {
-                    targets.push((*n as i64, arm_block));
-                }
-                PatternKind::Wildcard => {
-                    default_arm = Some(arm_block);
-                }
-                PatternKind::Ident(ident, _, _) => {
-                    // Bind the variable and treat as default
-                    self.current_block = Some(arm_block);
-                    let local = self.new_local(Ty::Int, Some(ident.name.clone()));
-                    self.vars.insert(ident.name.clone(), local);
-                    self.emit(StatementKind::Assign(local, Rvalue::Use(scrutinee_val.clone())));
-
-                    if default_arm.is_none() {
-                        default_arm = Some(arm_block);
-                    }
-                }
-                _ => {
-                    // Unsupported pattern, treat as default
-                    if default_arm.is_none() {
-                        default_arm = Some(arm_block);
-                    }
-                }
-            }
-
-            // Lower arm body
-            self.current_block = Some(arm_block);
-            if let Some(val) = self.lower_expr(&arm.body) {
-                self.emit(StatementKind::Assign(result, Rvalue::Use(val)));
-            }
+        // Start by jumping to first test
+        if !arm_blocks.is_empty() {
+            self.terminate(Terminator::Goto(arm_blocks[0].0));
+        } else {
             self.terminate(Terminator::Goto(exit_block));
         }
 
-        // Create switch
-        let default = default_arm.unwrap_or(exit_block);
-        self.current_block = Some(self.current_block.unwrap()); // Reset to pre-switch block
+        // Process each arm
+        for (i, arm) in arms.iter().enumerate() {
+            let (test_block, body_block) = arm_blocks[i];
+            let next_test = if i + 1 < arm_blocks.len() {
+                arm_blocks[i + 1].0
+            } else {
+                exit_block
+            };
 
-        // Actually, we need to switch from the original block
-        // For simplicity, create simple if-else chain for now
-        let check_block = self.new_block();
-        self.terminate(Terminator::Goto(check_block));
-        self.current_block = Some(check_block);
+            self.current_block = Some(test_block);
 
-        if !targets.is_empty() {
-            self.terminate(Terminator::Switch {
-                operand: scrutinee_val,
-                targets,
-                default,
-            });
-        } else {
-            self.terminate(Terminator::Goto(default));
+            match &arm.pattern.kind {
+                PatternKind::Wildcard => {
+                    // Always matches, go directly to body
+                    self.terminate(Terminator::Goto(body_block));
+                }
+
+                PatternKind::Ident(ident, _, _) => {
+                    // Check if this identifier is a known enum variant (or built-in like None)
+                    let is_enum_variant = self.enum_variants.get(&ident.name)
+                        .map(|(_, count)| *count == 0)
+                        .unwrap_or(false) || ident.name == "None";
+
+                    if is_enum_variant {
+                        // Unit variant - compare discriminants
+                        let disc_local = self.new_temp(Ty::Int);
+                        self.emit(StatementKind::Assign(
+                            disc_local,
+                            Rvalue::Discriminant(scrut_local),
+                        ));
+
+                        let expected_disc = self.get_variant_discriminant(&ident.name);
+                        let expected_local = self.new_temp(Ty::Int);
+                        self.emit(StatementKind::Assign(
+                            expected_local,
+                            Rvalue::Use(Operand::Constant(Constant::Int(expected_disc))),
+                        ));
+
+                        let cond_local = self.new_temp(Ty::Bool);
+                        self.emit(StatementKind::Assign(
+                            cond_local,
+                            Rvalue::BinaryOp(
+                                BinOp::Eq,
+                                Operand::Copy(disc_local),
+                                Operand::Copy(expected_local),
+                            ),
+                        ));
+                        self.terminate(Terminator::If {
+                            cond: Operand::Copy(cond_local),
+                            then_block: body_block,
+                            else_block: next_test,
+                        });
+                    } else {
+                        // Not an enum variant - bind the variable and go to body
+                        let local = self.new_local(Ty::Unit, Some(ident.name.clone()));
+                        self.vars.insert(ident.name.clone(), local);
+                        self.emit(StatementKind::Assign(
+                            local,
+                            Rvalue::Use(Operand::Copy(scrut_local)),
+                        ));
+                        self.terminate(Terminator::Goto(body_block));
+                    }
+                }
+
+                PatternKind::Literal(Literal { kind: LiteralKind::Int(n), .. }) => {
+                    // Compare integer and branch
+                    let lit_local = self.new_temp(Ty::Int);
+                    self.emit(StatementKind::Assign(
+                        lit_local,
+                        Rvalue::Use(Operand::Constant(Constant::Int(*n as i64))),
+                    ));
+                    let cond_local = self.new_temp(Ty::Bool);
+                    self.emit(StatementKind::Assign(
+                        cond_local,
+                        Rvalue::BinaryOp(
+                            BinOp::Eq,
+                            Operand::Copy(scrut_local),
+                            Operand::Copy(lit_local),
+                        ),
+                    ));
+                    self.terminate(Terminator::If {
+                        cond: Operand::Copy(cond_local),
+                        then_block: body_block,
+                        else_block: next_test,
+                    });
+                }
+
+                PatternKind::Struct(path, fields, _) => {
+                    // Enum variant pattern: Some(x), None, Color::Red, etc.
+                    let variant = if path.segments.len() == 2 {
+                        &path.segments[1].name.name
+                    } else if path.segments.len() == 1 {
+                        &path.segments[0].name.name
+                    } else {
+                        self.terminate(Terminator::Goto(next_test));
+                        continue;
+                    };
+
+                    // Get discriminant
+                    let disc_local = self.new_temp(Ty::Int);
+                    self.emit(StatementKind::Assign(
+                        disc_local,
+                        Rvalue::Discriminant(scrut_local),
+                    ));
+
+                    let variant_disc = self.get_variant_discriminant(variant);
+                    let expected = self.new_temp(Ty::Int);
+                    self.emit(StatementKind::Assign(
+                        expected,
+                        Rvalue::Use(Operand::Constant(Constant::Int(variant_disc))),
+                    ));
+
+                    let cond = self.new_temp(Ty::Bool);
+                    self.emit(StatementKind::Assign(
+                        cond,
+                        Rvalue::BinaryOp(BinOp::Eq, Operand::Copy(disc_local), Operand::Copy(expected)),
+                    ));
+
+                    // Check if there are fields to extract
+                    if fields.is_empty() {
+                        // Unit variant, go directly to body
+                        self.terminate(Terminator::If {
+                            cond: Operand::Copy(cond),
+                            then_block: body_block,
+                            else_block: next_test,
+                        });
+                    } else {
+                        // Create extraction block for binding fields
+                        let extract_block = self.new_block();
+                        self.terminate(Terminator::If {
+                            cond: Operand::Copy(cond),
+                            then_block: extract_block,
+                            else_block: next_test,
+                        });
+
+                        // In extract block: bind fields and goto body
+                        self.current_block = Some(extract_block);
+                        for (idx, field) in fields.iter().enumerate() {
+                            // PatternField has name and optional pattern
+                            // For `Some(x)`, name is "x" and we bind it
+                            let binding_name = &field.name.name;
+
+                            // Check if there's an explicit sub-pattern
+                            if let Some(ref sub_pattern) = field.pattern {
+                                match &sub_pattern.kind {
+                                    PatternKind::Wildcard => {
+                                        // Skip binding
+                                    }
+                                    PatternKind::Ident(inner_ident, _, _) => {
+                                        let field_local = self.new_local(Ty::Unit, Some(inner_ident.name.clone()));
+                                        self.vars.insert(inner_ident.name.clone(), field_local);
+                                        self.emit(StatementKind::Assign(
+                                            field_local,
+                                            Rvalue::EnumField(scrut_local, idx),
+                                        ));
+                                    }
+                                    _ => {}
+                                }
+                            } else {
+                                // Bind directly with field name
+                                let field_local = self.new_local(Ty::Unit, Some(binding_name.clone()));
+                                self.vars.insert(binding_name.clone(), field_local);
+                                self.emit(StatementKind::Assign(
+                                    field_local,
+                                    Rvalue::EnumField(scrut_local, idx),
+                                ));
+                            }
+                        }
+                        self.terminate(Terminator::Goto(body_block));
+                    }
+                }
+
+                _ => {
+                    // Unsupported pattern, skip to next
+                    self.terminate(Terminator::Goto(next_test));
+                    continue;
+                }
+            }
+
+            // Lower body
+            self.current_block = Some(body_block);
+            if let Some(val) = self.lower_expr(&arm.body) {
+                self.emit(StatementKind::Assign(result, Rvalue::Use(val)));
+            }
+            if self.current_fn.as_ref().unwrap().block(self.current_block.unwrap()).terminator.is_none() {
+                self.terminate(Terminator::Goto(exit_block));
+            }
         }
 
         self.current_block = Some(exit_block);
         Some(Operand::Local(result))
+    }
+
+    /// Get the discriminant (tag) value for a variant name.
+    ///
+    /// Returns a unique integer for each variant to enable pattern matching
+    /// via integer comparison. Built-in types have fixed discriminants:
+    /// - Option: None=0, Some=1
+    /// - Result: Ok=0, Err=1
+    ///
+    /// User-defined enums use a simple hash of the variant name.
+    fn get_variant_discriminant(&self, variant: &str) -> i64 {
+        match variant {
+            "None" => 0,
+            "Some" => 1,
+            "Ok" => 0,
+            "Err" => 1,
+            // For user-defined enums, use a simple hash
+            _ => variant.bytes().fold(0i64, |acc, b| acc + b as i64),
+        }
     }
 
     fn lower_for(
@@ -921,9 +1269,140 @@ impl Lowerer {
         }
     }
 
-    fn lower_type(&self, _ty: &crate::parser::Type) -> Ty {
-        // TODO: proper type lowering
-        Ty::Int
+    /// Convert an AST type to a MIR type.
+    ///
+    /// This function handles all ARIA type syntax including:
+    /// - Primitive types: Int, Bool, Str, Float, Char
+    /// - Sized integers: i8, i16, i32, i64, u8, u16, u32, u64
+    /// - Compound types: tuples, arrays, lists, maps, sets
+    /// - Generic types: Option[T], Result[T, E]
+    /// - Reference types: &T, &mut T
+    /// - Function types: (A, B) -> C
+    /// - User-defined types: structs and enums
+    fn lower_type(&self, ty: &crate::parser::Type) -> Ty {
+        use crate::parser::TypeKind as AstTypeKind;
+        use crate::types::TypeId;
+
+        match &ty.kind {
+            AstTypeKind::Path(path) => {
+                // Get the first segment (e.g., "Int", "Option", "MyStruct")
+                let first_seg = &path.segments[0];
+                let name = &first_seg.name.name;
+
+                // Lower any generic arguments
+                let type_args: Vec<Ty> = first_seg.args.as_ref()
+                    .map(|args| {
+                        args.args.iter().filter_map(|arg| {
+                            match arg {
+                                crate::parser::GenericArg::Type(t) => Some(self.lower_type(t)),
+                                _ => None,
+                            }
+                        }).collect()
+                    })
+                    .unwrap_or_default();
+
+                // Match built-in types
+                match name.as_str() {
+                    "Int" => Ty::Int,
+                    "Bool" => Ty::Bool,
+                    "Str" => Ty::Str,
+                    "Float" => Ty::Float,
+                    "Char" => Ty::Char,
+                    "Unit" | "()" => Ty::Unit,
+                    // Sized integer types
+                    "i8" => Ty::I8,
+                    "i16" => Ty::I16,
+                    "i32" => Ty::I32,
+                    "i64" => Ty::I64,
+                    "i128" => Ty::I128,
+                    "u8" => Ty::U8,
+                    "u16" => Ty::U16,
+                    "u32" => Ty::U32,
+                    "u64" => Ty::U64,
+                    "u128" => Ty::U128,
+                    "UInt" => Ty::UInt,
+                    // Floating point variants
+                    "f32" => Ty::F32,
+                    "f64" => Ty::F64,
+                    // Generic built-ins
+                    "Option" => {
+                        if type_args.len() == 1 {
+                            Ty::Option(Box::new(type_args[0].clone()))
+                        } else {
+                            Ty::Option(Box::new(Ty::Error))
+                        }
+                    }
+                    "Result" => {
+                        let ok_ty = type_args.get(0).cloned().unwrap_or(Ty::Error);
+                        let err_ty = type_args.get(1).cloned().unwrap_or(Ty::Str);
+                        Ty::Result(Box::new(ok_ty), Box::new(err_ty))
+                    }
+                    // User-defined type
+                    _ => Ty::Named(TypeId::new(name.clone()), type_args),
+                }
+            }
+
+            AstTypeKind::List(inner) => {
+                Ty::List(Box::new(self.lower_type(inner)))
+            }
+
+            AstTypeKind::Option(inner) => {
+                Ty::Option(Box::new(self.lower_type(inner)))
+            }
+
+            AstTypeKind::Result(ok, err) => {
+                let ok_ty = self.lower_type(ok);
+                let err_ty = err.as_ref()
+                    .map(|e| self.lower_type(e))
+                    .unwrap_or(Ty::Str);
+                Ty::Result(Box::new(ok_ty), Box::new(err_ty))
+            }
+
+            AstTypeKind::Tuple(tys) => {
+                Ty::Tuple(tys.iter().map(|t| self.lower_type(t)).collect())
+            }
+
+            AstTypeKind::Ref(inner, is_mut) => {
+                let mutability = if *is_mut {
+                    crate::types::Mutability::Mutable
+                } else {
+                    crate::types::Mutability::Immutable
+                };
+                Ty::Ref(Box::new(self.lower_type(inner)), mutability)
+            }
+
+            AstTypeKind::Ptr(inner, is_mut) => {
+                let mutability = if *is_mut {
+                    crate::types::Mutability::Mutable
+                } else {
+                    crate::types::Mutability::Immutable
+                };
+                Ty::Ptr(Box::new(self.lower_type(inner)), mutability)
+            }
+
+            AstTypeKind::Fn(params, ret) => {
+                let param_tys: Vec<Ty> = params.iter().map(|t| self.lower_type(t)).collect();
+                let ret_ty = self.lower_type(ret);
+                Ty::Fn(param_tys, Box::new(ret_ty))
+            }
+
+            AstTypeKind::Array(inner, _size_expr) => {
+                // For now, use a default size - proper const evaluation would be needed
+                Ty::Array(Box::new(self.lower_type(inner)), 0)
+            }
+
+            AstTypeKind::Map(key, value) => {
+                Ty::Map(Box::new(self.lower_type(key)), Box::new(self.lower_type(value)))
+            }
+
+            AstTypeKind::Set(inner) => {
+                Ty::Set(Box::new(self.lower_type(inner)))
+            }
+
+            AstTypeKind::Infer => Ty::Var(crate::types::TypeVar::fresh()),
+
+            AstTypeKind::Never => Ty::Never,
+        }
     }
 
     // Helper methods
@@ -957,6 +1436,66 @@ impl Lowerer {
 
     fn error(&mut self, message: String, span: Span) {
         self.errors.push(LowerError { message, span });
+    }
+
+    /// Find a similar variable name for typo suggestions.
+    ///
+    /// Uses a simple Levenshtein-like edit distance comparison
+    /// to find names that are likely typos of the given name.
+    fn find_similar_name(&self, name: &str) -> Option<String> {
+        let mut best_match: Option<(String, usize)> = None;
+
+        for existing in self.vars.keys() {
+            let dist = Self::edit_distance(name, existing);
+            // Only suggest if edit distance is small relative to name length
+            // and less than half the name length
+            if dist <= 2 && dist < name.len() / 2 + 1 {
+                match &best_match {
+                    None => best_match = Some((existing.clone(), dist)),
+                    Some((_, best_dist)) if dist < *best_dist => {
+                        best_match = Some((existing.clone(), dist))
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        best_match.map(|(name, _)| name)
+    }
+
+    /// Simple edit distance (Levenshtein distance) between two strings.
+    fn edit_distance(a: &str, b: &str) -> usize {
+        let a_chars: Vec<char> = a.chars().collect();
+        let b_chars: Vec<char> = b.chars().collect();
+        let m = a_chars.len();
+        let n = b_chars.len();
+
+        if m == 0 {
+            return n;
+        }
+        if n == 0 {
+            return m;
+        }
+
+        let mut dp = vec![vec![0; n + 1]; m + 1];
+
+        for i in 0..=m {
+            dp[i][0] = i;
+        }
+        for j in 0..=n {
+            dp[0][j] = j;
+        }
+
+        for i in 1..=m {
+            for j in 1..=n {
+                let cost = if a_chars[i - 1] == b_chars[j - 1] { 0 } else { 1 };
+                dp[i][j] = (dp[i - 1][j] + 1)
+                    .min(dp[i][j - 1] + 1)
+                    .min(dp[i - 1][j - 1] + cost);
+            }
+        }
+
+        dp[m][n]
     }
 }
 

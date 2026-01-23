@@ -22,6 +22,24 @@ pub enum Value {
     Tuple(Vec<Value>),
     Array(Vec<Value>),
     Struct(String, HashMap<String, Value>),
+    /// Enum variant value at runtime.
+    ///
+    /// Represents an instantiated enum variant with its payload.
+    /// - `type_name`: The enum type (e.g., "Option", "Result")
+    /// - `variant`: The active variant (e.g., "Some", "None", "Ok", "Err")
+    /// - `fields`: The values contained in the variant (empty for unit variants)
+    ///
+    /// # Examples
+    /// ```text
+    /// None    -> Enum { type_name: "Option", variant: "None", fields: [] }
+    /// Some(5) -> Enum { type_name: "Option", variant: "Some", fields: [Int(5)] }
+    /// Ok(42)  -> Enum { type_name: "Result", variant: "Ok", fields: [Int(42)] }
+    /// ```
+    Enum {
+        type_name: String,
+        variant: String,
+        fields: Vec<Value>,
+    },
     Ref(Box<Value>),
 }
 
@@ -86,6 +104,20 @@ impl std::fmt::Display for Value {
                     write!(f, "{}: {}", k, v)?;
                 }
                 write!(f, " }}")
+            }
+            Value::Enum { type_name, variant, fields } => {
+                write!(f, "{}::{}", type_name, variant)?;
+                if !fields.is_empty() {
+                    write!(f, "(")?;
+                    for (i, v) in fields.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", v)?;
+                    }
+                    write!(f, ")")?;
+                }
+                Ok(())
             }
             Value::Ref(inner) => write!(f, "&{}", inner),
         }
@@ -380,6 +412,57 @@ impl Interpreter {
                     map.insert(field_name.clone(), val);
                 }
                 Ok(Value::Struct(name.clone(), map))
+            }
+
+            Rvalue::Enum { type_name, variant, fields } => {
+                let field_vals: Vec<Value> = fields
+                    .iter()
+                    .map(|f| self.eval_operand(f))
+                    .collect::<Result<_, _>>()?;
+                Ok(Value::Enum {
+                    type_name: type_name.clone(),
+                    variant: variant.clone(),
+                    fields: field_vals,
+                })
+            }
+
+            Rvalue::Discriminant(local) => {
+                let frame = self.call_stack.last().unwrap();
+                let val = frame.locals.get(local).cloned().unwrap_or(Value::Unit);
+                match val {
+                    Value::Enum { variant, .. } => {
+                        let disc = match variant.as_str() {
+                            "None" => 0,
+                            "Some" => 1,
+                            "Ok" => 0,
+                            "Err" => 1,
+                            // For user-defined enums, use a simple hash-based discriminant
+                            _ => {
+                                // Simple hash: sum of character codes
+                                variant.bytes().fold(0i64, |acc, b| acc + b as i64)
+                            }
+                        };
+                        Ok(Value::Int(disc))
+                    }
+                    _ => Err(InterpError {
+                        message: "discriminant of non-enum".to_string(),
+                    }),
+                }
+            }
+
+            Rvalue::EnumField(local, idx) => {
+                let frame = self.call_stack.last().unwrap();
+                let val = frame.locals.get(local).cloned().unwrap_or(Value::Unit);
+                match val {
+                    Value::Enum { fields, .. } => {
+                        fields.get(*idx).cloned().ok_or_else(|| InterpError {
+                            message: format!("enum field {} out of bounds", idx),
+                        })
+                    }
+                    _ => Err(InterpError {
+                        message: "field access on non-enum".to_string(),
+                    }),
+                }
             }
 
             Rvalue::Field(op, field_name) => {
@@ -795,4 +878,179 @@ f main() -> Bool = is_even(10)
 
     // Note: ARIA uses | for pipeline, so bitwise operators are not directly
     // available in expression syntax. Skipping bitwise tests for now.
+
+    // ========================================================================
+    // Enum tests
+    // ========================================================================
+
+    #[test]
+    fn test_option_some() {
+        let result = run_source(
+            r#"
+f wrap(x: Int) -> Int?
+    Some(x)
+
+f main() -> Int? = wrap(42)
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            result,
+            Value::Enum {
+                type_name: "Option".to_string(),
+                variant: "Some".to_string(),
+                fields: vec![Value::Int(42)],
+            }
+        );
+    }
+
+    #[test]
+    fn test_option_none() {
+        let result = run_source(
+            r#"
+f nothing() -> Int?
+    None
+
+f main() -> Int? = nothing()
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            result,
+            Value::Enum {
+                type_name: "Option".to_string(),
+                variant: "None".to_string(),
+                fields: vec![],
+            }
+        );
+    }
+
+    #[test]
+    fn test_option_pattern_matching_some() {
+        let result = run_source(
+            r#"
+f unwrap_or(opt: Int?, default: Int) -> Int
+    m opt
+        Some(x) -> x
+        None -> default
+
+f main() -> Int = unwrap_or(Some(42), 0)
+"#,
+        )
+        .unwrap();
+        assert_eq!(result, Value::Int(42));
+    }
+
+    #[test]
+    fn test_option_pattern_matching_none() {
+        let result = run_source(
+            r#"
+f unwrap_or(opt: Int?, default: Int) -> Int
+    m opt
+        Some(x) -> x
+        None -> default
+
+f main() -> Int = unwrap_or(None, 99)
+"#,
+        )
+        .unwrap();
+        assert_eq!(result, Value::Int(99));
+    }
+
+    #[test]
+    fn test_result_ok() {
+        let result = run_source(
+            r#"
+f success(x: Int) -> Int!Str
+    Ok(x)
+
+f main() -> Int!Str = success(100)
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            result,
+            Value::Enum {
+                type_name: "Result".to_string(),
+                variant: "Ok".to_string(),
+                fields: vec![Value::Int(100)],
+            }
+        );
+    }
+
+    #[test]
+    fn test_result_err() {
+        let result = run_source(
+            r#"
+f fail(msg: Str) -> Int!Str
+    Err(msg)
+
+f main() -> Int!Str = fail("error")
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            result,
+            Value::Enum {
+                type_name: "Result".to_string(),
+                variant: "Err".to_string(),
+                fields: vec![Value::Str("error".to_string())],
+            }
+        );
+    }
+
+    #[test]
+    fn test_result_pattern_matching() {
+        let result = run_source(
+            r#"
+f get_value(res: Int!Str) -> Int
+    m res
+        Ok(x) -> x
+        Err(e) -> 0
+
+f main() -> Int = get_value(Ok(42))
+"#,
+        )
+        .unwrap();
+        assert_eq!(result, Value::Int(42));
+    }
+
+    #[test]
+    fn test_nested_option() {
+        let result = run_source(
+            r#"
+f double_if_some(opt: Int?) -> Int
+    m opt
+        Some(x) -> x * 2
+        None -> 0
+
+f main() -> Int = double_if_some(Some(21))
+"#,
+        )
+        .unwrap();
+        assert_eq!(result, Value::Int(42));
+    }
+
+    #[test]
+    fn test_enum_in_function_composition() {
+        let result = run_source(
+            r#"
+f add_one(x: Int) -> Int = x + 1
+
+f safe_add_one(opt: Int?) -> Int?
+    m opt
+        Some(x) -> Some(add_one(x))
+        None -> None
+
+f unwrap(opt: Int?) -> Int
+    m opt
+        Some(x) -> x
+        None -> 0
+
+f main() -> Int = unwrap(safe_add_one(Some(41)))
+"#,
+        )
+        .unwrap();
+        assert_eq!(result, Value::Int(42));
+    }
 }
