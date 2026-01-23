@@ -1,0 +1,373 @@
+# Bootstrap AST Types
+# Uses index-based approach for recursive types
+
+# ============================================================================
+# Spans (for error reporting)
+# ============================================================================
+
+s Span
+    start: Int
+    end: Int
+    line: Int
+    column: Int
+
+f span_new(start: Int, end: Int, line: Int, col: Int) -> Span
+    Span { start: start, end: end, line: line, column: col }
+
+f span_merge(a: Span, b: Span) -> Span
+    Span { start: a.start, end: b.end, line: a.line, column: a.column }
+
+# ============================================================================
+# Expression Kinds (stored as integers for discriminant)
+# ============================================================================
+
+# Literal kinds
+f EXPR_INT() -> Int = 1
+f EXPR_FLOAT() -> Int = 2
+f EXPR_BOOL() -> Int = 3
+f EXPR_CHAR() -> Int = 4
+f EXPR_STR() -> Int = 5
+
+# Identifier and path
+f EXPR_IDENT() -> Int = 10
+f EXPR_PATH() -> Int = 11
+
+# Operators
+f EXPR_BINARY() -> Int = 20
+f EXPR_UNARY() -> Int = 21
+
+# Calls and access
+f EXPR_CALL() -> Int = 30
+f EXPR_METHOD_CALL() -> Int = 31
+f EXPR_FIELD() -> Int = 32
+f EXPR_INDEX() -> Int = 33
+
+# Compound
+f EXPR_TUPLE() -> Int = 40
+f EXPR_ARRAY() -> Int = 41
+f EXPR_STRUCT() -> Int = 42
+
+# Control flow
+f EXPR_IF() -> Int = 50
+f EXPR_MATCH() -> Int = 51
+f EXPR_WHILE() -> Int = 52
+f EXPR_FOR() -> Int = 53
+f EXPR_LOOP() -> Int = 54
+f EXPR_BLOCK() -> Int = 55
+
+# Flow control
+f EXPR_RETURN() -> Int = 60
+f EXPR_BREAK() -> Int = 61
+f EXPR_CONTINUE() -> Int = 62
+
+# Closures
+f EXPR_CLOSURE() -> Int = 70
+
+# Assign
+f EXPR_ASSIGN() -> Int = 80
+
+# ============================================================================
+# Expression Node
+# ============================================================================
+
+# Each expression is stored as ExprNode
+# Kind-specific data is stored in auxiliary fields
+s ExprNode
+    kind: Int
+    span: Span
+    # For literals
+    int_val: Int
+    float_val: Float
+    bool_val: Bool
+    char_val: Char
+    str_val: Str
+    # For identifiers
+    name: Str
+    # For binary ops: left, op, right
+    left: Int      # Index into expr_nodes
+    op: Int        # Operator kind
+    right: Int     # Index into expr_nodes
+    # For unary: op and operand
+    operand: Int   # Index into expr_nodes
+    # For calls: callee and args (indices into expr_nodes)
+    callee: Int
+    args: [Int]
+    # For field access: object and field name
+    object: Int
+    field: Str
+    # For arrays/tuples: elements (indices)
+    elements: [Int]
+    # For if: condition, then_branch, else_branch (indices)
+    condition: Int
+    then_branch: Int
+    else_branch: Int  # -1 if no else
+    # For match: scrutinee, arms (indices into match_arms)
+    scrutinee: Int
+    arms: [Int]
+    # For while: condition, body_block
+    body_block: Int
+    # For blocks: statement indices
+    stmts: [Int]
+    # For struct: type_name, field_inits
+    type_name: Str
+    field_inits: [(Str, Int)]  # (field_name, expr_index)
+
+f expr_new(kind: Int, span: Span) -> ExprNode
+    ExprNode {
+        kind: kind,
+        span: span,
+        int_val: 0,
+        float_val: 0.0,
+        bool_val: false,
+        char_val: ' ',
+        str_val: "",
+        name: "",
+        left: -1,
+        op: 0,
+        right: -1,
+        operand: -1,
+        callee: -1,
+        args: [],
+        object: -1,
+        field: "",
+        elements: [],
+        condition: -1,
+        then_branch: -1,
+        else_branch: -1,
+        scrutinee: -1,
+        arms: [],
+        body_block: -1,
+        stmts: [],
+        type_name: "",
+        field_inits: []
+    }
+
+# ============================================================================
+# Statement Kinds
+# ============================================================================
+
+f STMT_EXPR() -> Int = 1
+f STMT_LET() -> Int = 2
+f STMT_ITEM() -> Int = 3
+
+# Statement Node
+s StmtNode
+    kind: Int
+    span: Span
+    expr: Int      # For STMT_EXPR: expr index
+    pattern: Int   # For STMT_LET: pattern index  
+    init: Int      # For STMT_LET: init expr index
+    mutable: Bool  # For STMT_LET: is mutable
+    item: Int      # For STMT_ITEM: item index
+
+f stmt_new(kind: Int, span: Span) -> StmtNode
+    StmtNode {
+        kind: kind,
+        span: span,
+        expr: -1,
+        pattern: -1,
+        init: -1,
+        mutable: false,
+        item: -1
+    }
+
+# ============================================================================
+# Item Kinds
+# ============================================================================
+
+f ITEM_FN() -> Int = 1
+f ITEM_STRUCT() -> Int = 2
+f ITEM_ENUM() -> Int = 3
+
+# Item Node
+s ItemNode
+    kind: Int
+    span: Span
+    name: Str
+    # For functions
+    params: [(Str, Int)]  # (name, type_index)
+    return_type: Int      # type index
+    body: Int             # expr index or -1
+    # For structs
+    fields: [(Str, Int)]  # (name, type_index)
+    # For enums
+    variants: [(Str, [Int])]  # (name, field_type_indices)
+
+f item_new(kind: Int, span: Span, name: Str) -> ItemNode
+    ItemNode {
+        kind: kind,
+        span: span,
+        name: name,
+        params: [],
+        return_type: -1,
+        body: -1,
+        fields: [],
+        variants: []
+    }
+
+# ============================================================================
+# Type Kinds
+# ============================================================================
+
+f TYPE_NAMED() -> Int = 1
+f TYPE_TUPLE() -> Int = 2
+f TYPE_ARRAY() -> Int = 3
+f TYPE_OPTION() -> Int = 4
+f TYPE_RESULT() -> Int = 5
+f TYPE_FN() -> Int = 6
+
+# Type Node
+s TypeNode
+    kind: Int
+    span: Span
+    name: Str         # For TYPE_NAMED
+    elements: [Int]   # For tuple/fn params (type indices)
+    inner: Int        # For option/array (inner type index)
+    error: Int        # For result (error type index)
+
+f type_new(kind: Int, span: Span) -> TypeNode
+    TypeNode {
+        kind: kind,
+        span: span,
+        name: "",
+        elements: [],
+        inner: -1,
+        error: -1
+    }
+
+# ============================================================================
+# Pattern Kinds
+# ============================================================================
+
+f PAT_WILDCARD() -> Int = 1
+f PAT_IDENT() -> Int = 2
+f PAT_LITERAL() -> Int = 3
+f PAT_TUPLE() -> Int = 4
+f PAT_STRUCT() -> Int = 5
+
+# Pattern Node
+s PatternNode
+    kind: Int
+    span: Span
+    name: Str         # For PAT_IDENT
+    mutable: Bool     # For PAT_IDENT
+    literal: Int      # For PAT_LITERAL (expr index)
+    elements: [Int]   # For PAT_TUPLE (pattern indices)
+    fields: [(Str, Int)]  # For PAT_STRUCT (name, pattern index)
+
+f pattern_new(kind: Int, span: Span) -> PatternNode
+    PatternNode {
+        kind: kind,
+        span: span,
+        name: "",
+        mutable: false,
+        literal: -1,
+        elements: [],
+        fields: []
+    }
+
+# ============================================================================
+# Match Arm
+# ============================================================================
+
+s MatchArm
+    pattern: Int  # pattern index
+    guard: Int    # expr index or -1
+    body: Int     # expr index
+    span: Span
+
+f match_arm_new(pattern: Int, body: Int, span: Span) -> MatchArm
+    MatchArm {
+        pattern: pattern,
+        guard: -1,
+        body: body,
+        span: span
+    }
+
+# ============================================================================
+# Binary Operators
+# ============================================================================
+
+f OP_ADD() -> Int = 1
+f OP_SUB() -> Int = 2
+f OP_MUL() -> Int = 3
+f OP_DIV() -> Int = 4
+f OP_REM() -> Int = 5
+f OP_EQ() -> Int = 10
+f OP_NE() -> Int = 11
+f OP_LT() -> Int = 12
+f OP_LE() -> Int = 13
+f OP_GT() -> Int = 14
+f OP_GE() -> Int = 15
+f OP_AND() -> Int = 20
+f OP_OR() -> Int = 21
+f OP_BITAND() -> Int = 30
+f OP_BITOR() -> Int = 31
+f OP_BITXOR() -> Int = 32
+f OP_SHL() -> Int = 33
+f OP_SHR() -> Int = 34
+
+# Unary Operators
+f UNOP_NEG() -> Int = 1
+f UNOP_NOT() -> Int = 2
+f UNOP_REF() -> Int = 3
+f UNOP_DEREF() -> Int = 4
+
+# ============================================================================
+# AST (the complete AST with all nodes)
+# ============================================================================
+
+s AST
+    exprs: [ExprNode]
+    stmts: [StmtNode]
+    items: [ItemNode]
+    types: [TypeNode]
+    patterns: [PatternNode]
+    match_arms: [MatchArm]
+    top_items: [Int]  # indices of top-level items
+
+f ast_new() -> AST
+    AST {
+        exprs: [],
+        stmts: [],
+        items: [],
+        types: [],
+        patterns: [],
+        match_arms: [],
+        top_items: []
+    }
+
+# Helper functions to add nodes and get their indices
+f ast_add_expr(ast: AST, expr: ExprNode) -> (AST, Int)
+    idx := vec_len(ast.exprs)
+    new_exprs := vec_push(ast.exprs, expr)
+    (AST { exprs: new_exprs, stmts: ast.stmts, items: ast.items, types: ast.types, patterns: ast.patterns, match_arms: ast.match_arms, top_items: ast.top_items }, idx)
+
+f ast_add_stmt(ast: AST, stmt: StmtNode) -> (AST, Int)
+    idx := vec_len(ast.stmts)
+    new_stmts := vec_push(ast.stmts, stmt)
+    (AST { exprs: ast.exprs, stmts: new_stmts, items: ast.items, types: ast.types, patterns: ast.patterns, match_arms: ast.match_arms, top_items: ast.top_items }, idx)
+
+f ast_add_item(ast: AST, item: ItemNode) -> (AST, Int)
+    idx := vec_len(ast.items)
+    new_items := vec_push(ast.items, item)
+    (AST { exprs: ast.exprs, stmts: ast.stmts, items: new_items, types: ast.types, patterns: ast.patterns, match_arms: ast.match_arms, top_items: ast.top_items }, idx)
+
+f ast_add_type(ast: AST, ty: TypeNode) -> (AST, Int)
+    idx := vec_len(ast.types)
+    new_types := vec_push(ast.types, ty)
+    (AST { exprs: ast.exprs, stmts: ast.stmts, items: ast.items, types: new_types, patterns: ast.patterns, match_arms: ast.match_arms, top_items: ast.top_items }, idx)
+
+f ast_add_pattern(ast: AST, pat: PatternNode) -> (AST, Int)
+    idx := vec_len(ast.patterns)
+    new_patterns := vec_push(ast.patterns, pat)
+    (AST { exprs: ast.exprs, stmts: ast.stmts, items: ast.items, types: ast.types, patterns: new_patterns, match_arms: ast.match_arms, top_items: ast.top_items }, idx)
+
+f ast_add_match_arm(ast: AST, arm: MatchArm) -> (AST, Int)
+    idx := vec_len(ast.match_arms)
+    new_arms := vec_push(ast.match_arms, arm)
+    (AST { exprs: ast.exprs, stmts: ast.stmts, items: ast.items, types: ast.types, patterns: ast.patterns, match_arms: new_arms, top_items: ast.top_items }, idx)
+
+f ast_add_top_item(ast: AST, idx: Int) -> AST
+    new_top := vec_push(ast.top_items, idx)
+    AST { exprs: ast.exprs, stmts: ast.stmts, items: ast.items, types: ast.types, patterns: ast.patterns, match_arms: ast.match_arms, top_items: new_top }

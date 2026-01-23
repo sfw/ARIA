@@ -1,0 +1,1568 @@
+# ARIA Bootstrap Compiler - Token Definitions
+# Defines all tokens that can appear in ARIA source code
+
+# ============================================================
+# Token Kind enumeration
+# Using integers to represent token kinds since ARIA enums
+# with data require more complex pattern matching
+# ============================================================
+
+# Token kind constants
+# Keywords (single character) - 1-10
+s TokenKind
+    # Store the discriminant
+    kind: Int
+    # For tokens with associated data, store separately
+    int_value: Int
+    float_value: Float
+    str_value: Str
+    char_value: Char
+
+# Token kind constants
+# Keywords (single character)
+f TK_F() -> Int = 1          # function
+f TK_S() -> Int = 2          # struct
+f TK_E() -> Int = 3          # enum
+f TK_T() -> Int = 4          # trait
+f TK_I() -> Int = 5          # impl
+f TK_M() -> Int = 6          # match
+
+# Keywords (multi-character) - 10-40
+f TK_IF() -> Int = 10
+f TK_THEN() -> Int = 11
+f TK_ELSE() -> Int = 12
+f TK_FOR() -> Int = 13
+f TK_IN() -> Int = 14
+f TK_WH() -> Int = 15        # while
+f TK_LP() -> Int = 16        # loop
+f TK_BR() -> Int = 17        # break
+f TK_CT() -> Int = 18        # continue
+f TK_RET() -> Int = 19       # return
+f TK_AS() -> Int = 20        # async
+f TK_AW() -> Int = 21        # await
+f TK_US() -> Int = 22        # use
+f TK_MD() -> Int = 23        # module
+f TK_PUB() -> Int = 24       # public
+f TK_MUT() -> Int = 25       # mutable
+f TK_MV() -> Int = 26        # move
+f TK_UN() -> Int = 27        # unsafe
+f TK_TYPE() -> Int = 28      # type alias
+f TK_WHERE() -> Int = 29     # where clause
+
+# Boolean/None literals - 40-45
+f TK_TRUE() -> Int = 40
+f TK_FALSE() -> Int = 41
+f TK_NONE() -> Int = 42
+
+# Built-in type constructors - 45-50
+f TK_SOME() -> Int = 45
+f TK_OK() -> Int = 46
+f TK_ERR() -> Int = 47
+
+# Arithmetic operators - 50-60
+f TK_PLUS() -> Int = 50      # +
+f TK_MINUS() -> Int = 51     # -
+f TK_STAR() -> Int = 52      # *
+f TK_SLASH() -> Int = 53     # /
+f TK_PERCENT() -> Int = 54   # %
+
+# Comparison operators - 60-70
+f TK_EQEQ() -> Int = 60      # ==
+f TK_BANGEQ() -> Int = 61    # !=
+f TK_LT() -> Int = 62        # <
+f TK_LTEQ() -> Int = 63      # <=
+f TK_GT() -> Int = 64        # >
+f TK_GTEQ() -> Int = 65      # >=
+
+# Logical operators - 70-75
+f TK_AMPAMP() -> Int = 70    # &&
+f TK_PIPEPIPE() -> Int = 71  # ||
+f TK_BANG() -> Int = 72      # !
+
+# Bitwise operators - 75-80
+f TK_AMP() -> Int = 75       # &
+f TK_PIPE() -> Int = 76      # |
+f TK_CARET() -> Int = 77     # ^
+f TK_LTLT() -> Int = 78      # <<
+f TK_GTGT() -> Int = 79      # >>
+
+# Assignment operators - 80-90
+f TK_EQ() -> Int = 80        # =
+f TK_COLONEQ() -> Int = 81   # :=
+f TK_PLUSEQ() -> Int = 82    # +=
+f TK_MINUSEQ() -> Int = 83   # -=
+f TK_STAREQ() -> Int = 84    # *=
+f TK_SLASHEQ() -> Int = 85   # /=
+
+# Special operators - 90-100
+f TK_QUESTION() -> Int = 90  # ?
+f TK_QUESTIONQUESTION() -> Int = 91  # ??
+f TK_ARROW() -> Int = 92     # ->
+f TK_FATARROW() -> Int = 93  # =>
+f TK_DOTDOT() -> Int = 94    # ..
+f TK_DOTDOTEQ() -> Int = 95  # ..=
+f TK_COLONCOLON() -> Int = 96 # ::
+f TK_DOT() -> Int = 97       # .
+f TK_COMMA() -> Int = 98     # ,
+f TK_AT() -> Int = 99        # @
+
+# Delimiters - 100-110
+f TK_LPAREN() -> Int = 100   # (
+f TK_RPAREN() -> Int = 101   # )
+f TK_LBRACKET() -> Int = 102 # [
+f TK_RBRACKET() -> Int = 103 # ]
+f TK_LBRACE() -> Int = 104   # {
+f TK_RBRACE() -> Int = 105   # }
+f TK_COLON() -> Int = 106    # :
+f TK_SEMICOLON() -> Int = 107 # ;
+
+# Literals - 110-120 (with associated data)
+f TK_INT() -> Int = 110
+f TK_FLOAT() -> Int = 111
+f TK_STRING() -> Int = 112
+f TK_CHAR() -> Int = 113
+
+# Identifiers - 120
+f TK_IDENT() -> Int = 120
+
+# Indentation tokens - 130-135
+f TK_NEWLINE() -> Int = 130
+f TK_INDENT() -> Int = 131
+f TK_DEDENT() -> Int = 132
+
+# Special - 140-145
+f TK_EOF() -> Int = 140
+f TK_ERROR() -> Int = 141
+
+# ============================================================
+# Span - Source location information
+# ============================================================
+
+s Span
+    start: Int
+    end: Int
+    line: Int
+    column: Int
+
+f span_new(start: Int, end: Int, line: Int, column: Int) -> Span = Span { start: start, end: end, line: line, column: column }
+
+f span_len(span: Span) -> Int = span.end - span.start
+
+f span_merge(a: Span, b: Span) -> Span
+    start := if a.start < b.start then a.start else b.start
+    end := if a.end > b.end then a.end else b.end
+    line := if a.line < b.line then a.line else b.line
+    col := if a.line <= b.line then a.column else b.column
+    Span { start: start, end: end, line: line, column: col }
+
+# ============================================================
+# Token - A token with its location and value
+# ============================================================
+
+s Token
+    kind: Int           # TokenKind constant
+    span: Span
+    lexeme: Str
+    # For literals with values
+    int_val: Int
+    float_val: Float
+    str_val: Str
+    char_val: Char
+
+f token_new(kind: Int, span: Span, lexeme: Str) -> Token = Token { kind: kind, span: span, lexeme: lexeme, int_val: 0, float_val: 0.0, str_val: "", char_val: ' ' }
+
+f token_new_int(kind: Int, span: Span, lexeme: Str, value: Int) -> Token = Token { kind: kind, span: span, lexeme: lexeme, int_val: value, float_val: 0.0, str_val: "", char_val: ' ' }
+
+f token_new_float(kind: Int, span: Span, lexeme: Str, value: Float) -> Token = Token { kind: kind, span: span, lexeme: lexeme, int_val: 0, float_val: value, str_val: "", char_val: ' ' }
+
+f token_new_str(kind: Int, span: Span, lexeme: Str, value: Str) -> Token = Token { kind: kind, span: span, lexeme: lexeme, int_val: 0, float_val: 0.0, str_val: value, char_val: ' ' }
+
+f token_new_char(kind: Int, span: Span, lexeme: Str, value: Char) -> Token = Token { kind: kind, span: span, lexeme: lexeme, int_val: 0, float_val: 0.0, str_val: "", char_val: value }
+
+f token_is(tok: Token, kind: Int) -> Bool
+    tok.kind == kind
+
+# ============================================================
+# Keyword lookup
+# ============================================================
+
+f keyword_lookup(s: Str) -> Option[Int]
+    # Single-character keywords
+    if s == "f" then ret Some(TK_F()) else 0
+    if s == "s" then ret Some(TK_S()) else 0
+    if s == "e" then ret Some(TK_E()) else 0
+    if s == "t" then ret Some(TK_T()) else 0
+    if s == "i" then ret Some(TK_I()) else 0
+    if s == "m" then ret Some(TK_M()) else 0
+    # Multi-character keywords
+    if s == "if" then ret Some(TK_IF()) else 0
+    if s == "then" then ret Some(TK_THEN()) else 0
+    if s == "else" then ret Some(TK_ELSE()) else 0
+    if s == "for" then ret Some(TK_FOR()) else 0
+    if s == "in" then ret Some(TK_IN()) else 0
+    if s == "wh" then ret Some(TK_WH()) else 0
+    if s == "lp" then ret Some(TK_LP()) else 0
+    if s == "br" then ret Some(TK_BR()) else 0
+    if s == "ct" then ret Some(TK_CT()) else 0
+    if s == "ret" then ret Some(TK_RET()) else 0
+    if s == "as" then ret Some(TK_AS()) else 0
+    if s == "aw" then ret Some(TK_AW()) else 0
+    if s == "us" then ret Some(TK_US()) else 0
+    if s == "md" then ret Some(TK_MD()) else 0
+    if s == "pub" then ret Some(TK_PUB()) else 0
+    if s == "mut" then ret Some(TK_MUT()) else 0
+    if s == "mv" then ret Some(TK_MV()) else 0
+    if s == "un" then ret Some(TK_UN()) else 0
+    if s == "type" then ret Some(TK_TYPE()) else 0
+    if s == "where" then ret Some(TK_WHERE()) else 0
+    # Boolean literals
+    if s == "T" then ret Some(TK_TRUE()) else 0
+    if s == "F" then ret Some(TK_FALSE()) else 0
+    if s == "true" then ret Some(TK_TRUE()) else 0
+    if s == "false" then ret Some(TK_FALSE()) else 0
+    # None literal
+    if s == "N" then ret Some(TK_NONE()) else 0
+    if s == "none" then ret Some(TK_NONE()) else 0
+    # Built-in constructors
+    if s == "Some" then ret Some(TK_SOME()) else 0
+    if s == "Ok" then ret Some(TK_OK()) else 0
+    if s == "Err" then ret Some(TK_ERR()) else 0
+    if s == "ok" then ret Some(TK_OK()) else 0
+    if s == "err" then ret Some(TK_ERR()) else 0
+    None
+
+# ============================================================
+# Token kind name (for debugging)
+# ============================================================
+
+f token_kind_name(kind: Int) -> Str
+    if kind == TK_F() then ret "F" else 0
+    if kind == TK_S() then ret "S" else 0
+    if kind == TK_E() then ret "E" else 0
+    if kind == TK_T() then ret "T" else 0
+    if kind == TK_I() then ret "I" else 0
+    if kind == TK_M() then ret "M" else 0
+    if kind == TK_IF() then ret "IF" else 0
+    if kind == TK_THEN() then ret "THEN" else 0
+    if kind == TK_ELSE() then ret "ELSE" else 0
+    if kind == TK_FOR() then ret "FOR" else 0
+    if kind == TK_IN() then ret "IN" else 0
+    if kind == TK_WH() then ret "WH" else 0
+    if kind == TK_LP() then ret "LP" else 0
+    if kind == TK_BR() then ret "BR" else 0
+    if kind == TK_CT() then ret "CT" else 0
+    if kind == TK_RET() then ret "RET" else 0
+    if kind == TK_TRUE() then ret "TRUE" else 0
+    if kind == TK_FALSE() then ret "FALSE" else 0
+    if kind == TK_NONE() then ret "NONE" else 0
+    if kind == TK_SOME() then ret "SOME" else 0
+    if kind == TK_OK() then ret "OK" else 0
+    if kind == TK_ERR() then ret "ERR" else 0
+    if kind == TK_PLUS() then ret "PLUS" else 0
+    if kind == TK_MINUS() then ret "MINUS" else 0
+    if kind == TK_STAR() then ret "STAR" else 0
+    if kind == TK_SLASH() then ret "SLASH" else 0
+    if kind == TK_PERCENT() then ret "PERCENT" else 0
+    if kind == TK_EQEQ() then ret "EQEQ" else 0
+    if kind == TK_BANGEQ() then ret "BANGEQ" else 0
+    if kind == TK_LT() then ret "LT" else 0
+    if kind == TK_LTEQ() then ret "LTEQ" else 0
+    if kind == TK_GT() then ret "GT" else 0
+    if kind == TK_GTEQ() then ret "GTEQ" else 0
+    if kind == TK_AMPAMP() then ret "AMPAMP" else 0
+    if kind == TK_PIPEPIPE() then ret "PIPEPIPE" else 0
+    if kind == TK_BANG() then ret "BANG" else 0
+    if kind == TK_AMP() then ret "AMP" else 0
+    if kind == TK_PIPE() then ret "PIPE" else 0
+    if kind == TK_CARET() then ret "CARET" else 0
+    if kind == TK_LTLT() then ret "LTLT" else 0
+    if kind == TK_GTGT() then ret "GTGT" else 0
+    if kind == TK_EQ() then ret "EQ" else 0
+    if kind == TK_COLONEQ() then ret "COLONEQ" else 0
+    if kind == TK_PLUSEQ() then ret "PLUSEQ" else 0
+    if kind == TK_MINUSEQ() then ret "MINUSEQ" else 0
+    if kind == TK_STAREQ() then ret "STAREQ" else 0
+    if kind == TK_SLASHEQ() then ret "SLASHEQ" else 0
+    if kind == TK_QUESTION() then ret "QUESTION" else 0
+    if kind == TK_QUESTIONQUESTION() then ret "QUESTIONQUESTION" else 0
+    if kind == TK_ARROW() then ret "ARROW" else 0
+    if kind == TK_FATARROW() then ret "FATARROW" else 0
+    if kind == TK_DOTDOT() then ret "DOTDOT" else 0
+    if kind == TK_DOTDOTEQ() then ret "DOTDOTEQ" else 0
+    if kind == TK_COLONCOLON() then ret "COLONCOLON" else 0
+    if kind == TK_DOT() then ret "DOT" else 0
+    if kind == TK_COMMA() then ret "COMMA" else 0
+    if kind == TK_AT() then ret "AT" else 0
+    if kind == TK_LPAREN() then ret "LPAREN" else 0
+    if kind == TK_RPAREN() then ret "RPAREN" else 0
+    if kind == TK_LBRACKET() then ret "LBRACKET" else 0
+    if kind == TK_RBRACKET() then ret "RBRACKET" else 0
+    if kind == TK_LBRACE() then ret "LBRACE" else 0
+    if kind == TK_RBRACE() then ret "RBRACE" else 0
+    if kind == TK_COLON() then ret "COLON" else 0
+    if kind == TK_SEMICOLON() then ret "SEMICOLON" else 0
+    if kind == TK_INT() then ret "INT" else 0
+    if kind == TK_FLOAT() then ret "FLOAT" else 0
+    if kind == TK_STRING() then ret "STRING" else 0
+    if kind == TK_CHAR() then ret "CHAR" else 0
+    if kind == TK_IDENT() then ret "IDENT" else 0
+    if kind == TK_NEWLINE() then ret "NEWLINE" else 0
+    if kind == TK_INDENT() then ret "INDENT" else 0
+    if kind == TK_DEDENT() then ret "DEDENT" else 0
+    if kind == TK_EOF() then ret "EOF" else 0
+    if kind == TK_ERROR() then ret "ERROR" else 0
+    "UNKNOWN"
+
+# ============================================================================
+# AST Types (from ast.aria, Span already defined above)
+# ============================================================================
+
+# ============================================================================
+# Expression Kinds (stored as integers for discriminant)
+# ============================================================================
+
+# Literal kinds
+f EXPR_INT() -> Int = 1
+f EXPR_FLOAT() -> Int = 2
+f EXPR_BOOL() -> Int = 3
+f EXPR_CHAR() -> Int = 4
+f EXPR_STR() -> Int = 5
+
+# Identifier and path
+f EXPR_IDENT() -> Int = 10
+f EXPR_PATH() -> Int = 11
+
+# Operators
+f EXPR_BINARY() -> Int = 20
+f EXPR_UNARY() -> Int = 21
+
+# Calls and access
+f EXPR_CALL() -> Int = 30
+f EXPR_METHOD_CALL() -> Int = 31
+f EXPR_FIELD() -> Int = 32
+f EXPR_INDEX() -> Int = 33
+
+# Compound
+f EXPR_TUPLE() -> Int = 40
+f EXPR_ARRAY() -> Int = 41
+f EXPR_STRUCT() -> Int = 42
+
+# Control flow
+f EXPR_IF() -> Int = 50
+f EXPR_MATCH() -> Int = 51
+f EXPR_WHILE() -> Int = 52
+f EXPR_FOR() -> Int = 53
+f EXPR_LOOP() -> Int = 54
+f EXPR_BLOCK() -> Int = 55
+
+# Flow control
+f EXPR_RETURN() -> Int = 60
+f EXPR_BREAK() -> Int = 61
+f EXPR_CONTINUE() -> Int = 62
+
+# Closures
+f EXPR_CLOSURE() -> Int = 70
+
+# Assign
+f EXPR_ASSIGN() -> Int = 80
+
+# ============================================================================
+# Expression Node
+# ============================================================================
+
+# Each expression is stored as ExprNode
+# Kind-specific data is stored in auxiliary fields
+s ExprNode
+    kind: Int
+    span: Span
+    # For literals
+    int_val: Int
+    float_val: Float
+    bool_val: Bool
+    char_val: Char
+    str_val: Str
+    # For identifiers
+    name: Str
+    # For binary ops: left, op, right
+    left: Int      # Index into expr_nodes
+    op: Int        # Operator kind
+    right: Int     # Index into expr_nodes
+    # For unary: op and operand
+    operand: Int   # Index into expr_nodes
+    # For calls: callee and args (indices into expr_nodes)
+    callee: Int
+    args: [Int]
+    # For field access: object and field name
+    object: Int
+    field: Str
+    # For arrays/tuples: elements (indices)
+    elements: [Int]
+    # For if: condition, then_branch, else_branch (indices)
+    condition: Int
+    then_branch: Int
+    else_branch: Int  # -1 if no else
+    # For match: scrutinee, arms (indices into match_arms)
+    scrutinee: Int
+    arms: [Int]
+    # For while: condition, body_block
+    body_block: Int
+    # For blocks: statement indices
+    stmts: [Int]
+    # For struct: type_name, field_inits
+    type_name: Str
+    field_inits: [(Str, Int)]  # (field_name, expr_index)
+
+f expr_new(kind: Int, span: Span) -> ExprNode
+    ExprNode {
+        kind: kind,
+        span: span,
+        int_val: 0,
+        float_val: 0.0,
+        bool_val: false,
+        char_val: ' ',
+        str_val: "",
+        name: "",
+        left: -1,
+        op: 0,
+        right: -1,
+        operand: -1,
+        callee: -1,
+        args: [],
+        object: -1,
+        field: "",
+        elements: [],
+        condition: -1,
+        then_branch: -1,
+        else_branch: -1,
+        scrutinee: -1,
+        arms: [],
+        body_block: -1,
+        stmts: [],
+        type_name: "",
+        field_inits: []
+    }
+
+# ============================================================================
+# Statement Kinds
+# ============================================================================
+
+f STMT_EXPR() -> Int = 1
+f STMT_LET() -> Int = 2
+f STMT_ITEM() -> Int = 3
+
+# Statement Node
+s StmtNode
+    kind: Int
+    span: Span
+    expr: Int      # For STMT_EXPR: expr index
+    pattern: Int   # For STMT_LET: pattern index  
+    init: Int      # For STMT_LET: init expr index
+    mutable: Bool  # For STMT_LET: is mutable
+    item: Int      # For STMT_ITEM: item index
+
+f stmt_new(kind: Int, span: Span) -> StmtNode
+    StmtNode {
+        kind: kind,
+        span: span,
+        expr: -1,
+        pattern: -1,
+        init: -1,
+        mutable: false,
+        item: -1
+    }
+
+# ============================================================================
+# Item Kinds
+# ============================================================================
+
+f ITEM_FN() -> Int = 1
+f ITEM_STRUCT() -> Int = 2
+f ITEM_ENUM() -> Int = 3
+
+# Item Node
+s ItemNode
+    kind: Int
+    span: Span
+    name: Str
+    # For functions
+    params: [(Str, Int)]  # (name, type_index)
+    return_type: Int      # type index
+    body: Int             # expr index or -1
+    # For structs
+    fields: [(Str, Int)]  # (name, type_index)
+    # For enums
+    variants: [(Str, [Int])]  # (name, field_type_indices)
+
+f item_new(kind: Int, span: Span, name: Str) -> ItemNode
+    ItemNode {
+        kind: kind,
+        span: span,
+        name: name,
+        params: [],
+        return_type: -1,
+        body: -1,
+        fields: [],
+        variants: []
+    }
+
+# ============================================================================
+# Type Kinds
+# ============================================================================
+
+f TYPE_NAMED() -> Int = 1
+f TYPE_TUPLE() -> Int = 2
+f TYPE_ARRAY() -> Int = 3
+f TYPE_OPTION() -> Int = 4
+f TYPE_RESULT() -> Int = 5
+f TYPE_FN() -> Int = 6
+
+# Type Node
+s TypeNode
+    kind: Int
+    span: Span
+    name: Str         # For TYPE_NAMED
+    elements: [Int]   # For tuple/fn params (type indices)
+    inner: Int        # For option/array (inner type index)
+    error: Int        # For result (error type index)
+
+f type_new(kind: Int, span: Span) -> TypeNode
+    TypeNode {
+        kind: kind,
+        span: span,
+        name: "",
+        elements: [],
+        inner: -1,
+        error: -1
+    }
+
+# ============================================================================
+# Pattern Kinds
+# ============================================================================
+
+f PAT_WILDCARD() -> Int = 1
+f PAT_IDENT() -> Int = 2
+f PAT_LITERAL() -> Int = 3
+f PAT_TUPLE() -> Int = 4
+f PAT_STRUCT() -> Int = 5
+
+# Pattern Node
+s PatternNode
+    kind: Int
+    span: Span
+    name: Str         # For PAT_IDENT
+    mutable: Bool     # For PAT_IDENT
+    literal: Int      # For PAT_LITERAL (expr index)
+    elements: [Int]   # For PAT_TUPLE (pattern indices)
+    fields: [(Str, Int)]  # For PAT_STRUCT (name, pattern index)
+
+f pattern_new(kind: Int, span: Span) -> PatternNode
+    PatternNode {
+        kind: kind,
+        span: span,
+        name: "",
+        mutable: false,
+        literal: -1,
+        elements: [],
+        fields: []
+    }
+
+# ============================================================================
+# Match Arm
+# ============================================================================
+
+s MatchArm
+    pattern: Int  # pattern index
+    guard: Int    # expr index or -1
+    body: Int     # expr index
+    span: Span
+
+f match_arm_new(pattern: Int, body: Int, span: Span) -> MatchArm
+    MatchArm {
+        pattern: pattern,
+        guard: -1,
+        body: body,
+        span: span
+    }
+
+# ============================================================================
+# Binary Operators
+# ============================================================================
+
+f OP_ADD() -> Int = 1
+f OP_SUB() -> Int = 2
+f OP_MUL() -> Int = 3
+f OP_DIV() -> Int = 4
+f OP_REM() -> Int = 5
+f OP_EQ() -> Int = 10
+f OP_NE() -> Int = 11
+f OP_LT() -> Int = 12
+f OP_LE() -> Int = 13
+f OP_GT() -> Int = 14
+f OP_GE() -> Int = 15
+f OP_AND() -> Int = 20
+f OP_OR() -> Int = 21
+f OP_BITAND() -> Int = 30
+f OP_BITOR() -> Int = 31
+f OP_BITXOR() -> Int = 32
+f OP_SHL() -> Int = 33
+f OP_SHR() -> Int = 34
+
+# Unary Operators
+f UNOP_NEG() -> Int = 1
+f UNOP_NOT() -> Int = 2
+f UNOP_REF() -> Int = 3
+f UNOP_DEREF() -> Int = 4
+
+# ============================================================================
+# AST (the complete AST with all nodes)
+# ============================================================================
+
+s AST
+    exprs: [ExprNode]
+    stmts: [StmtNode]
+    items: [ItemNode]
+    types: [TypeNode]
+    patterns: [PatternNode]
+    match_arms: [MatchArm]
+    top_items: [Int]  # indices of top-level items
+
+f ast_new() -> AST
+    AST {
+        exprs: [],
+        stmts: [],
+        items: [],
+        types: [],
+        patterns: [],
+        match_arms: [],
+        top_items: []
+    }
+
+# Helper functions to add nodes and get their indices
+f ast_add_expr(ast: AST, expr: ExprNode) -> (AST, Int)
+    idx := vec_len(ast.exprs)
+    new_exprs := vec_push(ast.exprs, expr)
+    (AST { exprs: new_exprs, stmts: ast.stmts, items: ast.items, types: ast.types, patterns: ast.patterns, match_arms: ast.match_arms, top_items: ast.top_items }, idx)
+
+f ast_add_stmt(ast: AST, stmt: StmtNode) -> (AST, Int)
+    idx := vec_len(ast.stmts)
+    new_stmts := vec_push(ast.stmts, stmt)
+    (AST { exprs: ast.exprs, stmts: new_stmts, items: ast.items, types: ast.types, patterns: ast.patterns, match_arms: ast.match_arms, top_items: ast.top_items }, idx)
+
+f ast_add_item(ast: AST, item: ItemNode) -> (AST, Int)
+    idx := vec_len(ast.items)
+    new_items := vec_push(ast.items, item)
+    (AST { exprs: ast.exprs, stmts: ast.stmts, items: new_items, types: ast.types, patterns: ast.patterns, match_arms: ast.match_arms, top_items: ast.top_items }, idx)
+
+f ast_add_type(ast: AST, ty: TypeNode) -> (AST, Int)
+    idx := vec_len(ast.types)
+    new_types := vec_push(ast.types, ty)
+    (AST { exprs: ast.exprs, stmts: ast.stmts, items: ast.items, types: new_types, patterns: ast.patterns, match_arms: ast.match_arms, top_items: ast.top_items }, idx)
+
+f ast_add_pattern(ast: AST, pat: PatternNode) -> (AST, Int)
+    idx := vec_len(ast.patterns)
+    new_patterns := vec_push(ast.patterns, pat)
+    (AST { exprs: ast.exprs, stmts: ast.stmts, items: ast.items, types: ast.types, patterns: new_patterns, match_arms: ast.match_arms, top_items: ast.top_items }, idx)
+
+f ast_add_match_arm(ast: AST, arm: MatchArm) -> (AST, Int)
+    idx := vec_len(ast.match_arms)
+    new_arms := vec_push(ast.match_arms, arm)
+    (AST { exprs: ast.exprs, stmts: ast.stmts, items: ast.items, types: ast.types, patterns: ast.patterns, match_arms: new_arms, top_items: ast.top_items }, idx)
+
+f ast_add_top_item(ast: AST, idx: Int) -> AST
+    new_top := vec_push(ast.top_items, idx)
+    AST { exprs: ast.exprs, stmts: ast.stmts, items: ast.items, types: ast.types, patterns: ast.patterns, match_arms: ast.match_arms, top_items: new_top }
+
+# ============================================================================
+# Parser (from parser.aria)
+# ============================================================================
+
+# Bootstrap Parser for ARIA
+# Recursive descent parser with index-based AST
+
+# ============================================================================
+# Parser State
+# ============================================================================
+
+s Parser
+    tokens: [Token]    # Input tokens from lexer
+    pos: Int           # Current position in token stream
+    ast: AST           # AST being built
+
+f parser_new(tokens: [Token]) -> Parser
+    Parser {
+        tokens: tokens,
+        pos: 0,
+        ast: ast_new()
+    }
+
+# ============================================================================
+# Token Access
+# ============================================================================
+
+f at_end(p: Parser) -> Bool
+    p.pos >= vec_len(p.tokens)
+
+f current(p: Parser) -> Token
+    if at_end(p) then p.tokens[vec_len(p.tokens) - 1]
+    else p.tokens[p.pos]
+
+f peek(p: Parser) -> Option[Token]
+    if p.pos + 1 >= vec_len(p.tokens) then None
+    else Some(p.tokens[p.pos + 1])
+
+f current_span(p: Parser) -> Span
+    tok := current(p)
+    tok.span
+
+f advance(p: Parser) -> Parser
+    if at_end(p) then p
+    else Parser { tokens: p.tokens, pos: p.pos + 1, ast: p.ast }
+
+f check(p: Parser, kind: Int) -> Bool
+    if at_end(p) then false
+    else current(p).kind == kind
+
+f check_ident(p: Parser) -> Bool
+    check(p, TK_IDENT())
+
+f match_token(p: Parser, kind: Int) -> (Parser, Bool)
+    if check(p, kind) then (advance(p), true)
+    else (p, false)
+
+f expect_token(p: Parser, kind: Int) -> (Parser, Bool)
+    if check(p, kind) then (advance(p), true)
+    else (p, false)
+
+f skip_newlines(p: Parser) -> Parser
+    done := false
+    result := p
+    wh !done
+        if check(result, TK_NEWLINE()) then result = advance(result)
+        else done = true
+    result
+
+# ============================================================================
+# Error Handling
+# ============================================================================
+
+s ParseError
+    message: Str
+    span: Span
+
+f error(p: Parser, msg: Str) -> ParseError
+    ParseError { message: msg, span: current_span(p) }
+
+# ============================================================================
+# Expression Parsing (Pratt Parser)
+# ============================================================================
+
+# Precedence levels
+f PREC_NONE() -> Int = 0
+f PREC_ASSIGN() -> Int = 1
+f PREC_OR() -> Int = 2
+f PREC_AND() -> Int = 3
+f PREC_EQ() -> Int = 4
+f PREC_CMP() -> Int = 5
+f PREC_TERM() -> Int = 6
+f PREC_FACTOR() -> Int = 7
+f PREC_UNARY() -> Int = 8
+f PREC_CALL() -> Int = 9
+f PREC_PRIMARY() -> Int = 10
+
+# Get precedence of binary operator
+f bin_op_precedence(kind: Int) -> Int
+    if kind == TK_PIPEPIPE() then PREC_OR()
+    else if kind == TK_AMPAMP() then PREC_AND()
+    else if kind == TK_EQEQ() || kind == TK_BANGEQ() then PREC_EQ()
+    else if kind == TK_LT() || kind == TK_LTEQ() || kind == TK_GT() || kind == TK_GTEQ() then PREC_CMP()
+    else if kind == TK_PLUS() || kind == TK_MINUS() then PREC_TERM()
+    else if kind == TK_STAR() || kind == TK_SLASH() || kind == TK_PERCENT() then PREC_FACTOR()
+    else PREC_NONE()
+
+# Get operator kind for AST
+f token_to_bin_op(kind: Int) -> Int
+    if kind == TK_PLUS() then OP_ADD()
+    else if kind == TK_MINUS() then OP_SUB()
+    else if kind == TK_STAR() then OP_MUL()
+    else if kind == TK_SLASH() then OP_DIV()
+    else if kind == TK_PERCENT() then OP_REM()
+    else if kind == TK_EQEQ() then OP_EQ()
+    else if kind == TK_BANGEQ() then OP_NE()
+    else if kind == TK_LT() then OP_LT()
+    else if kind == TK_LTEQ() then OP_LE()
+    else if kind == TK_GT() then OP_GT()
+    else if kind == TK_GTEQ() then OP_GE()
+    else if kind == TK_AMPAMP() then OP_AND()
+    else if kind == TK_PIPEPIPE() then OP_OR()
+    else 0
+
+# Parse primary expression (literals, identifiers, parenthesized, control flow)
+f parse_primary(p: Parser) -> (Parser, Int)
+    tok := current(p)
+    span := tok.span
+
+    # If expression
+    if tok.kind == TK_IF() then
+        parse_if_expr(p)
+
+    # While expression
+    else if tok.kind == TK_WH() then
+        parse_while_expr(p)
+
+    # Match expression
+    else if tok.kind == TK_M() then
+        parse_match_expr(p)
+
+    # Return expression: ret expr or ret
+    else if tok.kind == TK_RET() then
+        parse_return_expr(p)
+
+    # Break expression
+    else if tok.kind == TK_BR() then
+        p2 := advance(p)
+        expr := expr_new(EXPR_BREAK(), span)
+        (ast2, idx) := ast_add_expr(p.ast, expr)
+        (Parser { tokens: p2.tokens, pos: p2.pos, ast: ast2 }, idx)
+
+    # Continue expression
+    else if tok.kind == TK_CT() then
+        p2 := advance(p)
+        expr := expr_new(EXPR_CONTINUE(), span)
+        (ast2, idx) := ast_add_expr(p.ast, expr)
+        (Parser { tokens: p2.tokens, pos: p2.pos, ast: ast2 }, idx)
+
+    # Integer literal
+    else if tok.kind == TK_INT() then
+        expr := expr_new(EXPR_INT(), span)
+        expr = ExprNode { kind: expr.kind, span: expr.span, int_val: tok.int_val, float_val: expr.float_val, bool_val: expr.bool_val, char_val: expr.char_val, str_val: expr.str_val, name: expr.name, left: expr.left, op: expr.op, right: expr.right, operand: expr.operand, callee: expr.callee, args: expr.args, object: expr.object, field: expr.field, elements: expr.elements, condition: expr.condition, then_branch: expr.then_branch, else_branch: expr.else_branch, scrutinee: expr.scrutinee, arms: expr.arms, body_block: expr.body_block, stmts: expr.stmts, type_name: expr.type_name, field_inits: expr.field_inits }
+        (ast2, idx) := ast_add_expr(p.ast, expr)
+        p2 := Parser { tokens: p.tokens, pos: p.pos, ast: ast2 }
+        (advance(p2), idx)
+    
+    # Float literal
+    else if tok.kind == TK_FLOAT() then
+        expr := expr_new(EXPR_FLOAT(), span)
+        expr = ExprNode { kind: expr.kind, span: expr.span, int_val: expr.int_val, float_val: tok.float_val, bool_val: expr.bool_val, char_val: expr.char_val, str_val: expr.str_val, name: expr.name, left: expr.left, op: expr.op, right: expr.right, operand: expr.operand, callee: expr.callee, args: expr.args, object: expr.object, field: expr.field, elements: expr.elements, condition: expr.condition, then_branch: expr.then_branch, else_branch: expr.else_branch, scrutinee: expr.scrutinee, arms: expr.arms, body_block: expr.body_block, stmts: expr.stmts, type_name: expr.type_name, field_inits: expr.field_inits }
+        (ast2, idx) := ast_add_expr(p.ast, expr)
+        p2 := Parser { tokens: p.tokens, pos: p.pos, ast: ast2 }
+        (advance(p2), idx)
+    
+    # String literal
+    else if tok.kind == TK_STRING() then
+        expr := expr_new(EXPR_STR(), span)
+        expr = ExprNode { kind: expr.kind, span: expr.span, int_val: expr.int_val, float_val: expr.float_val, bool_val: expr.bool_val, char_val: expr.char_val, str_val: tok.str_val, name: expr.name, left: expr.left, op: expr.op, right: expr.right, operand: expr.operand, callee: expr.callee, args: expr.args, object: expr.object, field: expr.field, elements: expr.elements, condition: expr.condition, then_branch: expr.then_branch, else_branch: expr.else_branch, scrutinee: expr.scrutinee, arms: expr.arms, body_block: expr.body_block, stmts: expr.stmts, type_name: expr.type_name, field_inits: expr.field_inits }
+        (ast2, idx) := ast_add_expr(p.ast, expr)
+        p2 := Parser { tokens: p.tokens, pos: p.pos, ast: ast2 }
+        (advance(p2), idx)
+    
+    # Bool literals
+    else if tok.kind == TK_TRUE() then
+        expr := expr_new(EXPR_BOOL(), span)
+        expr = ExprNode { kind: expr.kind, span: expr.span, int_val: expr.int_val, float_val: expr.float_val, bool_val: true, char_val: expr.char_val, str_val: expr.str_val, name: expr.name, left: expr.left, op: expr.op, right: expr.right, operand: expr.operand, callee: expr.callee, args: expr.args, object: expr.object, field: expr.field, elements: expr.elements, condition: expr.condition, then_branch: expr.then_branch, else_branch: expr.else_branch, scrutinee: expr.scrutinee, arms: expr.arms, body_block: expr.body_block, stmts: expr.stmts, type_name: expr.type_name, field_inits: expr.field_inits }
+        (ast2, idx) := ast_add_expr(p.ast, expr)
+        p2 := Parser { tokens: p.tokens, pos: p.pos, ast: ast2 }
+        (advance(p2), idx)
+    
+    else if tok.kind == TK_FALSE() then
+        expr := expr_new(EXPR_BOOL(), span)
+        (ast2, idx) := ast_add_expr(p.ast, expr)
+        p2 := Parser { tokens: p.tokens, pos: p.pos, ast: ast2 }
+        (advance(p2), idx)
+    
+    # Identifier
+    else if tok.kind == TK_IDENT() then
+        expr := expr_new(EXPR_IDENT(), span)
+        expr = ExprNode { kind: expr.kind, span: expr.span, int_val: expr.int_val, float_val: expr.float_val, bool_val: expr.bool_val, char_val: expr.char_val, str_val: tok.str_val, name: tok.str_val, left: expr.left, op: expr.op, right: expr.right, operand: expr.operand, callee: expr.callee, args: expr.args, object: expr.object, field: expr.field, elements: expr.elements, condition: expr.condition, then_branch: expr.then_branch, else_branch: expr.else_branch, scrutinee: expr.scrutinee, arms: expr.arms, body_block: expr.body_block, stmts: expr.stmts, type_name: expr.type_name, field_inits: expr.field_inits }
+        (ast2, idx) := ast_add_expr(p.ast, expr)
+        p2 := Parser { tokens: p.tokens, pos: p.pos, ast: ast2 }
+        (advance(p2), idx)
+    
+    # Parenthesized expression
+    else if tok.kind == TK_LPAREN() then
+        p2 := advance(p)
+        (p3, expr_idx) := parse_expr(p2)
+        (p4, _) := expect_token(p3, TK_RPAREN())
+        (p4, expr_idx)
+    
+    # Error case - return dummy expr
+    else
+        expr := expr_new(EXPR_INT(), span)
+        (ast2, idx) := ast_add_expr(p.ast, expr)
+        p2 := Parser { tokens: p.tokens, pos: p.pos, ast: ast2 }
+        (p2, idx)
+
+# Parse unary expression
+f parse_unary(p: Parser) -> (Parser, Int)
+    tok := current(p)
+    span := tok.span
+    
+    if tok.kind == TK_MINUS() then
+        p2 := advance(p)
+        (p3, operand) := parse_unary(p2)
+        expr := expr_new(EXPR_UNARY(), span)
+        expr = ExprNode { kind: expr.kind, span: expr.span, int_val: expr.int_val, float_val: expr.float_val, bool_val: expr.bool_val, char_val: expr.char_val, str_val: expr.str_val, name: expr.name, left: expr.left, op: UNOP_NEG(), right: expr.right, operand: operand, callee: expr.callee, args: expr.args, object: expr.object, field: expr.field, elements: expr.elements, condition: expr.condition, then_branch: expr.then_branch, else_branch: expr.else_branch, scrutinee: expr.scrutinee, arms: expr.arms, body_block: expr.body_block, stmts: expr.stmts, type_name: expr.type_name, field_inits: expr.field_inits }
+        (ast2, idx) := ast_add_expr(p3.ast, expr)
+        (Parser { tokens: p3.tokens, pos: p3.pos, ast: ast2 }, idx)
+    
+    else if tok.kind == TK_BANG() then
+        p2 := advance(p)
+        (p3, operand) := parse_unary(p2)
+        expr := expr_new(EXPR_UNARY(), span)
+        expr = ExprNode { kind: expr.kind, span: expr.span, int_val: expr.int_val, float_val: expr.float_val, bool_val: expr.bool_val, char_val: expr.char_val, str_val: expr.str_val, name: expr.name, left: expr.left, op: UNOP_NOT(), right: expr.right, operand: operand, callee: expr.callee, args: expr.args, object: expr.object, field: expr.field, elements: expr.elements, condition: expr.condition, then_branch: expr.then_branch, else_branch: expr.else_branch, scrutinee: expr.scrutinee, arms: expr.arms, body_block: expr.body_block, stmts: expr.stmts, type_name: expr.type_name, field_inits: expr.field_inits }
+        (ast2, idx) := ast_add_expr(p3.ast, expr)
+        (Parser { tokens: p3.tokens, pos: p3.pos, ast: ast2 }, idx)
+    
+    else
+        parse_call(p)
+
+# Parse call/method/field access (postfix)
+f parse_call(p: Parser) -> (Parser, Int)
+    (p2, expr_idx) := parse_primary(p)
+    parse_postfix(p2, expr_idx)
+
+f parse_postfix(p: Parser, expr_idx: Int) -> (Parser, Int)
+    tok := current(p)
+    
+    # Function call
+    if tok.kind == TK_LPAREN() then
+        p2 := advance(p)
+        (p3, args) := parse_args(p2)
+        (p4, _) := expect_token(p3, TK_RPAREN())
+        
+        base_expr := p4.ast.exprs[expr_idx]
+        call_expr := expr_new(EXPR_CALL(), span_merge(base_expr.span, current_span(p4)))
+        call_expr = ExprNode { kind: call_expr.kind, span: call_expr.span, int_val: call_expr.int_val, float_val: call_expr.float_val, bool_val: call_expr.bool_val, char_val: call_expr.char_val, str_val: call_expr.str_val, name: call_expr.name, left: call_expr.left, op: call_expr.op, right: call_expr.right, operand: call_expr.operand, callee: expr_idx, args: args, object: call_expr.object, field: call_expr.field, elements: call_expr.elements, condition: call_expr.condition, then_branch: call_expr.then_branch, else_branch: call_expr.else_branch, scrutinee: call_expr.scrutinee, arms: call_expr.arms, body_block: call_expr.body_block, stmts: call_expr.stmts, type_name: call_expr.type_name, field_inits: call_expr.field_inits }
+        (ast2, idx) := ast_add_expr(p4.ast, call_expr)
+        parse_postfix(Parser { tokens: p4.tokens, pos: p4.pos, ast: ast2 }, idx)
+    
+    # Field access
+    else if tok.kind == TK_DOT() then
+        p2 := advance(p)
+        field_tok := current(p2)
+        if field_tok.kind == TK_IDENT() then
+            p3 := advance(p2)
+            base_expr := p3.ast.exprs[expr_idx]
+            field_expr := expr_new(EXPR_FIELD(), span_merge(base_expr.span, field_tok.span))
+            field_expr = ExprNode { kind: field_expr.kind, span: field_expr.span, int_val: field_expr.int_val, float_val: field_expr.float_val, bool_val: field_expr.bool_val, char_val: field_expr.char_val, str_val: field_expr.str_val, name: field_expr.name, left: field_expr.left, op: field_expr.op, right: field_expr.right, operand: field_expr.operand, callee: field_expr.callee, args: field_expr.args, object: expr_idx, field: field_tok.str_val, elements: field_expr.elements, condition: field_expr.condition, then_branch: field_expr.then_branch, else_branch: field_expr.else_branch, scrutinee: field_expr.scrutinee, arms: field_expr.arms, body_block: field_expr.body_block, stmts: field_expr.stmts, type_name: field_expr.type_name, field_inits: field_expr.field_inits }
+            (ast2, idx) := ast_add_expr(p3.ast, field_expr)
+            parse_postfix(Parser { tokens: p3.tokens, pos: p3.pos, ast: ast2 }, idx)
+        else
+            (p2, expr_idx)
+    
+    # Index access
+    else if tok.kind == TK_LBRACKET() then
+        p2 := advance(p)
+        (p3, index_expr) := parse_expr(p2)
+        (p4, _) := expect_token(p3, TK_RBRACKET())
+        
+        base_expr := p4.ast.exprs[expr_idx]
+        idx_expr := expr_new(EXPR_INDEX(), span_merge(base_expr.span, current_span(p4)))
+        idx_expr = ExprNode { kind: idx_expr.kind, span: idx_expr.span, int_val: idx_expr.int_val, float_val: idx_expr.float_val, bool_val: idx_expr.bool_val, char_val: idx_expr.char_val, str_val: idx_expr.str_val, name: idx_expr.name, left: expr_idx, op: idx_expr.op, right: index_expr, operand: idx_expr.operand, callee: idx_expr.callee, args: idx_expr.args, object: idx_expr.object, field: idx_expr.field, elements: idx_expr.elements, condition: idx_expr.condition, then_branch: idx_expr.then_branch, else_branch: idx_expr.else_branch, scrutinee: idx_expr.scrutinee, arms: idx_expr.arms, body_block: idx_expr.body_block, stmts: idx_expr.stmts, type_name: idx_expr.type_name, field_inits: idx_expr.field_inits }
+        (ast2, idx) := ast_add_expr(p4.ast, idx_expr)
+        parse_postfix(Parser { tokens: p4.tokens, pos: p4.pos, ast: ast2 }, idx)
+    
+    else
+        (p, expr_idx)
+
+# ============================================================================
+# Control Flow Expressions
+# ============================================================================
+
+# Parse return expression: ret expr or ret (returns unit)
+f parse_return_expr(p: Parser) -> (Parser, Int)
+    span := current_span(p)
+    p2 := advance(p)  # consume 'ret'
+
+    # Check if there's a value to return (not at end, newline, dedent, or else)
+    tok := current(p2)
+    if at_end(p2) || tok.kind == TK_NEWLINE() || tok.kind == TK_DEDENT() || tok.kind == TK_ELSE() then
+        # Return unit
+        expr := expr_new(EXPR_RETURN(), span)
+        expr = ExprNode { kind: expr.kind, span: expr.span, int_val: expr.int_val, float_val: expr.float_val, bool_val: expr.bool_val, char_val: expr.char_val, str_val: expr.str_val, name: expr.name, left: expr.left, op: expr.op, right: expr.right, operand: -1, callee: expr.callee, args: expr.args, object: expr.object, field: expr.field, elements: expr.elements, condition: expr.condition, then_branch: expr.then_branch, else_branch: expr.else_branch, scrutinee: expr.scrutinee, arms: expr.arms, body_block: expr.body_block, stmts: expr.stmts, type_name: expr.type_name, field_inits: expr.field_inits }
+        (ast2, idx) := ast_add_expr(p2.ast, expr)
+        (Parser { tokens: p2.tokens, pos: p2.pos, ast: ast2 }, idx)
+    else
+        # Return with value
+        (p3, val) := parse_expr(p2)
+        expr := expr_new(EXPR_RETURN(), span)
+        expr = ExprNode { kind: expr.kind, span: expr.span, int_val: expr.int_val, float_val: expr.float_val, bool_val: expr.bool_val, char_val: expr.char_val, str_val: expr.str_val, name: expr.name, left: expr.left, op: expr.op, right: expr.right, operand: val, callee: expr.callee, args: expr.args, object: expr.object, field: expr.field, elements: expr.elements, condition: expr.condition, then_branch: expr.then_branch, else_branch: expr.else_branch, scrutinee: expr.scrutinee, arms: expr.arms, body_block: expr.body_block, stmts: expr.stmts, type_name: expr.type_name, field_inits: expr.field_inits }
+        (ast2, idx) := ast_add_expr(p3.ast, expr)
+        (Parser { tokens: p3.tokens, pos: p3.pos, ast: ast2 }, idx)
+
+# Parse if expression: if cond then expr else expr
+f parse_if_expr(p: Parser) -> (Parser, Int)
+    span := current_span(p)
+    p2 := advance(p)  # consume 'if'
+
+    # Parse condition
+    (p3, cond) := parse_expr(p2)
+
+    # Expect 'then'
+    (p4, _) := expect_token(p3, TK_THEN())
+
+    # Parse then branch
+    (p5, then_br) := parse_expr(p4)
+
+    # Parse optional else branch
+    if check(p5, TK_ELSE()) then
+        p6 := advance(p5)
+        (p7, else_br) := parse_expr(p6)
+        (new_ast, idx) := make_if_expr(p7.ast, span, cond, then_br, else_br)
+        (Parser { tokens: p7.tokens, pos: p7.pos, ast: new_ast }, idx)
+    else
+        (new_ast, idx) := make_if_expr(p5.ast, span, cond, then_br, -1)
+        (Parser { tokens: p5.tokens, pos: p5.pos, ast: new_ast }, idx)
+
+f make_if_expr(ast: AST, span: Span, cond: Int, then_br: Int, else_br: Int) -> (AST, Int)
+    expr := expr_new(EXPR_IF(), span)
+    expr = ExprNode { kind: expr.kind, span: expr.span, int_val: expr.int_val, float_val: expr.float_val, bool_val: expr.bool_val, char_val: expr.char_val, str_val: expr.str_val, name: expr.name, left: expr.left, op: expr.op, right: expr.right, operand: expr.operand, callee: expr.callee, args: expr.args, object: expr.object, field: expr.field, elements: expr.elements, condition: cond, then_branch: then_br, else_branch: else_br, scrutinee: expr.scrutinee, arms: expr.arms, body_block: expr.body_block, stmts: expr.stmts, type_name: expr.type_name, field_inits: expr.field_inits }
+    ast_add_expr(ast, expr)
+
+# Parse while expression: wh cond { body } or wh cond INDENT body DEDENT
+f parse_while_expr(p: Parser) -> (Parser, Int)
+    span := current_span(p)
+    p2 := advance(p)  # consume 'wh'
+
+    # Parse condition
+    (p3, cond) := parse_expr(p2)
+
+    # Skip newline and parse body
+    p4 := skip_newlines(p3)
+
+    # Check for indent (block body) or inline
+    if check(p4, TK_INDENT()) then
+        p5 := advance(p4)  # consume INDENT
+        (p6, body_stmts) := parse_block_stmts(p5)
+        (p7, _) := expect_token(p6, TK_DEDENT())
+
+        # Create a block expression for the body
+        block_expr := expr_new(EXPR_BLOCK(), span)
+        block_expr = ExprNode { kind: block_expr.kind, span: block_expr.span, int_val: block_expr.int_val, float_val: block_expr.float_val, bool_val: block_expr.bool_val, char_val: block_expr.char_val, str_val: block_expr.str_val, name: block_expr.name, left: block_expr.left, op: block_expr.op, right: block_expr.right, operand: block_expr.operand, callee: block_expr.callee, args: block_expr.args, object: block_expr.object, field: block_expr.field, elements: block_expr.elements, condition: block_expr.condition, then_branch: block_expr.then_branch, else_branch: block_expr.else_branch, scrutinee: block_expr.scrutinee, arms: block_expr.arms, body_block: block_expr.body_block, stmts: body_stmts, type_name: block_expr.type_name, field_inits: block_expr.field_inits }
+        (ast2, body_idx) := ast_add_expr(p7.ast, block_expr)
+
+        # Create while expression
+        while_expr := expr_new(EXPR_WHILE(), span)
+        while_expr = ExprNode { kind: while_expr.kind, span: while_expr.span, int_val: while_expr.int_val, float_val: while_expr.float_val, bool_val: while_expr.bool_val, char_val: while_expr.char_val, str_val: while_expr.str_val, name: while_expr.name, left: while_expr.left, op: while_expr.op, right: while_expr.right, operand: while_expr.operand, callee: while_expr.callee, args: while_expr.args, object: while_expr.object, field: while_expr.field, elements: while_expr.elements, condition: cond, then_branch: while_expr.then_branch, else_branch: while_expr.else_branch, scrutinee: while_expr.scrutinee, arms: while_expr.arms, body_block: body_idx, stmts: while_expr.stmts, type_name: while_expr.type_name, field_inits: while_expr.field_inits }
+        (ast3, idx) := ast_add_expr(ast2, while_expr)
+        (Parser { tokens: p7.tokens, pos: p7.pos, ast: ast3 }, idx)
+    else
+        # Inline while body (single expression)
+        (p5, body) := parse_expr(p4)
+        while_expr := expr_new(EXPR_WHILE(), span)
+        while_expr = ExprNode { kind: while_expr.kind, span: while_expr.span, int_val: while_expr.int_val, float_val: while_expr.float_val, bool_val: while_expr.bool_val, char_val: while_expr.char_val, str_val: while_expr.str_val, name: while_expr.name, left: while_expr.left, op: while_expr.op, right: while_expr.right, operand: while_expr.operand, callee: while_expr.callee, args: while_expr.args, object: while_expr.object, field: while_expr.field, elements: while_expr.elements, condition: cond, then_branch: while_expr.then_branch, else_branch: while_expr.else_branch, scrutinee: while_expr.scrutinee, arms: while_expr.arms, body_block: body, stmts: while_expr.stmts, type_name: while_expr.type_name, field_inits: while_expr.field_inits }
+        (ast2, idx) := ast_add_expr(p5.ast, while_expr)
+        (Parser { tokens: p5.tokens, pos: p5.pos, ast: ast2 }, idx)
+
+# Parse block statements (between INDENT and DEDENT)
+f parse_block_stmts(p: Parser) -> (Parser, [Int])
+    parse_block_stmts_loop(p, [])
+
+f parse_block_stmts_loop(p: Parser, stmts: [Int]) -> (Parser, [Int])
+    p2 := skip_newlines(p)
+    if check(p2, TK_DEDENT()) || at_end(p2) then (p2, stmts)
+    else
+        (p3, stmt_idx) := parse_statement(p2)
+        new_stmts := vec_push(stmts, stmt_idx)
+        p4 := skip_newlines(p3)
+        parse_block_stmts_loop(p4, new_stmts)
+
+# Parse a single statement - either let binding or expression
+f parse_statement(p: Parser) -> (Parser, Int)
+    # Check for let statement: name := expr or (pattern) := expr
+    (p2, is_let) := try_parse_let(p)
+    if is_let then (p2, vec_len(p2.ast.stmts) - 1)
+    else
+        # Parse as expression statement
+        (p3, stmt_expr) := parse_expr(p)
+        stmt := stmt_new(STMT_EXPR(), p3.ast.exprs[stmt_expr].span)
+        stmt = StmtNode { kind: stmt.kind, span: stmt.span, expr: stmt_expr, pattern: stmt.pattern, init: stmt.init, mutable: stmt.mutable, item: stmt.item }
+        (ast2, stmt_idx) := ast_add_stmt(p3.ast, stmt)
+        (Parser { tokens: p3.tokens, pos: p3.pos, ast: ast2 }, stmt_idx)
+
+# Try to parse a let statement, returns (Parser, Bool) where Bool indicates success
+f try_parse_let(p: Parser) -> (Parser, Bool)
+    tok := current(p)
+    span := tok.span
+
+    # Check for simple let: name := expr
+    if tok.kind == TK_IDENT() then
+        p2 := advance(p)
+        if check(p2, TK_COLONEQ()) then
+            # It's a let statement
+            p3 := advance(p2)  # consume :=
+            (p4, init_expr) := parse_expr(p3)
+
+            # Create identifier pattern
+            pat := pattern_new(PAT_IDENT(), span)
+            pat = PatternNode { kind: pat.kind, span: pat.span, name: tok.str_val, mutable: false, literal: pat.literal, elements: pat.elements, fields: pat.fields }
+            (ast2, pat_idx) := ast_add_pattern(p4.ast, pat)
+
+            # Create let statement
+            stmt := stmt_new(STMT_LET(), span)
+            stmt = StmtNode { kind: stmt.kind, span: stmt.span, expr: stmt.expr, pattern: pat_idx, init: init_expr, mutable: false, item: stmt.item }
+            (ast3, _) := ast_add_stmt(ast2, stmt)
+
+            (Parser { tokens: p4.tokens, pos: p4.pos, ast: ast3 }, true)
+        else
+            (p, false)
+
+    # Check for mutable let: mut name := expr or name = expr (assignment, not let)
+    # For now, we treat simple assignment as let for simplicity
+    else if tok.kind == TK_LPAREN() then
+        # Tuple pattern: (a, b) := expr
+        p2 := advance(p)
+        (p3, pats) := parse_tuple_pattern_elements(p2)
+        (p4, _) := expect_token(p3, TK_RPAREN())
+
+        if check(p4, TK_COLONEQ()) then
+            p5 := advance(p4)  # consume :=
+            (p6, init_expr) := parse_expr(p5)
+
+            # Create tuple pattern
+            pat := pattern_new(PAT_TUPLE(), span)
+            pat = PatternNode { kind: pat.kind, span: pat.span, name: pat.name, mutable: false, literal: pat.literal, elements: pats, fields: pat.fields }
+            (ast2, pat_idx) := ast_add_pattern(p6.ast, pat)
+
+            # Create let statement
+            stmt := stmt_new(STMT_LET(), span)
+            stmt = StmtNode { kind: stmt.kind, span: stmt.span, expr: stmt.expr, pattern: pat_idx, init: init_expr, mutable: false, item: stmt.item }
+            (ast3, _) := ast_add_stmt(ast2, stmt)
+
+            (Parser { tokens: p6.tokens, pos: p6.pos, ast: ast3 }, true)
+        else
+            (p, false)
+    else
+        (p, false)
+
+# Parse tuple pattern elements: a, b, c
+f parse_tuple_pattern_elements(p: Parser) -> (Parser, [Int])
+    parse_tuple_pattern_elements_loop(p, [])
+
+f parse_tuple_pattern_elements_loop(p: Parser, pats: [Int]) -> (Parser, [Int])
+    if check(p, TK_RPAREN()) then (p, pats)
+    else
+        tok := current(p)
+        if tok.kind == TK_IDENT() then
+            # Create identifier pattern
+            pat := pattern_new(PAT_IDENT(), tok.span)
+            pat = PatternNode { kind: pat.kind, span: pat.span, name: tok.str_val, mutable: false, literal: pat.literal, elements: pat.elements, fields: pat.fields }
+            (ast2, pat_idx) := ast_add_pattern(p.ast, pat)
+
+            new_pats := vec_push(pats, pat_idx)
+            p2 := advance(Parser { tokens: p.tokens, pos: p.pos, ast: ast2 })
+
+            if check(p2, TK_COMMA()) then parse_tuple_pattern_elements_loop(advance(p2), new_pats)
+            else (p2, new_pats)
+        else
+            (p, pats)
+
+# Parse match expression: m scrutinee INDENT arms DEDENT
+f parse_match_expr(p: Parser) -> (Parser, Int)
+    span := current_span(p)
+    p2 := advance(p)  # consume 'm'
+
+    # Parse scrutinee
+    (p3, scrut) := parse_expr(p2)
+
+    # Skip newlines and parse arms
+    p4 := skip_newlines(p3)
+
+    if check(p4, TK_INDENT()) then
+        p5 := advance(p4)  # consume INDENT
+        (p6, arms) := parse_match_arms(p5)
+        (p7, _) := expect_token(p6, TK_DEDENT())
+
+        match_expr := expr_new(EXPR_MATCH(), span)
+        match_expr = ExprNode { kind: match_expr.kind, span: match_expr.span, int_val: match_expr.int_val, float_val: match_expr.float_val, bool_val: match_expr.bool_val, char_val: match_expr.char_val, str_val: match_expr.str_val, name: match_expr.name, left: match_expr.left, op: match_expr.op, right: match_expr.right, operand: match_expr.operand, callee: match_expr.callee, args: match_expr.args, object: match_expr.object, field: match_expr.field, elements: match_expr.elements, condition: match_expr.condition, then_branch: match_expr.then_branch, else_branch: match_expr.else_branch, scrutinee: scrut, arms: arms, body_block: match_expr.body_block, stmts: match_expr.stmts, type_name: match_expr.type_name, field_inits: match_expr.field_inits }
+        (ast2, idx) := ast_add_expr(p7.ast, match_expr)
+        (Parser { tokens: p7.tokens, pos: p7.pos, ast: ast2 }, idx)
+    else
+        # Error - match needs arms in a block
+        expr := expr_new(EXPR_INT(), span)
+        (ast2, idx) := ast_add_expr(p4.ast, expr)
+        (Parser { tokens: p4.tokens, pos: p4.pos, ast: ast2 }, idx)
+
+# Parse match arms
+f parse_match_arms(p: Parser) -> (Parser, [Int])
+    parse_match_arms_loop(p, [])
+
+f parse_match_arms_loop(p: Parser, arms: [Int]) -> (Parser, [Int])
+    p2 := skip_newlines(p)
+    if check(p2, TK_DEDENT()) || at_end(p2) then (p2, arms)
+    else
+        (p3, arm_idx) := parse_match_arm(p2)
+        new_arms := vec_push(arms, arm_idx)
+        p4 := skip_newlines(p3)
+        parse_match_arms_loop(p4, new_arms)
+
+# Parse a single match arm: pattern -> body
+f parse_match_arm(p: Parser) -> (Parser, Int)
+    span := current_span(p)
+    (p2, pat) := parse_pattern(p)
+    (p3, _) := expect_token(p2, TK_ARROW())
+    (p4, body) := parse_expr(p3)
+
+    arm := match_arm_new(pat, body, span)
+    (new_ast, idx) := ast_add_match_arm(p4.ast, arm)
+    (Parser { tokens: p4.tokens, pos: p4.pos, ast: new_ast }, idx)
+
+# Parse pattern
+f parse_pattern(p: Parser) -> (Parser, Int)
+    tok := current(p)
+    span := tok.span
+
+    # Wildcard pattern: _
+    if tok.kind == TK_IDENT() && tok.str_val == "_" then
+        pat := pattern_new(PAT_WILDCARD(), span)
+        (ast2, idx) := ast_add_pattern(p.ast, pat)
+        (Parser { tokens: p.tokens, pos: p.pos + 1, ast: ast2 }, idx)
+
+    # None pattern (unit variant)
+    else if tok.kind == TK_NONE() then
+        pat := pattern_new(PAT_IDENT(), span)
+        pat = PatternNode { kind: pat.kind, span: pat.span, name: "None", mutable: false, literal: pat.literal, elements: pat.elements, fields: pat.fields }
+        (ast2, idx) := ast_add_pattern(p.ast, pat)
+        (Parser { tokens: p.tokens, pos: p.pos + 1, ast: ast2 }, idx)
+
+    # Identifier or constructor pattern: name or Name(args)
+    else if tok.kind == TK_IDENT() then
+        p2 := advance(p)
+        # Check for constructor pattern: Some(x) or Name(...)
+        if check(p2, TK_LPAREN()) then
+            p3 := advance(p2)  # consume (
+            (p4, inner_pats) := parse_pattern_args(p3)
+            (p5, _) := expect_token(p4, TK_RPAREN())
+
+            # This is a struct/variant pattern
+            pat := pattern_new(PAT_STRUCT(), span)
+            fields := build_positional_fields(inner_pats, 0)
+            pat = PatternNode { kind: pat.kind, span: pat.span, name: tok.str_val, mutable: false, literal: pat.literal, elements: inner_pats, fields: fields }
+            (ast2, idx) := ast_add_pattern(p5.ast, pat)
+            (Parser { tokens: p5.tokens, pos: p5.pos, ast: ast2 }, idx)
+        else
+            # Simple identifier pattern
+            pat := pattern_new(PAT_IDENT(), span)
+            pat = PatternNode { kind: pat.kind, span: pat.span, name: tok.str_val, mutable: false, literal: pat.literal, elements: pat.elements, fields: pat.fields }
+            (ast2, idx) := ast_add_pattern(p.ast, pat)
+            (Parser { tokens: p.tokens, pos: p.pos + 1, ast: ast2 }, idx)
+
+    # Integer literal pattern
+    else if tok.kind == TK_INT() then
+        # Create literal expression
+        lit_expr := expr_new(EXPR_INT(), span)
+        lit_expr = ExprNode { kind: lit_expr.kind, span: lit_expr.span, int_val: tok.int_val, float_val: lit_expr.float_val, bool_val: lit_expr.bool_val, char_val: lit_expr.char_val, str_val: lit_expr.str_val, name: lit_expr.name, left: lit_expr.left, op: lit_expr.op, right: lit_expr.right, operand: lit_expr.operand, callee: lit_expr.callee, args: lit_expr.args, object: lit_expr.object, field: lit_expr.field, elements: lit_expr.elements, condition: lit_expr.condition, then_branch: lit_expr.then_branch, else_branch: lit_expr.else_branch, scrutinee: lit_expr.scrutinee, arms: lit_expr.arms, body_block: lit_expr.body_block, stmts: lit_expr.stmts, type_name: lit_expr.type_name, field_inits: lit_expr.field_inits }
+        (ast2, lit_idx) := ast_add_expr(p.ast, lit_expr)
+
+        pat := pattern_new(PAT_LITERAL(), span)
+        pat = PatternNode { kind: pat.kind, span: pat.span, name: pat.name, mutable: false, literal: lit_idx, elements: pat.elements, fields: pat.fields }
+        (ast3, idx) := ast_add_pattern(ast2, pat)
+        (Parser { tokens: p.tokens, pos: p.pos + 1, ast: ast3 }, idx)
+
+    else
+        # Default: wildcard
+        pat := pattern_new(PAT_WILDCARD(), span)
+        (ast2, idx) := ast_add_pattern(p.ast, pat)
+        (Parser { tokens: p.tokens, pos: p.pos, ast: ast2 }, idx)
+
+# Parse pattern arguments for constructor patterns
+f parse_pattern_args(p: Parser) -> (Parser, [Int])
+    parse_pattern_args_loop(p, [])
+
+f parse_pattern_args_loop(p: Parser, pats: [Int]) -> (Parser, [Int])
+    if check(p, TK_RPAREN()) then (p, pats)
+    else
+        (p2, pat) := parse_pattern(p)
+        new_pats := vec_push(pats, pat)
+        if check(p2, TK_COMMA()) then parse_pattern_args_loop(advance(p2), new_pats)
+        else (p2, new_pats)
+
+# Build positional field list for struct patterns
+f build_positional_fields(pats: [Int], idx: Int) -> [(Str, Int)]
+    build_positional_fields_acc(pats, idx, [])
+
+f build_positional_fields_acc(pats: [Int], idx: Int, acc: [(Str, Int)]) -> [(Str, Int)]
+    if idx >= vec_len(pats) then acc
+    else
+        field := (int_to_str(idx), pats[idx])
+        new_acc := vec_push(acc, field)
+        build_positional_fields_acc(pats, idx + 1, new_acc)
+
+# ============================================================================
+# Arguments
+# ============================================================================
+
+# Parse function call arguments
+f parse_args(p: Parser) -> (Parser, [Int])
+    parse_args_loop(p, [])
+
+f parse_args_loop(p: Parser, args: [Int]) -> (Parser, [Int])
+    if check(p, TK_RPAREN()) then (p, args)
+    else
+        (p2, arg) := parse_expr(p)
+        new_args := vec_push(args, arg)
+        if check(p2, TK_COMMA()) then parse_args_loop(advance(p2), new_args)
+        else (p2, new_args)
+
+# Parse binary expression with precedence
+f parse_binary(p: Parser, min_prec: Int) -> (Parser, Int)
+    (p2, left) := parse_unary(p)
+    parse_binary_rhs(p2, left, min_prec)
+
+f parse_binary_rhs(p: Parser, left: Int, min_prec: Int) -> (Parser, Int)
+    tok := current(p)
+    prec := bin_op_precedence(tok.kind)
+    
+    if prec <= min_prec then
+        (p, left)
+    else
+        op := token_to_bin_op(tok.kind)
+        p2 := advance(p)
+        (p3, right) := parse_binary(p2, prec)
+        
+        left_expr := p3.ast.exprs[left]
+        right_expr := p3.ast.exprs[right]
+        bin_expr := expr_new(EXPR_BINARY(), span_merge(left_expr.span, right_expr.span))
+        bin_expr = ExprNode { kind: bin_expr.kind, span: bin_expr.span, int_val: bin_expr.int_val, float_val: bin_expr.float_val, bool_val: bin_expr.bool_val, char_val: bin_expr.char_val, str_val: bin_expr.str_val, name: bin_expr.name, left: left, op: op, right: right, operand: bin_expr.operand, callee: bin_expr.callee, args: bin_expr.args, object: bin_expr.object, field: bin_expr.field, elements: bin_expr.elements, condition: bin_expr.condition, then_branch: bin_expr.then_branch, else_branch: bin_expr.else_branch, scrutinee: bin_expr.scrutinee, arms: bin_expr.arms, body_block: bin_expr.body_block, stmts: bin_expr.stmts, type_name: bin_expr.type_name, field_inits: bin_expr.field_inits }
+        (ast2, idx) := ast_add_expr(p3.ast, bin_expr)
+        parse_binary_rhs(Parser { tokens: p3.tokens, pos: p3.pos, ast: ast2 }, idx, min_prec)
+
+# Parse expression
+f parse_expr(p: Parser) -> (Parser, Int)
+    parse_binary(p, PREC_NONE())
+
+# ============================================================================
+# Top Level Parsing
+# ============================================================================
+
+f parse_file(p: Parser) -> (Parser, Bool)
+    p2 := skip_newlines(p)
+    parse_file_loop(p2)
+
+f parse_file_loop(p: Parser) -> (Parser, Bool)
+    if at_end(p) then (p, true)
+    else
+        # Try parsing function
+        (p2, ok) := parse_item_fn(p)
+        if ok then parse_file_loop(skip_newlines(p2))
+        else
+            # Try parsing struct
+            (p3, ok2) := parse_item_struct(p)
+            if ok2 then parse_file_loop(skip_newlines(p3))
+            else
+                # Try parsing enum
+                (p4, ok3) := parse_item_enum(p)
+                if ok3 then parse_file_loop(skip_newlines(p4))
+                else (p, false)
+
+# Parse a function item
+f parse_item_fn(p: Parser) -> (Parser, Bool)
+    tok := current(p)
+    if tok.kind != TK_F() then
+        (p, false)
+    else
+        span := tok.span
+        p2 := advance(p)
+        
+        # Function name
+        name_tok := current(p2)
+        if name_tok.kind != TK_IDENT() then
+            (p2, false)
+        else
+            p3 := advance(p2)
+            name := name_tok.str_val
+            
+            # Parameters
+            (p4, _) := expect_token(p3, TK_LPAREN())
+            (p5, params) := parse_params(p4)
+            (p6, _) := expect_token(p5, TK_RPAREN())
+            
+            # Return type
+            (p7, ret_type) := parse_optional_return_type(p6)
+            
+            # Body
+            (p8, _) := expect_token(p7, TK_EQ())
+            (p9, body) := parse_expr(p8)
+            
+            # Create function item
+            item := item_new(ITEM_FN(), span, name)
+            item = ItemNode { kind: item.kind, span: span_merge(span, p9.ast.exprs[body].span), name: name, params: params, return_type: ret_type, body: body, fields: item.fields, variants: item.variants }
+            (ast2, idx) := ast_add_item(p9.ast, item)
+            ast3 := ast_add_top_item(ast2, idx)
+            (Parser { tokens: p9.tokens, pos: p9.pos, ast: ast3 }, true)
+
+# Parse a struct item: s Name NEWLINE INDENT fields DEDENT
+f parse_item_struct(p: Parser) -> (Parser, Bool)
+    tok := current(p)
+    if tok.kind != TK_S() then
+        (p, false)
+    else
+        span := tok.span
+        p2 := advance(p)
+
+        # Struct name
+        name_tok := current(p2)
+        if name_tok.kind != TK_IDENT() then
+            (p2, false)
+        else
+            p3 := advance(p2)
+            name := name_tok.str_val
+
+            # Skip newline and expect indent
+            p4 := skip_newlines(p3)
+            if check(p4, TK_INDENT()) then
+                p5 := advance(p4)
+                (p6, fields) := parse_struct_fields(p5)
+                (p7, _) := expect_token(p6, TK_DEDENT())
+
+                # Create struct item
+                item := item_new(ITEM_STRUCT(), span, name)
+                item = ItemNode { kind: item.kind, span: span, name: name, params: item.params, return_type: item.return_type, body: item.body, fields: fields, variants: item.variants }
+                (ast2, idx) := ast_add_item(p7.ast, item)
+                ast3 := ast_add_top_item(ast2, idx)
+                (Parser { tokens: p7.tokens, pos: p7.pos, ast: ast3 }, true)
+            else
+                # Unit struct (no fields)
+                item := item_new(ITEM_STRUCT(), span, name)
+                item = ItemNode { kind: item.kind, span: span, name: name, params: item.params, return_type: item.return_type, body: item.body, fields: [], variants: item.variants }
+                (ast2, idx) := ast_add_item(p4.ast, item)
+                ast3 := ast_add_top_item(ast2, idx)
+                (Parser { tokens: p4.tokens, pos: p4.pos, ast: ast3 }, true)
+
+f parse_struct_fields(p: Parser) -> (Parser, [(Str, Int)])
+    parse_struct_fields_loop(p, [])
+
+f parse_struct_fields_loop(p: Parser, fields: [(Str, Int)]) -> (Parser, [(Str, Int)])
+    p2 := skip_newlines(p)
+    if check(p2, TK_DEDENT()) || at_end(p2) then (p2, fields)
+    else
+        (p3, field) := parse_struct_field(p2)
+        new_fields := vec_push(fields, field)
+        parse_struct_fields_loop(p3, new_fields)
+
+f parse_struct_field(p: Parser) -> (Parser, (Str, Int))
+    name_tok := current(p)
+    if name_tok.kind != TK_IDENT() then
+        (p, ("", -1))
+    else
+        p2 := advance(p)
+        (p3, _) := expect_token(p2, TK_COLON())
+        (p4, ty) := parse_type(p3)
+        (p4, (name_tok.str_val, ty))
+
+# Parse an enum item: e Name NEWLINE INDENT variants DEDENT
+f parse_item_enum(p: Parser) -> (Parser, Bool)
+    tok := current(p)
+    if tok.kind != TK_E() then
+        (p, false)
+    else
+        span := tok.span
+        p2 := advance(p)
+
+        # Enum name
+        name_tok := current(p2)
+        if name_tok.kind != TK_IDENT() then
+            (p2, false)
+        else
+            p3 := advance(p2)
+            name := name_tok.str_val
+
+            # Skip newline and expect indent
+            p4 := skip_newlines(p3)
+            if check(p4, TK_INDENT()) then
+                p5 := advance(p4)
+                (p6, variants) := parse_enum_variants(p5)
+                (p7, _) := expect_token(p6, TK_DEDENT())
+
+                # Create enum item
+                item := item_new(ITEM_ENUM(), span, name)
+                item = ItemNode { kind: item.kind, span: span, name: name, params: item.params, return_type: item.return_type, body: item.body, fields: item.fields, variants: variants }
+                (ast2, idx) := ast_add_item(p7.ast, item)
+                ast3 := ast_add_top_item(ast2, idx)
+                (Parser { tokens: p7.tokens, pos: p7.pos, ast: ast3 }, true)
+            else
+                (p4, false)
+
+f parse_enum_variants(p: Parser) -> (Parser, [(Str, [Int])])
+    parse_enum_variants_loop(p, [])
+
+f parse_enum_variants_loop(p: Parser, variants: [(Str, [Int])]) -> (Parser, [(Str, [Int])])
+    p2 := skip_newlines(p)
+    if check(p2, TK_DEDENT()) || at_end(p2) then (p2, variants)
+    else
+        (p3, variant) := parse_enum_variant(p2)
+        new_variants := vec_push(variants, variant)
+        parse_enum_variants_loop(p3, new_variants)
+
+f parse_enum_variant(p: Parser) -> (Parser, (Str, [Int]))
+    name_tok := current(p)
+    if name_tok.kind != TK_IDENT() then
+        (p, ("", []))
+    else
+        p2 := advance(p)
+        name := name_tok.str_val
+
+        # Check for variant fields: Variant(Type1, Type2)
+        if check(p2, TK_LPAREN()) then
+            p3 := advance(p2)
+            (p4, types) := parse_variant_types(p3)
+            (p5, _) := expect_token(p4, TK_RPAREN())
+            (p5, (name, types))
+        else
+            # Unit variant
+            (p2, (name, []))
+
+f parse_variant_types(p: Parser) -> (Parser, [Int])
+    parse_variant_types_loop(p, [])
+
+f parse_variant_types_loop(p: Parser, types: [Int]) -> (Parser, [Int])
+    if check(p, TK_RPAREN()) then (p, types)
+    else
+        (p2, ty) := parse_type(p)
+        new_types := vec_push(types, ty)
+        if check(p2, TK_COMMA()) then parse_variant_types_loop(advance(p2), new_types)
+        else (p2, new_types)
+
+f parse_params(p: Parser) -> (Parser, [(Str, Int)])
+    parse_params_loop(p, [])
+
+f parse_params_loop(p: Parser, params: [(Str, Int)]) -> (Parser, [(Str, Int)])
+    if check(p, TK_RPAREN()) then (p, params)
+    else
+        (p2, param) := parse_param(p)
+        new_params := vec_push(params, param)
+        if check(p2, TK_COMMA()) then parse_params_loop(advance(p2), new_params)
+        else (p2, new_params)
+
+f parse_param(p: Parser) -> (Parser, (Str, Int))
+    name_tok := current(p)
+    if name_tok.kind != TK_IDENT() then
+        (p, ("", -1))
+    else
+        p2 := advance(p)
+        (p3, _) := expect_token(p2, TK_COLON())
+        (p4, ty) := parse_type(p3)
+        (p4, (name_tok.str_val, ty))
+
+f parse_optional_return_type(p: Parser) -> (Parser, Int)
+    (p2, matched) := match_token(p, TK_ARROW())
+    if matched then parse_type(p2)
+    else (p, -1)
+
+f parse_type(p: Parser) -> (Parser, Int)
+    tok := current(p)
+    if tok.kind == TK_IDENT() then
+        ty := type_new(TYPE_NAMED(), tok.span)
+        ty = TypeNode { kind: ty.kind, span: ty.span, name: tok.str_val, elements: ty.elements, inner: ty.inner, error: ty.error }
+        (ast2, idx) := ast_add_type(p.ast, ty)
+        (Parser { tokens: p.tokens, pos: p.pos + 1, ast: ast2 }, idx)
+    else
+        (p, -1)
+
+# ============================================================================
+# Main Entry Point
+# ============================================================================
+
+f parse(tokens: [Token]) -> AST
+    p := parser_new(tokens)
+    (p2, _) := parse_file(p)
+    p2.ast

@@ -1,0 +1,314 @@
+# ARIA Bootstrap Compiler - Token Definitions
+# Defines all tokens that can appear in ARIA source code
+
+# ============================================================
+# Token Kind enumeration
+# Using integers to represent token kinds since ARIA enums
+# with data require more complex pattern matching
+# ============================================================
+
+# Token kind constants
+# Keywords (single character) - 1-10
+s TokenKind
+    # Store the discriminant
+    kind: Int
+    # For tokens with associated data, store separately
+    int_value: Int
+    float_value: Float
+    str_value: Str
+    char_value: Char
+
+# Token kind constants
+# Keywords (single character)
+f TK_F() -> Int = 1          # function
+f TK_S() -> Int = 2          # struct
+f TK_E() -> Int = 3          # enum
+f TK_T() -> Int = 4          # trait
+f TK_I() -> Int = 5          # impl
+f TK_M() -> Int = 6          # match
+
+# Keywords (multi-character) - 10-40
+f TK_IF() -> Int = 10
+f TK_THEN() -> Int = 11
+f TK_ELSE() -> Int = 12
+f TK_FOR() -> Int = 13
+f TK_IN() -> Int = 14
+f TK_WH() -> Int = 15        # while
+f TK_LP() -> Int = 16        # loop
+f TK_BR() -> Int = 17        # break
+f TK_CT() -> Int = 18        # continue
+f TK_RET() -> Int = 19       # return
+f TK_AS() -> Int = 20        # async
+f TK_AW() -> Int = 21        # await
+f TK_US() -> Int = 22        # use
+f TK_MD() -> Int = 23        # module
+f TK_PUB() -> Int = 24       # public
+f TK_MUT() -> Int = 25       # mutable
+f TK_MV() -> Int = 26        # move
+f TK_UN() -> Int = 27        # unsafe
+f TK_TYPE() -> Int = 28      # type alias
+f TK_WHERE() -> Int = 29     # where clause
+
+# Boolean/None literals - 40-45
+f TK_TRUE() -> Int = 40
+f TK_FALSE() -> Int = 41
+f TK_NONE() -> Int = 42
+
+# Built-in type constructors - 45-50
+f TK_SOME() -> Int = 45
+f TK_OK() -> Int = 46
+f TK_ERR() -> Int = 47
+
+# Arithmetic operators - 50-60
+f TK_PLUS() -> Int = 50      # +
+f TK_MINUS() -> Int = 51     # -
+f TK_STAR() -> Int = 52      # *
+f TK_SLASH() -> Int = 53     # /
+f TK_PERCENT() -> Int = 54   # %
+
+# Comparison operators - 60-70
+f TK_EQEQ() -> Int = 60      # ==
+f TK_BANGEQ() -> Int = 61    # !=
+f TK_LT() -> Int = 62        # <
+f TK_LTEQ() -> Int = 63      # <=
+f TK_GT() -> Int = 64        # >
+f TK_GTEQ() -> Int = 65      # >=
+
+# Logical operators - 70-75
+f TK_AMPAMP() -> Int = 70    # &&
+f TK_PIPEPIPE() -> Int = 71  # ||
+f TK_BANG() -> Int = 72      # !
+
+# Bitwise operators - 75-80
+f TK_AMP() -> Int = 75       # &
+f TK_PIPE() -> Int = 76      # |
+f TK_CARET() -> Int = 77     # ^
+f TK_LTLT() -> Int = 78      # <<
+f TK_GTGT() -> Int = 79      # >>
+
+# Assignment operators - 80-90
+f TK_EQ() -> Int = 80        # =
+f TK_COLONEQ() -> Int = 81   # :=
+f TK_PLUSEQ() -> Int = 82    # +=
+f TK_MINUSEQ() -> Int = 83   # -=
+f TK_STAREQ() -> Int = 84    # *=
+f TK_SLASHEQ() -> Int = 85   # /=
+
+# Special operators - 90-100
+f TK_QUESTION() -> Int = 90  # ?
+f TK_QUESTIONQUESTION() -> Int = 91  # ??
+f TK_ARROW() -> Int = 92     # ->
+f TK_FATARROW() -> Int = 93  # =>
+f TK_DOTDOT() -> Int = 94    # ..
+f TK_DOTDOTEQ() -> Int = 95  # ..=
+f TK_COLONCOLON() -> Int = 96 # ::
+f TK_DOT() -> Int = 97       # .
+f TK_COMMA() -> Int = 98     # ,
+f TK_AT() -> Int = 99        # @
+
+# Delimiters - 100-110
+f TK_LPAREN() -> Int = 100   # (
+f TK_RPAREN() -> Int = 101   # )
+f TK_LBRACKET() -> Int = 102 # [
+f TK_RBRACKET() -> Int = 103 # ]
+f TK_LBRACE() -> Int = 104   # {
+f TK_RBRACE() -> Int = 105   # }
+f TK_COLON() -> Int = 106    # :
+f TK_SEMICOLON() -> Int = 107 # ;
+
+# Literals - 110-120 (with associated data)
+f TK_INT() -> Int = 110
+f TK_FLOAT() -> Int = 111
+f TK_STRING() -> Int = 112
+f TK_CHAR() -> Int = 113
+
+# Identifiers - 120
+f TK_IDENT() -> Int = 120
+
+# Indentation tokens - 130-135
+f TK_NEWLINE() -> Int = 130
+f TK_INDENT() -> Int = 131
+f TK_DEDENT() -> Int = 132
+
+# Special - 140-145
+f TK_EOF() -> Int = 140
+f TK_ERROR() -> Int = 141
+
+# ============================================================
+# Span - Source location information
+# ============================================================
+
+s Span
+    start: Int
+    end: Int
+    line: Int
+    column: Int
+
+f span_new(start: Int, end: Int, line: Int, column: Int) -> Span = Span { start: start, end: end, line: line, column: column }
+
+f span_len(span: Span) -> Int = span.end - span.start
+
+f span_merge(a: Span, b: Span) -> Span
+    start := if a.start < b.start then a.start else b.start
+    end := if a.end > b.end then a.end else b.end
+    line := if a.line < b.line then a.line else b.line
+    col := if a.line <= b.line then a.column else b.column
+    Span { start: start, end: end, line: line, column: col }
+
+# ============================================================
+# Token - A token with its location and value
+# ============================================================
+
+s Token
+    kind: Int           # TokenKind constant
+    span: Span
+    lexeme: Str
+    # For literals with values
+    int_val: Int
+    float_val: Float
+    str_val: Str
+    char_val: Char
+
+f token_new(kind: Int, span: Span, lexeme: Str) -> Token = Token { kind: kind, span: span, lexeme: lexeme, int_val: 0, float_val: 0.0, str_val: "", char_val: ' ' }
+
+f token_new_int(kind: Int, span: Span, lexeme: Str, value: Int) -> Token = Token { kind: kind, span: span, lexeme: lexeme, int_val: value, float_val: 0.0, str_val: "", char_val: ' ' }
+
+f token_new_float(kind: Int, span: Span, lexeme: Str, value: Float) -> Token = Token { kind: kind, span: span, lexeme: lexeme, int_val: 0, float_val: value, str_val: "", char_val: ' ' }
+
+f token_new_str(kind: Int, span: Span, lexeme: Str, value: Str) -> Token = Token { kind: kind, span: span, lexeme: lexeme, int_val: 0, float_val: 0.0, str_val: value, char_val: ' ' }
+
+f token_new_char(kind: Int, span: Span, lexeme: Str, value: Char) -> Token = Token { kind: kind, span: span, lexeme: lexeme, int_val: 0, float_val: 0.0, str_val: "", char_val: value }
+
+f token_is(tok: Token, kind: Int) -> Bool
+    tok.kind == kind
+
+# ============================================================
+# Keyword lookup
+# ============================================================
+
+f keyword_lookup(s: Str) -> Option[Int]
+    # Single-character keywords
+    if s == "f" then ret Some(TK_F()) else 0
+    if s == "s" then ret Some(TK_S()) else 0
+    if s == "e" then ret Some(TK_E()) else 0
+    if s == "t" then ret Some(TK_T()) else 0
+    if s == "i" then ret Some(TK_I()) else 0
+    if s == "m" then ret Some(TK_M()) else 0
+    # Multi-character keywords
+    if s == "if" then ret Some(TK_IF()) else 0
+    if s == "then" then ret Some(TK_THEN()) else 0
+    if s == "else" then ret Some(TK_ELSE()) else 0
+    if s == "for" then ret Some(TK_FOR()) else 0
+    if s == "in" then ret Some(TK_IN()) else 0
+    if s == "wh" then ret Some(TK_WH()) else 0
+    if s == "lp" then ret Some(TK_LP()) else 0
+    if s == "br" then ret Some(TK_BR()) else 0
+    if s == "ct" then ret Some(TK_CT()) else 0
+    if s == "ret" then ret Some(TK_RET()) else 0
+    if s == "as" then ret Some(TK_AS()) else 0
+    if s == "aw" then ret Some(TK_AW()) else 0
+    if s == "us" then ret Some(TK_US()) else 0
+    if s == "md" then ret Some(TK_MD()) else 0
+    if s == "pub" then ret Some(TK_PUB()) else 0
+    if s == "mut" then ret Some(TK_MUT()) else 0
+    if s == "mv" then ret Some(TK_MV()) else 0
+    if s == "un" then ret Some(TK_UN()) else 0
+    if s == "type" then ret Some(TK_TYPE()) else 0
+    if s == "where" then ret Some(TK_WHERE()) else 0
+    # Boolean literals
+    if s == "T" then ret Some(TK_TRUE()) else 0
+    if s == "F" then ret Some(TK_FALSE()) else 0
+    if s == "true" then ret Some(TK_TRUE()) else 0
+    if s == "false" then ret Some(TK_FALSE()) else 0
+    # None literal
+    if s == "N" then ret Some(TK_NONE()) else 0
+    if s == "none" then ret Some(TK_NONE()) else 0
+    # Built-in constructors
+    if s == "Some" then ret Some(TK_SOME()) else 0
+    if s == "Ok" then ret Some(TK_OK()) else 0
+    if s == "Err" then ret Some(TK_ERR()) else 0
+    if s == "ok" then ret Some(TK_OK()) else 0
+    if s == "err" then ret Some(TK_ERR()) else 0
+    None
+
+# ============================================================
+# Token kind name (for debugging)
+# ============================================================
+
+f token_kind_name(kind: Int) -> Str
+    if kind == TK_F() then ret "F" else 0
+    if kind == TK_S() then ret "S" else 0
+    if kind == TK_E() then ret "E" else 0
+    if kind == TK_T() then ret "T" else 0
+    if kind == TK_I() then ret "I" else 0
+    if kind == TK_M() then ret "M" else 0
+    if kind == TK_IF() then ret "IF" else 0
+    if kind == TK_THEN() then ret "THEN" else 0
+    if kind == TK_ELSE() then ret "ELSE" else 0
+    if kind == TK_FOR() then ret "FOR" else 0
+    if kind == TK_IN() then ret "IN" else 0
+    if kind == TK_WH() then ret "WH" else 0
+    if kind == TK_LP() then ret "LP" else 0
+    if kind == TK_BR() then ret "BR" else 0
+    if kind == TK_CT() then ret "CT" else 0
+    if kind == TK_RET() then ret "RET" else 0
+    if kind == TK_TRUE() then ret "TRUE" else 0
+    if kind == TK_FALSE() then ret "FALSE" else 0
+    if kind == TK_NONE() then ret "NONE" else 0
+    if kind == TK_SOME() then ret "SOME" else 0
+    if kind == TK_OK() then ret "OK" else 0
+    if kind == TK_ERR() then ret "ERR" else 0
+    if kind == TK_PLUS() then ret "PLUS" else 0
+    if kind == TK_MINUS() then ret "MINUS" else 0
+    if kind == TK_STAR() then ret "STAR" else 0
+    if kind == TK_SLASH() then ret "SLASH" else 0
+    if kind == TK_PERCENT() then ret "PERCENT" else 0
+    if kind == TK_EQEQ() then ret "EQEQ" else 0
+    if kind == TK_BANGEQ() then ret "BANGEQ" else 0
+    if kind == TK_LT() then ret "LT" else 0
+    if kind == TK_LTEQ() then ret "LTEQ" else 0
+    if kind == TK_GT() then ret "GT" else 0
+    if kind == TK_GTEQ() then ret "GTEQ" else 0
+    if kind == TK_AMPAMP() then ret "AMPAMP" else 0
+    if kind == TK_PIPEPIPE() then ret "PIPEPIPE" else 0
+    if kind == TK_BANG() then ret "BANG" else 0
+    if kind == TK_AMP() then ret "AMP" else 0
+    if kind == TK_PIPE() then ret "PIPE" else 0
+    if kind == TK_CARET() then ret "CARET" else 0
+    if kind == TK_LTLT() then ret "LTLT" else 0
+    if kind == TK_GTGT() then ret "GTGT" else 0
+    if kind == TK_EQ() then ret "EQ" else 0
+    if kind == TK_COLONEQ() then ret "COLONEQ" else 0
+    if kind == TK_PLUSEQ() then ret "PLUSEQ" else 0
+    if kind == TK_MINUSEQ() then ret "MINUSEQ" else 0
+    if kind == TK_STAREQ() then ret "STAREQ" else 0
+    if kind == TK_SLASHEQ() then ret "SLASHEQ" else 0
+    if kind == TK_QUESTION() then ret "QUESTION" else 0
+    if kind == TK_QUESTIONQUESTION() then ret "QUESTIONQUESTION" else 0
+    if kind == TK_ARROW() then ret "ARROW" else 0
+    if kind == TK_FATARROW() then ret "FATARROW" else 0
+    if kind == TK_DOTDOT() then ret "DOTDOT" else 0
+    if kind == TK_DOTDOTEQ() then ret "DOTDOTEQ" else 0
+    if kind == TK_COLONCOLON() then ret "COLONCOLON" else 0
+    if kind == TK_DOT() then ret "DOT" else 0
+    if kind == TK_COMMA() then ret "COMMA" else 0
+    if kind == TK_AT() then ret "AT" else 0
+    if kind == TK_LPAREN() then ret "LPAREN" else 0
+    if kind == TK_RPAREN() then ret "RPAREN" else 0
+    if kind == TK_LBRACKET() then ret "LBRACKET" else 0
+    if kind == TK_RBRACKET() then ret "RBRACKET" else 0
+    if kind == TK_LBRACE() then ret "LBRACE" else 0
+    if kind == TK_RBRACE() then ret "RBRACE" else 0
+    if kind == TK_COLON() then ret "COLON" else 0
+    if kind == TK_SEMICOLON() then ret "SEMICOLON" else 0
+    if kind == TK_INT() then ret "INT" else 0
+    if kind == TK_FLOAT() then ret "FLOAT" else 0
+    if kind == TK_STRING() then ret "STRING" else 0
+    if kind == TK_CHAR() then ret "CHAR" else 0
+    if kind == TK_IDENT() then ret "IDENT" else 0
+    if kind == TK_NEWLINE() then ret "NEWLINE" else 0
+    if kind == TK_INDENT() then ret "INDENT" else 0
+    if kind == TK_DEDENT() then ret "DEDENT" else 0
+    if kind == TK_EOF() then ret "EOF" else 0
+    if kind == TK_ERROR() then ret "ERROR" else 0
+    "UNKNOWN"
