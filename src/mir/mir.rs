@@ -211,6 +211,15 @@ pub enum Rvalue {
     Index(Operand, Operand),
     /// Cast: `operand as ty`
     Cast(Operand, Ty),
+    /// Closure creation with captured values
+    ///
+    /// Creates a closure value that packages a function with its captured environment.
+    /// - `func_name`: The lifted function that implements the closure body
+    /// - `captures`: Values captured from the enclosing scope
+    Closure {
+        func_name: String,
+        captures: Vec<Operand>,
+    },
 }
 
 /// An operand - something that can be used as input.
@@ -314,6 +323,17 @@ pub enum Terminator {
     /// Function call
     Call {
         func: String,
+        args: Vec<Operand>,
+        dest: Option<Local>,
+        next: BlockId,
+    },
+    /// Indirect function call (for closures and higher-order functions)
+    ///
+    /// Calls a function value stored in an operand. The callee can be:
+    /// - A closure value with captured environment
+    /// - A function reference
+    CallIndirect {
+        callee: Operand,
         args: Vec<Operand>,
         dest: Option<Local>,
         next: BlockId,
@@ -438,6 +458,16 @@ impl fmt::Display for Rvalue {
             Rvalue::TupleField(op, idx) => write!(f, "{}.{}", op, idx),
             Rvalue::Index(base, idx) => write!(f, "{}[{}]", base, idx),
             Rvalue::Cast(op, ty) => write!(f, "{} as {}", op, ty),
+            Rvalue::Closure { func_name, captures } => {
+                write!(f, "closure {}(", func_name)?;
+                for (i, cap) in captures.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", cap)?;
+                }
+                write!(f, ")")
+            }
         }
     }
 }
@@ -500,6 +530,24 @@ impl fmt::Display for Terminator {
                     write!(f, "{} = ", d)?;
                 }
                 write!(f, "call {}(", func)?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", arg)?;
+                }
+                write!(f, ") -> {}", next)
+            }
+            Terminator::CallIndirect {
+                callee,
+                args,
+                dest,
+                next,
+            } => {
+                if let Some(d) = dest {
+                    write!(f, "{} = ", d)?;
+                }
+                write!(f, "call_indirect {}(", callee)?;
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;

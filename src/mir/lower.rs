@@ -49,6 +49,8 @@ pub struct Lowerer {
     errors: Vec<LowerError>,
     /// Enum variant to (enum_type_name, variant_fields_count) mapping
     enum_variants: HashMap<String, (String, usize)>,
+    /// Counter for generating unique closure function names
+    closure_counter: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -68,6 +70,7 @@ impl Lowerer {
             loop_stack: Vec::new(),
             errors: Vec::new(),
             enum_variants: HashMap::new(),
+            closure_counter: 0,
         }
     }
 
@@ -429,19 +432,30 @@ impl Lowerer {
                     }
                 }
 
-                // Regular function call
-                let func_name = match &callee.kind {
-                    ExprKind::Ident(ident) => ident.name.clone(),
+                // Determine if this is a direct function call or an indirect call (closure/HOF)
+                let (is_direct, func_name) = match &callee.kind {
+                    ExprKind::Ident(ident) => {
+                        // Check if this identifier is a known function or a variable (closure)
+                        let name = &ident.name;
+                        if self.program.functions.contains_key(name)
+                            || self.is_builtin(name)
+                            || !self.vars.contains_key(name)
+                        {
+                            // Known function or unknown (will be resolved later)
+                            (true, Some(name.clone()))
+                        } else {
+                            // Variable holding a closure - needs indirect call
+                            (false, None)
+                        }
+                    }
                     ExprKind::Path(path) => {
-                        path.segments.iter()
+                        let name = path.segments.iter()
                             .map(|s| s.name.clone())
                             .collect::<Vec<_>>()
-                            .join("::")
+                            .join("::");
+                        (true, Some(name))
                     }
-                    _ => {
-                        self.error("invalid callee".to_string(), expr.span);
-                        return None;
-                    }
+                    _ => (false, None),  // Expression that evaluates to closure
                 };
 
                 // Lower arguments
@@ -452,15 +466,27 @@ impl Lowerer {
                     }
                 }
 
-                // Create call
                 let result = self.new_temp(Ty::Int); // TODO: proper return type
                 let next_block = self.new_block();
-                self.terminate(Terminator::Call {
-                    func: func_name,
-                    args: mir_args,
-                    dest: Some(result),
-                    next: next_block,
-                });
+
+                if is_direct {
+                    // Direct function call
+                    self.terminate(Terminator::Call {
+                        func: func_name.unwrap(),
+                        args: mir_args,
+                        dest: Some(result),
+                        next: next_block,
+                    });
+                } else {
+                    // Indirect call through closure variable
+                    let callee_op = self.lower_expr(callee)?;
+                    self.terminate(Terminator::CallIndirect {
+                        callee: callee_op,
+                        args: mir_args,
+                        dest: Some(result),
+                        next: next_block,
+                    });
+                }
                 self.current_block = Some(next_block);
 
                 Some(Operand::Local(result))
@@ -478,11 +504,14 @@ impl Lowerer {
                     }
                 }
 
-                // Create call (method name will be resolved later)
+                // Resolve method name to built-in function or qualified name
+                let func_name = self.resolve_method(&method.name);
+
+                // Create call
                 let result = self.new_temp(Ty::Int);
                 let next_block = self.new_block();
                 self.terminate(Terminator::Call {
-                    func: method.name.clone(),
+                    func: func_name,
                     args: mir_args,
                     dest: Some(result),
                     next: next_block,
@@ -661,11 +690,80 @@ impl Lowerer {
             }
 
             ExprKind::Closure(closure) => {
-                // For now, lower closure as a named function
-                // TODO: proper closure handling with captures
-                let _ = closure;
-                self.error("closures not yet supported in MIR".to_string(), expr.span);
-                None
+                // Lambda lifting: convert closure to a top-level function
+
+                // Generate unique name for the lifted function
+                let func_name = format!("__closure_{}", self.closure_counter);
+                self.closure_counter += 1;
+
+                // Find free variables (captured from enclosing scope)
+                let param_names: std::collections::HashSet<_> = closure.params.iter()
+                    .map(|p| p.name.name.clone())
+                    .collect();
+                let free_vars = self.find_free_vars(&closure.body, &param_names);
+
+                // Build captured value operands (from current scope)
+                let mut captures: Vec<Operand> = Vec::new();
+                for var_name in &free_vars {
+                    if let Some(&local) = self.vars.get(var_name) {
+                        captures.push(Operand::Copy(local));
+                    }
+                }
+
+                // Save current lowering state
+                let saved_fn = self.current_fn.take();
+                let saved_block = self.current_block.take();
+                let saved_vars = std::mem::take(&mut self.vars);
+
+                // Create the lifted function with signature: fn(captures..., params...)
+                let mut params: Vec<(Local, Ty)> = Vec::new();
+                let mut new_fn = Function::new(func_name.clone(), vec![], Ty::Int);
+
+                // Add captured variables as parameters first
+                for var_name in &free_vars {
+                    let local = new_fn.add_local(Ty::Int, Some(var_name.clone()));
+                    params.push((local, Ty::Int));
+                    self.vars.insert(var_name.clone(), local);
+                }
+
+                // Add closure parameters
+                for param in &closure.params {
+                    let local = new_fn.add_local(Ty::Int, Some(param.name.name.clone()));
+                    params.push((local, Ty::Int));
+                    self.vars.insert(param.name.name.clone(), local);
+                }
+
+                new_fn.params = params;
+
+                // Create entry block
+                let entry = new_fn.add_block();
+                self.current_fn = Some(new_fn);
+                self.current_block = Some(entry);
+
+                // Lower closure body
+                if let Some(result) = self.lower_expr(&closure.body) {
+                    self.terminate(Terminator::Return(Some(result)));
+                } else {
+                    self.terminate(Terminator::Return(None));
+                }
+
+                // Finalize and add the lifted function
+                if let Some(finished_fn) = self.current_fn.take() {
+                    self.program.functions.insert(func_name.clone(), finished_fn);
+                }
+
+                // Restore lowering state
+                self.current_fn = saved_fn;
+                self.current_block = saved_block;
+                self.vars = saved_vars;
+
+                // Create closure value with captured variables
+                let result = self.new_temp(Ty::Int); // TODO: proper closure type
+                self.emit(StatementKind::Assign(result, Rvalue::Closure {
+                    func_name,
+                    captures,
+                }));
+                Some(Operand::Local(result))
             }
 
             ExprKind::Pipeline(left, right) => {
@@ -1079,6 +1177,51 @@ impl Lowerer {
             "Err" => 1,
             // For user-defined enums, use a simple hash
             _ => variant.bytes().fold(0i64, |acc, b| acc + b as i64),
+        }
+    }
+
+    /// Resolve a method name to a function name.
+    ///
+    /// Maps common method names to their built-in function equivalents.
+    /// For example: `.len()` -> `vec_len` or `str_len`, `.push(x)` -> `vec_push`
+    fn resolve_method(&self, method_name: &str) -> String {
+        match method_name {
+            // Vec/Array methods
+            "len" => "vec_len".to_string(),
+            "push" => "vec_push".to_string(),
+            "pop" => "vec_pop".to_string(),
+            "get" => "vec_get".to_string(),
+            "set" => "vec_set".to_string(),
+            "first" => "vec_first".to_string(),
+            "last" => "vec_last".to_string(),
+            "concat" => "vec_concat".to_string(),
+            "slice" => "vec_slice".to_string(),
+            "reverse" => "vec_reverse".to_string(),
+
+            // String methods
+            "char_at" => "str_char_at".to_string(),
+            "contains" => "str_contains".to_string(),
+            "starts_with" => "str_starts_with".to_string(),
+            "ends_with" => "str_ends_with".to_string(),
+            "split" => "str_split".to_string(),
+            "trim" => "str_trim".to_string(),
+            "to_int" => "str_to_int".to_string(),
+            "to_str" => "int_to_str".to_string(),
+
+            // Map methods
+            "insert" => "map_insert".to_string(),
+            "remove" => "map_remove".to_string(),
+            "keys" => "map_keys".to_string(),
+            "values" => "map_values".to_string(),
+
+            // Char methods
+            "is_digit" => "char_is_digit".to_string(),
+            "is_alpha" => "char_is_alpha".to_string(),
+            "is_alphanumeric" => "char_is_alphanumeric".to_string(),
+            "is_whitespace" => "char_is_whitespace".to_string(),
+
+            // Default: use the method name as-is (for user-defined methods)
+            _ => method_name.to_string(),
         }
     }
 
@@ -1496,6 +1639,133 @@ impl Lowerer {
         }
 
         dp[m][n]
+    }
+
+    /// Find free variables in an expression that aren't in the given bound set.
+    /// Used for closure capture analysis.
+    fn find_free_vars(&self, expr: &Expr, bound: &std::collections::HashSet<String>) -> Vec<String> {
+        let mut free = Vec::new();
+        self.collect_free_vars(expr, bound, &mut free);
+        // Remove duplicates while preserving order
+        let mut seen = std::collections::HashSet::new();
+        free.retain(|v| seen.insert(v.clone()));
+        free
+    }
+
+    fn collect_free_vars(&self, expr: &Expr, bound: &std::collections::HashSet<String>, free: &mut Vec<String>) {
+        match &expr.kind {
+            ExprKind::Ident(ident) => {
+                let name = &ident.name;
+                // Check if it's a free variable (not bound, not a known function, not a builtin)
+                if !bound.contains(name)
+                    && !self.program.functions.contains_key(name)
+                    && !self.is_builtin(name)
+                    && !self.enum_variants.contains_key(name)
+                    && self.vars.contains_key(name)
+                {
+                    free.push(name.clone());
+                }
+            }
+            ExprKind::Literal(_) => {}
+            ExprKind::Unary(_, e) => self.collect_free_vars(e, bound, free),
+            ExprKind::Binary(left, _, right) => {
+                self.collect_free_vars(left, bound, free);
+                self.collect_free_vars(right, bound, free);
+            }
+            ExprKind::Call(callee, args) => {
+                self.collect_free_vars(callee, bound, free);
+                for arg in args {
+                    self.collect_free_vars(&arg.value, bound, free);
+                }
+            }
+            ExprKind::MethodCall(receiver, _, args) => {
+                self.collect_free_vars(receiver, bound, free);
+                for arg in args {
+                    self.collect_free_vars(&arg.value, bound, free);
+                }
+            }
+            ExprKind::If(if_expr) => {
+                // Collect from condition
+                self.collect_free_vars(&if_expr.condition, bound, free);
+                // Collect from then branch
+                match &if_expr.then_branch {
+                    IfBranch::Expr(e) => self.collect_free_vars(e, bound, free),
+                    IfBranch::Block(block) => {
+                        for stmt in &block.stmts {
+                            if let StmtKind::Expr(e) = &stmt.kind {
+                                self.collect_free_vars(e, bound, free);
+                            }
+                        }
+                    }
+                }
+                // Collect from else branch
+                if let Some(else_branch) = &if_expr.else_branch {
+                    match else_branch {
+                        ElseBranch::Expr(e) => self.collect_free_vars(e, bound, free),
+                        ElseBranch::Block(block) => {
+                            for stmt in &block.stmts {
+                                if let StmtKind::Expr(e) = &stmt.kind {
+                                    self.collect_free_vars(e, bound, free);
+                                }
+                            }
+                        }
+                        ElseBranch::ElseIf(nested_if) => {
+                            // Recurse as an if expression
+                            self.collect_free_vars(&Expr {
+                                kind: ExprKind::If(nested_if.clone()),
+                                span: expr.span,
+                            }, bound, free);
+                        }
+                    }
+                }
+            }
+            ExprKind::Block(block) => {
+                for stmt in &block.stmts {
+                    if let StmtKind::Expr(e) = &stmt.kind {
+                        self.collect_free_vars(e, bound, free);
+                    }
+                }
+            }
+            ExprKind::Tuple(exprs) => {
+                for e in exprs {
+                    self.collect_free_vars(e, bound, free);
+                }
+            }
+            ExprKind::Array(exprs) => {
+                for e in exprs {
+                    self.collect_free_vars(e, bound, free);
+                }
+            }
+            ExprKind::Index(base, idx) => {
+                self.collect_free_vars(base, bound, free);
+                self.collect_free_vars(idx, bound, free);
+            }
+            ExprKind::Field(e, _) => {
+                self.collect_free_vars(e, bound, free);
+            }
+            ExprKind::Closure(closure) => {
+                // Add closure params to bound set for nested closure
+                let mut inner_bound = bound.clone();
+                for param in &closure.params {
+                    inner_bound.insert(param.name.name.clone());
+                }
+                self.collect_free_vars(&closure.body, &inner_bound, free);
+            }
+            // Handle other cases conservatively
+            _ => {}
+        }
+    }
+
+    fn is_builtin(&self, name: &str) -> bool {
+        matches!(name,
+            "print" | "vec_new" | "vec_push" | "vec_pop" | "vec_len" | "vec_get" |
+            "vec_first" | "vec_last" | "vec_concat" | "vec_reverse" | "vec_slice" |
+            "str_len" | "str_char_at" | "str_slice" | "str_contains" | "str_starts_with" |
+            "str_ends_with" | "str_split" | "str_trim" | "str_to_int" | "int_to_str" |
+            "str_concat" | "map_new" | "map_insert" | "map_get" | "map_contains" |
+            "map_remove" | "map_len" | "map_keys" | "char_is_digit" | "char_is_alpha" |
+            "char_is_alphanumeric" | "char_is_whitespace" | "char_to_int"
+        )
     }
 }
 

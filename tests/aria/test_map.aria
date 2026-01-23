@@ -1,0 +1,71 @@
+# Test HashMap built-in functions
+# Expected output: All tests pass, final result: 1
+
+f test_map_new() -> Bool
+    mymap := map_new()
+    map_len(mymap) == 0
+
+f test_map_insert_get() -> Bool
+    mymap := map_new()
+    mymap = map_insert(mymap, "key1", 42)
+    m map_get(mymap, "key1")
+        Some(v) -> v == 42
+        None -> false
+
+f test_map_multiple_inserts() -> Bool
+    mymap := map_new()
+    mymap = map_insert(mymap, "a", 1)
+    mymap = map_insert(mymap, "b", 2)
+    mymap = map_insert(mymap, "c", 3)
+    map_len(mymap) == 3
+
+f test_map_get_missing() -> Bool
+    mymap := map_new()
+    mymap = map_insert(mymap, "exists", 100)
+    m map_get(mymap, "missing")
+        Some(_) -> false
+        None -> true
+
+f test_map_contains() -> Bool
+    mymap := map_new()
+    mymap = map_insert(mymap, "hello", 1)
+    map_contains(mymap, "hello")
+
+f test_map_contains_false() -> Bool
+    mymap := map_new()
+    mymap = map_insert(mymap, "hello", 1)
+    !map_contains(mymap, "goodbye")
+
+f test_map_overwrite() -> Bool
+    mymap := map_new()
+    mymap = map_insert(mymap, "key", 10)
+    mymap = map_insert(mymap, "key", 20)
+    m map_get(mymap, "key")
+        Some(v) -> v == 20
+        None -> false
+
+f test_map_keys() -> Bool
+    mymap := map_new()
+    mymap = map_insert(mymap, "a", 1)
+    mymap = map_insert(mymap, "b", 2)
+    keys := map_keys(mymap)
+    vec_len(keys) == 2
+
+f run_all_tests() -> Int
+    passed := 0
+    if test_map_new() then passed = passed + 1 else print("FAIL: test_map_new")
+    if test_map_insert_get() then passed = passed + 1 else print("FAIL: test_map_insert_get")
+    if test_map_multiple_inserts() then passed = passed + 1 else print("FAIL: test_map_multiple_inserts")
+    if test_map_get_missing() then passed = passed + 1 else print("FAIL: test_map_get_missing")
+    if test_map_contains() then passed = passed + 1 else print("FAIL: test_map_contains")
+    if test_map_contains_false() then passed = passed + 1 else print("FAIL: test_map_contains_false")
+    if test_map_overwrite() then passed = passed + 1 else print("FAIL: test_map_overwrite")
+    if test_map_keys() then passed = passed + 1 else print("FAIL: test_map_keys")
+
+    print("Map tests passed:")
+    print(passed)
+    print("of 8")
+
+    if passed == 8 then 1 else 0
+
+f main() -> Int = run_all_tests()

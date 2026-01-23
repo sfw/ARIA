@@ -1,0 +1,60 @@
+# Test method dispatch
+# Expected output: All tests pass, final result: 1
+
+f test_array_len_method() -> Bool
+    arr := [1, 2, 3, 4, 5]
+    arr.len() == 5
+
+f test_string_len_method() -> Bool
+    text := "hello"
+    text.len() == 5
+
+f test_array_push_method() -> Bool
+    arr := [1, 2]
+    arr2 := arr.push(3)
+    arr2.len() == 3
+
+f test_string_contains_method() -> Bool
+    text := "hello world"
+    text.contains("world")
+
+f test_string_starts_with_method() -> Bool
+    text := "hello world"
+    text.starts_with("hello")
+
+f test_string_ends_with_method() -> Bool
+    text := "hello world"
+    text.ends_with("world")
+
+f test_string_trim_method() -> Bool
+    text := "  hello  "
+    text.trim() == "hello"
+
+f test_string_split_method() -> Bool
+    text := "a,b,c"
+    parts := text.split(",")
+    parts.len() == 3
+
+f test_chained_methods() -> Bool
+    text := "  hello world  "
+    text.trim().contains("world")
+
+f run_all_tests() -> Int
+    passed := 0
+    if test_array_len_method() then passed = passed + 1 else print("FAIL: test_array_len_method")
+    if test_string_len_method() then passed = passed + 1 else print("FAIL: test_string_len_method")
+    if test_array_push_method() then passed = passed + 1 else print("FAIL: test_array_push_method")
+    if test_string_contains_method() then passed = passed + 1 else print("FAIL: test_string_contains_method")
+    if test_string_starts_with_method() then passed = passed + 1 else print("FAIL: test_string_starts_with_method")
+    if test_string_ends_with_method() then passed = passed + 1 else print("FAIL: test_string_ends_with_method")
+    if test_string_trim_method() then passed = passed + 1 else print("FAIL: test_string_trim_method")
+    if test_string_split_method() then passed = passed + 1 else print("FAIL: test_string_split_method")
+    if test_chained_methods() then passed = passed + 1 else print("FAIL: test_chained_methods")
+
+    print("Method dispatch tests passed:")
+    print(passed)
+    print("of 9")
+
+    if passed == 9 then 1 else 0
+
+f main() -> Int = run_all_tests()

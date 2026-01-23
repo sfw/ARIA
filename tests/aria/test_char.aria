@@ -1,0 +1,62 @@
+# Test Char built-in functions
+# Expected output: All tests pass, final result: 1
+
+f test_char_is_digit_true() -> Bool
+    char_is_digit('5')
+
+f test_char_is_digit_false() -> Bool
+    !char_is_digit('a')
+
+f test_char_is_alpha_true() -> Bool
+    char_is_alpha('x')
+
+f test_char_is_alpha_false() -> Bool
+    !char_is_alpha('9')
+
+f test_char_is_alphanumeric_letter() -> Bool
+    char_is_alphanumeric('Z')
+
+f test_char_is_alphanumeric_digit() -> Bool
+    char_is_alphanumeric('0')
+
+f test_char_is_alphanumeric_false() -> Bool
+    !char_is_alphanumeric('!')
+
+f test_char_is_whitespace_space() -> Bool
+    char_is_whitespace(' ')
+
+f test_char_is_whitespace_tab() -> Bool
+    char_is_whitespace('\t')
+
+f test_char_is_whitespace_false() -> Bool
+    !char_is_whitespace('x')
+
+f test_char_to_int() -> Bool
+    # 'A' should be 65 in ASCII
+    char_to_int('A') == 65
+
+f test_char_comparison() -> Bool
+    'a' < 'b' && 'z' > 'a' && 'x' == 'x' && 'a' != 'b'
+
+f run_all_tests() -> Int
+    passed := 0
+    if test_char_is_digit_true() then passed = passed + 1 else print("FAIL: test_char_is_digit_true")
+    if test_char_is_digit_false() then passed = passed + 1 else print("FAIL: test_char_is_digit_false")
+    if test_char_is_alpha_true() then passed = passed + 1 else print("FAIL: test_char_is_alpha_true")
+    if test_char_is_alpha_false() then passed = passed + 1 else print("FAIL: test_char_is_alpha_false")
+    if test_char_is_alphanumeric_letter() then passed = passed + 1 else print("FAIL: test_char_is_alphanumeric_letter")
+    if test_char_is_alphanumeric_digit() then passed = passed + 1 else print("FAIL: test_char_is_alphanumeric_digit")
+    if test_char_is_alphanumeric_false() then passed = passed + 1 else print("FAIL: test_char_is_alphanumeric_false")
+    if test_char_is_whitespace_space() then passed = passed + 1 else print("FAIL: test_char_is_whitespace_space")
+    if test_char_is_whitespace_tab() then passed = passed + 1 else print("FAIL: test_char_is_whitespace_tab")
+    if test_char_is_whitespace_false() then passed = passed + 1 else print("FAIL: test_char_is_whitespace_false")
+    if test_char_to_int() then passed = passed + 1 else print("FAIL: test_char_to_int")
+    if test_char_comparison() then passed = passed + 1 else print("FAIL: test_char_comparison")
+
+    print("Char tests passed:")
+    print(passed)
+    print("of 12")
+
+    if passed == 12 then 1 else 0
+
+f main() -> Int = run_all_tests()

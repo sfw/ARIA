@@ -1,0 +1,103 @@
+# Test Vec built-in functions
+# Expected output: All tests pass, final result: 1
+
+f test_vec_new() -> Bool
+    arr := vec_new()
+    vec_len(arr) == 0
+
+f test_vec_push() -> Bool
+    arr := vec_new()
+    arr = vec_push(arr, 10)
+    arr = vec_push(arr, 20)
+    arr = vec_push(arr, 30)
+    vec_len(arr) == 3
+
+f test_vec_get() -> Bool
+    arr := vec_new()
+    arr = vec_push(arr, 100)
+    arr = vec_push(arr, 200)
+    m vec_get(arr, 0)
+        Some(x) -> x == 100
+        None -> false
+
+f test_vec_get_out_of_bounds() -> Bool
+    arr := vec_new()
+    arr = vec_push(arr, 1)
+    m vec_get(arr, 10)
+        Some(_) -> false
+        None -> true
+
+f test_vec_first() -> Bool
+    arr := vec_new()
+    arr = vec_push(arr, 5)
+    arr = vec_push(arr, 10)
+    m vec_first(arr)
+        Some(x) -> x == 5
+        None -> false
+
+f test_vec_last() -> Bool
+    arr := vec_new()
+    arr = vec_push(arr, 5)
+    arr = vec_push(arr, 10)
+    m vec_last(arr)
+        Some(x) -> x == 10
+        None -> false
+
+f test_vec_set() -> Bool
+    arr := vec_new()
+    arr = vec_push(arr, 1)
+    arr = vec_push(arr, 2)
+    arr = vec_set(arr, 0, 100)
+    m vec_get(arr, 0)
+        Some(x) -> x == 100
+        None -> false
+
+f test_vec_concat() -> Bool
+    arr1 := vec_new()
+    arr1 = vec_push(arr1, 1)
+    arr1 = vec_push(arr1, 2)
+    arr2 := vec_new()
+    arr2 = vec_push(arr2, 3)
+    arr2 = vec_push(arr2, 4)
+    combined := vec_concat(arr1, arr2)
+    vec_len(combined) == 4
+
+f test_vec_slice() -> Bool
+    arr := vec_new()
+    arr = vec_push(arr, 0)
+    arr = vec_push(arr, 1)
+    arr = vec_push(arr, 2)
+    arr = vec_push(arr, 3)
+    sliced := vec_slice(arr, 1, 3)
+    vec_len(sliced) == 2
+
+f test_vec_reverse() -> Bool
+    arr := vec_new()
+    arr = vec_push(arr, 1)
+    arr = vec_push(arr, 2)
+    arr = vec_push(arr, 3)
+    rev := vec_reverse(arr)
+    m vec_first(rev)
+        Some(x) -> x == 3
+        None -> false
+
+f run_all_tests() -> Int
+    passed := 0
+    if test_vec_new() then passed = passed + 1 else print("FAIL: test_vec_new")
+    if test_vec_push() then passed = passed + 1 else print("FAIL: test_vec_push")
+    if test_vec_get() then passed = passed + 1 else print("FAIL: test_vec_get")
+    if test_vec_get_out_of_bounds() then passed = passed + 1 else print("FAIL: test_vec_get_out_of_bounds")
+    if test_vec_first() then passed = passed + 1 else print("FAIL: test_vec_first")
+    if test_vec_last() then passed = passed + 1 else print("FAIL: test_vec_last")
+    if test_vec_set() then passed = passed + 1 else print("FAIL: test_vec_set")
+    if test_vec_concat() then passed = passed + 1 else print("FAIL: test_vec_concat")
+    if test_vec_slice() then passed = passed + 1 else print("FAIL: test_vec_slice")
+    if test_vec_reverse() then passed = passed + 1 else print("FAIL: test_vec_reverse")
+
+    print("Vec tests passed:")
+    print(passed)
+    print("of 10")
+
+    if passed == 10 then 1 else 0
+
+f main() -> Int = run_all_tests()

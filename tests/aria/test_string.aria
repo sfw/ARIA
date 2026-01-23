@@ -1,0 +1,94 @@
+# Test String built-in functions
+# Expected output: All tests pass, final result: 1
+
+f test_str_len() -> Bool
+    str_len("hello") == 5
+
+f test_str_len_empty() -> Bool
+    str_len("") == 0
+
+f test_str_char_at() -> Bool
+    m str_char_at("hello", 0)
+        Some(c) -> c == 'h'
+        None -> false
+
+f test_str_char_at_out_of_bounds() -> Bool
+    m str_char_at("hi", 10)
+        Some(_) -> false
+        None -> true
+
+f test_str_slice() -> Bool
+    str_slice("hello world", 0, 5) == "hello"
+
+f test_str_slice_middle() -> Bool
+    str_slice("hello world", 6, 11) == "world"
+
+f test_str_contains() -> Bool
+    str_contains("hello world", "world")
+
+f test_str_contains_false() -> Bool
+    !str_contains("hello world", "foo")
+
+f test_str_starts_with() -> Bool
+    str_starts_with("hello world", "hello")
+
+f test_str_starts_with_false() -> Bool
+    !str_starts_with("hello world", "world")
+
+f test_str_ends_with() -> Bool
+    str_ends_with("hello world", "world")
+
+f test_str_ends_with_false() -> Bool
+    !str_ends_with("hello world", "hello")
+
+f test_str_split() -> Bool
+    parts := str_split("a,b,c", ",")
+    vec_len(parts) == 3
+
+f test_str_trim() -> Bool
+    str_trim("  hello  ") == "hello"
+
+f test_str_to_int() -> Bool
+    m str_to_int("42")
+        Some(n) -> n == 42
+        None -> false
+
+f test_str_to_int_invalid() -> Bool
+    m str_to_int("abc")
+        Some(_) -> false
+        None -> true
+
+f test_int_to_str() -> Bool
+    int_to_str(123) == "123"
+
+f test_str_concat() -> Bool
+    str_concat("hello", " world") == "hello world"
+
+f run_all_tests() -> Int
+    passed := 0
+    if test_str_len() then passed = passed + 1 else print("FAIL: test_str_len")
+    if test_str_len_empty() then passed = passed + 1 else print("FAIL: test_str_len_empty")
+    if test_str_char_at() then passed = passed + 1 else print("FAIL: test_str_char_at")
+    if test_str_char_at_out_of_bounds() then passed = passed + 1 else print("FAIL: test_str_char_at_out_of_bounds")
+    if test_str_slice() then passed = passed + 1 else print("FAIL: test_str_slice")
+    if test_str_slice_middle() then passed = passed + 1 else print("FAIL: test_str_slice_middle")
+    if test_str_contains() then passed = passed + 1 else print("FAIL: test_str_contains")
+    if test_str_contains_false() then passed = passed + 1 else print("FAIL: test_str_contains_false")
+    if test_str_starts_with() then passed = passed + 1 else print("FAIL: test_str_starts_with")
+    if test_str_starts_with_false() then passed = passed + 1 else print("FAIL: test_str_starts_with_false")
+    if test_str_ends_with() then passed = passed + 1 else print("FAIL: test_str_ends_with")
+    if test_str_ends_with_false() then passed = passed + 1 else print("FAIL: test_str_ends_with_false")
+    if test_str_split() then passed = passed + 1 else print("FAIL: test_str_split")
+    if test_str_trim() then passed = passed + 1 else print("FAIL: test_str_trim")
+    if test_str_to_int() then passed = passed + 1 else print("FAIL: test_str_to_int")
+    if test_str_to_int_invalid() then passed = passed + 1 else print("FAIL: test_str_to_int_invalid")
+    if test_int_to_str() then passed = passed + 1 else print("FAIL: test_int_to_str")
+    if test_str_concat() then passed = passed + 1 else print("FAIL: test_str_concat")
+
+    print("String tests passed:")
+    print(passed)
+    print("of 18")
+
+    if passed == 18 then 1 else 0
+
+f main() -> Int = run_all_tests()

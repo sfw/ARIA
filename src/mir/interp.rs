@@ -41,6 +41,16 @@ pub enum Value {
         fields: Vec<Value>,
     },
     Ref(Box<Value>),
+    /// HashMap for key-value storage
+    Map(HashMap<String, Value>),
+    /// Closure value - a function with captured environment
+    ///
+    /// - `func_name`: The lifted function that implements the closure
+    /// - `captures`: Values captured from the enclosing scope
+    Closure {
+        func_name: String,
+        captures: Vec<Value>,
+    },
 }
 
 impl Value {
@@ -120,6 +130,26 @@ impl std::fmt::Display for Value {
                 Ok(())
             }
             Value::Ref(inner) => write!(f, "&{}", inner),
+            Value::Map(map) => {
+                write!(f, "{{")?;
+                for (i, (k, v)) in map.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}: {}", k, v)?;
+                }
+                write!(f, "}}")
+            }
+            Value::Closure { func_name, captures } => {
+                write!(f, "<closure {} [", func_name)?;
+                for (i, v) in captures.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", v)?;
+                }
+                write!(f, "]>")
+            }
         }
     }
 }
@@ -309,15 +339,8 @@ impl Interpreter {
                         .collect::<Result<_, _>>()?;
 
                     // Handle built-in functions
-                    let result = if fn_name == "print" {
-                        for (i, val) in arg_vals.iter().enumerate() {
-                            if i > 0 {
-                                print!(" ");
-                            }
-                            print!("{}", val);
-                        }
-                        println!();
-                        Value::Unit
+                    let result = if let Some(builtin_result) = self.call_builtin(&fn_name, &arg_vals)? {
+                        builtin_result
                     } else if let Some(callee) = self.program.functions.get(&fn_name).cloned() {
                         // Regular function call
                         let mut callee_frame =
@@ -345,12 +368,846 @@ impl Interpreter {
                     frame.current_block = next;
                 }
 
+                Terminator::CallIndirect {
+                    callee,
+                    args,
+                    dest,
+                    next,
+                } => {
+                    // Evaluate the callee (should be a closure or function reference)
+                    let callee_val = self.eval_operand(&callee)?;
+
+                    // Evaluate arguments
+                    let arg_vals: Vec<Value> = args
+                        .iter()
+                        .map(|a| self.eval_operand(a))
+                        .collect::<Result<_, _>>()?;
+
+                    let result = match callee_val {
+                        Value::Closure { func_name, captures } => {
+                            // Get the closure's implementation function
+                            if let Some(callee_fn) = self.program.functions.get(&func_name).cloned() {
+                                let mut callee_frame = Frame::new(func_name.clone(), callee_fn.entry_block);
+
+                                // First bind captured values, then regular arguments
+                                // The lifted function has signature: fn(captures..., args...)
+                                let all_args: Vec<Value> = captures.into_iter().chain(arg_vals.into_iter()).collect();
+
+                                for ((local, _ty), value) in callee_fn.params.iter().zip(all_args.iter()) {
+                                    callee_frame.locals.insert(*local, value.clone());
+                                }
+
+                                self.call_stack.push(callee_frame);
+                                let result = self.execute(&callee_fn)?;
+                                self.call_stack.pop();
+                                result
+                            } else {
+                                return Err(InterpError {
+                                    message: format!("undefined closure function: {}", func_name),
+                                });
+                            }
+                        }
+                        _ => {
+                            return Err(InterpError {
+                                message: format!("cannot call non-closure value: {:?}", callee_val),
+                            });
+                        }
+                    };
+
+                    // Store result and continue
+                    let frame = self.call_stack.last_mut().unwrap();
+                    if let Some(d) = dest {
+                        frame.locals.insert(d, result);
+                    }
+                    frame.current_block = next;
+                }
+
                 Terminator::Unreachable => {
                     return Err(InterpError {
                         message: "reached unreachable code".to_string(),
                     });
                 }
             }
+        }
+    }
+
+    /// Handle built-in functions. Returns Some(result) if the function is a built-in,
+    /// None if it should be handled as a regular function call.
+    fn call_builtin(&mut self, fn_name: &str, args: &[Value]) -> Result<Option<Value>, InterpError> {
+        match fn_name {
+            // ===== I/O =====
+            "print" => {
+                for (i, val) in args.iter().enumerate() {
+                    if i > 0 {
+                        print!(" ");
+                    }
+                    print!("{}", val);
+                }
+                println!();
+                Ok(Some(Value::Unit))
+            }
+
+            // ===== Vec operations =====
+            "vec_new" => {
+                Ok(Some(Value::Array(vec![])))
+            }
+            "vec_len" => {
+                match &args[0] {
+                    Value::Array(arr) => Ok(Some(Value::Int(arr.len() as i64))),
+                    Value::Str(s) => Ok(Some(Value::Int(s.len() as i64))),  // Support .len() on strings
+                    Value::Ref(inner) => {
+                        match inner.as_ref() {
+                            Value::Array(arr) => Ok(Some(Value::Int(arr.len() as i64))),
+                            Value::Str(s) => Ok(Some(Value::Int(s.len() as i64))),
+                            _ => Err(InterpError { message: "len: expected array or string".to_string() })
+                        }
+                    }
+                    _ => Err(InterpError { message: "len: expected array or string".to_string() })
+                }
+            }
+            "vec_get" => {
+                let arr = match &args[0] {
+                    Value::Array(arr) => arr,
+                    Value::Ref(inner) => {
+                        if let Value::Array(arr) = inner.as_ref() {
+                            arr
+                        } else {
+                            return Err(InterpError { message: "vec_get: expected array".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "vec_get: expected array".to_string() })
+                };
+                let idx = args[1].as_int().ok_or_else(|| InterpError {
+                    message: "vec_get: index must be Int".to_string()
+                })?;
+                if idx < 0 || idx as usize >= arr.len() {
+                    // Return None for out of bounds
+                    Ok(Some(Value::Enum {
+                        type_name: "Option".to_string(),
+                        variant: "None".to_string(),
+                        fields: vec![],
+                    }))
+                } else {
+                    Ok(Some(Value::Enum {
+                        type_name: "Option".to_string(),
+                        variant: "Some".to_string(),
+                        fields: vec![arr[idx as usize].clone()],
+                    }))
+                }
+            }
+            "vec_first" => {
+                let arr = match &args[0] {
+                    Value::Array(arr) => arr,
+                    Value::Ref(inner) => {
+                        if let Value::Array(arr) = inner.as_ref() {
+                            arr
+                        } else {
+                            return Err(InterpError { message: "vec_first: expected array".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "vec_first: expected array".to_string() })
+                };
+                if arr.is_empty() {
+                    Ok(Some(Value::Enum {
+                        type_name: "Option".to_string(),
+                        variant: "None".to_string(),
+                        fields: vec![],
+                    }))
+                } else {
+                    Ok(Some(Value::Enum {
+                        type_name: "Option".to_string(),
+                        variant: "Some".to_string(),
+                        fields: vec![arr[0].clone()],
+                    }))
+                }
+            }
+            "vec_last" => {
+                let arr = match &args[0] {
+                    Value::Array(arr) => arr,
+                    Value::Ref(inner) => {
+                        if let Value::Array(arr) = inner.as_ref() {
+                            arr
+                        } else {
+                            return Err(InterpError { message: "vec_last: expected array".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "vec_last: expected array".to_string() })
+                };
+                if arr.is_empty() {
+                    Ok(Some(Value::Enum {
+                        type_name: "Option".to_string(),
+                        variant: "None".to_string(),
+                        fields: vec![],
+                    }))
+                } else {
+                    Ok(Some(Value::Enum {
+                        type_name: "Option".to_string(),
+                        variant: "Some".to_string(),
+                        fields: vec![arr[arr.len() - 1].clone()],
+                    }))
+                }
+            }
+
+            // ===== String operations =====
+            "str_len" => {
+                let s = match &args[0] {
+                    Value::Str(s) => s,
+                    Value::Ref(inner) => {
+                        if let Value::Str(s) = inner.as_ref() {
+                            s
+                        } else {
+                            return Err(InterpError { message: "str_len: expected string".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "str_len: expected string".to_string() })
+                };
+                Ok(Some(Value::Int(s.len() as i64)))
+            }
+            "str_char_at" => {
+                let s = match &args[0] {
+                    Value::Str(s) => s.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Str(s) = inner.as_ref() {
+                            s.clone()
+                        } else {
+                            return Err(InterpError { message: "str_char_at: expected string".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "str_char_at: expected string".to_string() })
+                };
+                let idx = args[1].as_int().ok_or_else(|| InterpError {
+                    message: "str_char_at: index must be Int".to_string()
+                })?;
+                match s.chars().nth(idx as usize) {
+                    Some(c) => Ok(Some(Value::Enum {
+                        type_name: "Option".to_string(),
+                        variant: "Some".to_string(),
+                        fields: vec![Value::Char(c)],
+                    })),
+                    None => Ok(Some(Value::Enum {
+                        type_name: "Option".to_string(),
+                        variant: "None".to_string(),
+                        fields: vec![],
+                    }))
+                }
+            }
+            "str_slice" => {
+                let s = match &args[0] {
+                    Value::Str(s) => s.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Str(s) = inner.as_ref() {
+                            s.clone()
+                        } else {
+                            return Err(InterpError { message: "str_slice: expected string".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "str_slice: expected string".to_string() })
+                };
+                let start = args[1].as_int().ok_or_else(|| InterpError {
+                    message: "str_slice: start must be Int".to_string()
+                })? as usize;
+                let end = args[2].as_int().ok_or_else(|| InterpError {
+                    message: "str_slice: end must be Int".to_string()
+                })? as usize;
+                let chars: Vec<char> = s.chars().collect();
+                let start = start.min(chars.len());
+                let end = end.min(chars.len());
+                let result: String = chars[start..end].iter().collect();
+                Ok(Some(Value::Str(result)))
+            }
+            "str_contains" => {
+                let s = match &args[0] {
+                    Value::Str(s) => s.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Str(s) = inner.as_ref() {
+                            s.clone()
+                        } else {
+                            return Err(InterpError { message: "str_contains: expected string".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "str_contains: expected string".to_string() })
+                };
+                let sub = match &args[1] {
+                    Value::Str(s) => s.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Str(s) = inner.as_ref() {
+                            s.clone()
+                        } else {
+                            return Err(InterpError { message: "str_contains: expected string".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "str_contains: expected string".to_string() })
+                };
+                Ok(Some(Value::Bool(s.contains(&sub))))
+            }
+            "str_starts_with" => {
+                let s = match &args[0] {
+                    Value::Str(s) => s.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Str(s) = inner.as_ref() {
+                            s.clone()
+                        } else {
+                            return Err(InterpError { message: "str_starts_with: expected string".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "str_starts_with: expected string".to_string() })
+                };
+                let prefix = match &args[1] {
+                    Value::Str(s) => s.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Str(s) = inner.as_ref() {
+                            s.clone()
+                        } else {
+                            return Err(InterpError { message: "str_starts_with: expected string".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "str_starts_with: expected string".to_string() })
+                };
+                Ok(Some(Value::Bool(s.starts_with(&prefix))))
+            }
+            "str_ends_with" => {
+                let s = match &args[0] {
+                    Value::Str(s) => s.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Str(s) = inner.as_ref() {
+                            s.clone()
+                        } else {
+                            return Err(InterpError { message: "str_ends_with: expected string".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "str_ends_with: expected string".to_string() })
+                };
+                let suffix = match &args[1] {
+                    Value::Str(s) => s.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Str(s) = inner.as_ref() {
+                            s.clone()
+                        } else {
+                            return Err(InterpError { message: "str_ends_with: expected string".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "str_ends_with: expected string".to_string() })
+                };
+                Ok(Some(Value::Bool(s.ends_with(&suffix))))
+            }
+            "str_split" => {
+                let s = match &args[0] {
+                    Value::Str(s) => s.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Str(s) = inner.as_ref() {
+                            s.clone()
+                        } else {
+                            return Err(InterpError { message: "str_split: expected string".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "str_split: expected string".to_string() })
+                };
+                let delim = match &args[1] {
+                    Value::Str(s) => s.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Str(s) = inner.as_ref() {
+                            s.clone()
+                        } else {
+                            return Err(InterpError { message: "str_split: expected string".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "str_split: expected string".to_string() })
+                };
+                let parts: Vec<Value> = s.split(&delim).map(|p| Value::Str(p.to_string())).collect();
+                Ok(Some(Value::Array(parts)))
+            }
+            "str_trim" => {
+                let s = match &args[0] {
+                    Value::Str(s) => s.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Str(s) = inner.as_ref() {
+                            s.clone()
+                        } else {
+                            return Err(InterpError { message: "str_trim: expected string".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "str_trim: expected string".to_string() })
+                };
+                Ok(Some(Value::Str(s.trim().to_string())))
+            }
+            "str_to_int" => {
+                let s = match &args[0] {
+                    Value::Str(s) => s.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Str(s) = inner.as_ref() {
+                            s.clone()
+                        } else {
+                            return Err(InterpError { message: "str_to_int: expected string".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "str_to_int: expected string".to_string() })
+                };
+                match s.trim().parse::<i64>() {
+                    Ok(n) => Ok(Some(Value::Enum {
+                        type_name: "Option".to_string(),
+                        variant: "Some".to_string(),
+                        fields: vec![Value::Int(n)],
+                    })),
+                    Err(_) => Ok(Some(Value::Enum {
+                        type_name: "Option".to_string(),
+                        variant: "None".to_string(),
+                        fields: vec![],
+                    }))
+                }
+            }
+            "int_to_str" => {
+                let n = args[0].as_int().ok_or_else(|| InterpError {
+                    message: "int_to_str: expected Int".to_string()
+                })?;
+                Ok(Some(Value::Str(n.to_string())))
+            }
+            "str_concat" => {
+                let s1 = match &args[0] {
+                    Value::Str(s) => s.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Str(s) = inner.as_ref() {
+                            s.clone()
+                        } else {
+                            return Err(InterpError { message: "str_concat: expected string".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "str_concat: expected string".to_string() })
+                };
+                let s2 = match &args[1] {
+                    Value::Str(s) => s.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Str(s) = inner.as_ref() {
+                            s.clone()
+                        } else {
+                            return Err(InterpError { message: "str_concat: expected string".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "str_concat: expected string".to_string() })
+                };
+                Ok(Some(Value::Str(format!("{}{}", s1, s2))))
+            }
+
+            // ===== Char operations =====
+            "char_is_digit" => {
+                let c = match &args[0] {
+                    Value::Char(c) => *c,
+                    _ => return Err(InterpError { message: "char_is_digit: expected Char".to_string() })
+                };
+                Ok(Some(Value::Bool(c.is_ascii_digit())))
+            }
+            "char_is_alpha" => {
+                let c = match &args[0] {
+                    Value::Char(c) => *c,
+                    _ => return Err(InterpError { message: "char_is_alpha: expected Char".to_string() })
+                };
+                Ok(Some(Value::Bool(c.is_alphabetic())))
+            }
+            "char_is_alphanumeric" => {
+                let c = match &args[0] {
+                    Value::Char(c) => *c,
+                    _ => return Err(InterpError { message: "char_is_alphanumeric: expected Char".to_string() })
+                };
+                Ok(Some(Value::Bool(c.is_alphanumeric())))
+            }
+            "char_is_whitespace" => {
+                let c = match &args[0] {
+                    Value::Char(c) => *c,
+                    _ => return Err(InterpError { message: "char_is_whitespace: expected Char".to_string() })
+                };
+                Ok(Some(Value::Bool(c.is_whitespace())))
+            }
+            "char_to_int" => {
+                let c = match &args[0] {
+                    Value::Char(c) => *c,
+                    _ => return Err(InterpError { message: "char_to_int: expected Char".to_string() })
+                };
+                Ok(Some(Value::Int(c as i64)))
+            }
+            "int_to_char" => {
+                let n = args[0].as_int().ok_or_else(|| InterpError {
+                    message: "int_to_char: expected Int".to_string()
+                })?;
+                if n >= 0 && n <= 0x10FFFF {
+                    if let Some(c) = char::from_u32(n as u32) {
+                        return Ok(Some(Value::Enum {
+                            type_name: "Option".to_string(),
+                            variant: "Some".to_string(),
+                            fields: vec![Value::Char(c)],
+                        }));
+                    }
+                }
+                Ok(Some(Value::Enum {
+                    type_name: "Option".to_string(),
+                    variant: "None".to_string(),
+                    fields: vec![],
+                }))
+            }
+
+            // ===== HashMap operations =====
+            "map_new" => {
+                Ok(Some(Value::Map(HashMap::new())))
+            }
+            "map_len" => {
+                let map = match &args[0] {
+                    Value::Map(m) => m,
+                    Value::Ref(inner) => {
+                        if let Value::Map(m) = inner.as_ref() {
+                            m
+                        } else {
+                            return Err(InterpError { message: "map_len: expected map".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "map_len: expected map".to_string() })
+                };
+                Ok(Some(Value::Int(map.len() as i64)))
+            }
+            "map_get" => {
+                let map = match &args[0] {
+                    Value::Map(m) => m,
+                    Value::Ref(inner) => {
+                        if let Value::Map(m) = inner.as_ref() {
+                            m
+                        } else {
+                            return Err(InterpError { message: "map_get: expected map".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "map_get: expected map".to_string() })
+                };
+                let key = match &args[1] {
+                    Value::Str(s) => s.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Str(s) = inner.as_ref() {
+                            s.clone()
+                        } else {
+                            return Err(InterpError { message: "map_get: key must be string".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "map_get: key must be string".to_string() })
+                };
+                match map.get(&key) {
+                    Some(v) => Ok(Some(Value::Enum {
+                        type_name: "Option".to_string(),
+                        variant: "Some".to_string(),
+                        fields: vec![v.clone()],
+                    })),
+                    None => Ok(Some(Value::Enum {
+                        type_name: "Option".to_string(),
+                        variant: "None".to_string(),
+                        fields: vec![],
+                    }))
+                }
+            }
+            "map_contains" => {
+                let map = match &args[0] {
+                    Value::Map(m) => m,
+                    Value::Ref(inner) => {
+                        if let Value::Map(m) = inner.as_ref() {
+                            m
+                        } else {
+                            return Err(InterpError { message: "map_contains: expected map".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "map_contains: expected map".to_string() })
+                };
+                let key = match &args[1] {
+                    Value::Str(s) => s.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Str(s) = inner.as_ref() {
+                            s.clone()
+                        } else {
+                            return Err(InterpError { message: "map_contains: key must be string".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "map_contains: key must be string".to_string() })
+                };
+                Ok(Some(Value::Bool(map.contains_key(&key))))
+            }
+            "map_keys" => {
+                let map = match &args[0] {
+                    Value::Map(m) => m,
+                    Value::Ref(inner) => {
+                        if let Value::Map(m) = inner.as_ref() {
+                            m
+                        } else {
+                            return Err(InterpError { message: "map_keys: expected map".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "map_keys: expected map".to_string() })
+                };
+                let keys: Vec<Value> = map.keys().map(|k| Value::Str(k.clone())).collect();
+                Ok(Some(Value::Array(keys)))
+            }
+
+            // ===== Functional mutating operations (return new collections) =====
+            "vec_push" => {
+                // vec_push(arr, elem) -> new array with elem appended
+                let arr = match &args[0] {
+                    Value::Array(arr) => arr.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Array(arr) = inner.as_ref() {
+                            arr.clone()
+                        } else {
+                            return Err(InterpError { message: "vec_push: expected array".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "vec_push: expected array".to_string() })
+                };
+                let mut new_arr = arr;
+                new_arr.push(args[1].clone());
+                Ok(Some(Value::Array(new_arr)))
+            }
+            "vec_pop" => {
+                // vec_pop(arr) -> (new_array, Option<elem>)
+                let arr = match &args[0] {
+                    Value::Array(arr) => arr.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Array(arr) = inner.as_ref() {
+                            arr.clone()
+                        } else {
+                            return Err(InterpError { message: "vec_pop: expected array".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "vec_pop: expected array".to_string() })
+                };
+                let mut new_arr = arr;
+                let popped = new_arr.pop();
+                let opt = match popped {
+                    Some(v) => Value::Enum {
+                        type_name: "Option".to_string(),
+                        variant: "Some".to_string(),
+                        fields: vec![v],
+                    },
+                    None => Value::Enum {
+                        type_name: "Option".to_string(),
+                        variant: "None".to_string(),
+                        fields: vec![],
+                    },
+                };
+                Ok(Some(Value::Tuple(vec![Value::Array(new_arr), opt])))
+            }
+            "vec_set" => {
+                // vec_set(arr, index, value) -> new array with element at index replaced
+                let arr = match &args[0] {
+                    Value::Array(arr) => arr.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Array(arr) = inner.as_ref() {
+                            arr.clone()
+                        } else {
+                            return Err(InterpError { message: "vec_set: expected array".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "vec_set: expected array".to_string() })
+                };
+                let idx = args[1].as_int().ok_or_else(|| InterpError {
+                    message: "vec_set: index must be Int".to_string()
+                })?;
+                if idx < 0 || idx as usize >= arr.len() {
+                    return Err(InterpError { message: format!("vec_set: index {} out of bounds", idx) });
+                }
+                let mut new_arr = arr;
+                new_arr[idx as usize] = args[2].clone();
+                Ok(Some(Value::Array(new_arr)))
+            }
+            "vec_concat" => {
+                // vec_concat(arr1, arr2) -> combined array
+                let arr1 = match &args[0] {
+                    Value::Array(arr) => arr.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Array(arr) = inner.as_ref() {
+                            arr.clone()
+                        } else {
+                            return Err(InterpError { message: "vec_concat: expected array".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "vec_concat: expected array".to_string() })
+                };
+                let arr2 = match &args[1] {
+                    Value::Array(arr) => arr.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Array(arr) = inner.as_ref() {
+                            arr.clone()
+                        } else {
+                            return Err(InterpError { message: "vec_concat: expected array".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "vec_concat: expected array".to_string() })
+                };
+                let mut result = arr1;
+                result.extend(arr2);
+                Ok(Some(Value::Array(result)))
+            }
+            "vec_slice" => {
+                // vec_slice(arr, start, end) -> new array containing arr[start..end]
+                let arr = match &args[0] {
+                    Value::Array(arr) => arr.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Array(arr) = inner.as_ref() {
+                            arr.clone()
+                        } else {
+                            return Err(InterpError { message: "vec_slice: expected array".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "vec_slice: expected array".to_string() })
+                };
+                let start = args[1].as_int().ok_or_else(|| InterpError {
+                    message: "vec_slice: start must be Int".to_string()
+                })? as usize;
+                let end = args[2].as_int().ok_or_else(|| InterpError {
+                    message: "vec_slice: end must be Int".to_string()
+                })? as usize;
+                let start = start.min(arr.len());
+                let end = end.min(arr.len());
+                Ok(Some(Value::Array(arr[start..end].to_vec())))
+            }
+            "vec_reverse" => {
+                // vec_reverse(arr) -> reversed array
+                let arr = match &args[0] {
+                    Value::Array(arr) => arr.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Array(arr) = inner.as_ref() {
+                            arr.clone()
+                        } else {
+                            return Err(InterpError { message: "vec_reverse: expected array".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "vec_reverse: expected array".to_string() })
+                };
+                let mut result = arr;
+                result.reverse();
+                Ok(Some(Value::Array(result)))
+            }
+
+            "map_insert" => {
+                // map_insert(map, key, value) -> new map with entry added
+                let map = match &args[0] {
+                    Value::Map(m) => m.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Map(m) = inner.as_ref() {
+                            m.clone()
+                        } else {
+                            return Err(InterpError { message: "map_insert: expected map".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "map_insert: expected map".to_string() })
+                };
+                let key = match &args[1] {
+                    Value::Str(s) => s.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Str(s) = inner.as_ref() {
+                            s.clone()
+                        } else {
+                            return Err(InterpError { message: "map_insert: key must be string".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "map_insert: key must be string".to_string() })
+                };
+                let mut new_map = map;
+                new_map.insert(key, args[2].clone());
+                Ok(Some(Value::Map(new_map)))
+            }
+            "map_remove" => {
+                // map_remove(map, key) -> (new_map, Option<removed_value>)
+                let map = match &args[0] {
+                    Value::Map(m) => m.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Map(m) = inner.as_ref() {
+                            m.clone()
+                        } else {
+                            return Err(InterpError { message: "map_remove: expected map".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "map_remove: expected map".to_string() })
+                };
+                let key = match &args[1] {
+                    Value::Str(s) => s.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Str(s) = inner.as_ref() {
+                            s.clone()
+                        } else {
+                            return Err(InterpError { message: "map_remove: key must be string".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "map_remove: key must be string".to_string() })
+                };
+                let mut new_map = map;
+                let removed = new_map.remove(&key);
+                let opt = match removed {
+                    Some(v) => Value::Enum {
+                        type_name: "Option".to_string(),
+                        variant: "Some".to_string(),
+                        fields: vec![v],
+                    },
+                    None => Value::Enum {
+                        type_name: "Option".to_string(),
+                        variant: "None".to_string(),
+                        fields: vec![],
+                    },
+                };
+                Ok(Some(Value::Tuple(vec![Value::Map(new_map), opt])))
+            }
+            "map_values" => {
+                // map_values(map) -> array of values
+                let map = match &args[0] {
+                    Value::Map(m) => m,
+                    Value::Ref(inner) => {
+                        if let Value::Map(m) = inner.as_ref() {
+                            m
+                        } else {
+                            return Err(InterpError { message: "map_values: expected map".to_string() });
+                        }
+                    }
+                    _ => return Err(InterpError { message: "map_values: expected map".to_string() })
+                };
+                let values: Vec<Value> = map.values().cloned().collect();
+                Ok(Some(Value::Array(values)))
+            }
+
+            // ===== Type/Debug operations =====
+            "type_of" => {
+                let type_name = match &args[0] {
+                    Value::Unit => "Unit",
+                    Value::Bool(_) => "Bool",
+                    Value::Int(_) => "Int",
+                    Value::Float(_) => "Float",
+                    Value::Char(_) => "Char",
+                    Value::Str(_) => "Str",
+                    Value::Tuple(_) => "Tuple",
+                    Value::Array(_) => "Array",
+                    Value::Struct(name, _) => name.as_str(),
+                    Value::Enum { type_name, .. } => type_name.as_str(),
+                    Value::Ref(_) => "Ref",
+                    Value::Map(_) => "Map",
+                    Value::Closure { .. } => "Closure",
+                };
+                Ok(Some(Value::Str(type_name.to_string())))
+            }
+            "panic" => {
+                let msg = match &args[0] {
+                    Value::Str(s) => s.clone(),
+                    other => format!("{}", other),
+                };
+                Err(InterpError { message: format!("panic: {}", msg) })
+            }
+            "assert" => {
+                let cond = args[0].as_bool().ok_or_else(|| InterpError {
+                    message: "assert: expected Bool".to_string()
+                })?;
+                if !cond {
+                    let msg = if args.len() > 1 {
+                        match &args[1] {
+                            Value::Str(s) => s.clone(),
+                            other => format!("{}", other),
+                        }
+                    } else {
+                        "assertion failed".to_string()
+                    };
+                    return Err(InterpError { message: format!("assertion failed: {}", msg) });
+                }
+                Ok(Some(Value::Unit))
+            }
+
+            // Not a built-in function
+            _ => Ok(None)
         }
     }
 
@@ -523,6 +1380,17 @@ impl Interpreter {
                 // For now, just return the value unchanged
                 self.eval_operand(op)
             }
+
+            Rvalue::Closure { func_name, captures } => {
+                let capture_vals: Vec<Value> = captures
+                    .iter()
+                    .map(|c| self.eval_operand(c))
+                    .collect::<Result<_, _>>()?;
+                Ok(Value::Closure {
+                    func_name: func_name.clone(),
+                    captures: capture_vals,
+                })
+            }
         }
     }
 
@@ -600,6 +1468,14 @@ impl Interpreter {
             // String comparison
             (BinOp::Eq, Value::Str(a), Value::Str(b)) => Ok(Value::Bool(a == b)),
             (BinOp::Ne, Value::Str(a), Value::Str(b)) => Ok(Value::Bool(a != b)),
+
+            // Char comparison
+            (BinOp::Eq, Value::Char(a), Value::Char(b)) => Ok(Value::Bool(a == b)),
+            (BinOp::Ne, Value::Char(a), Value::Char(b)) => Ok(Value::Bool(a != b)),
+            (BinOp::Lt, Value::Char(a), Value::Char(b)) => Ok(Value::Bool(a < b)),
+            (BinOp::Le, Value::Char(a), Value::Char(b)) => Ok(Value::Bool(a <= b)),
+            (BinOp::Gt, Value::Char(a), Value::Char(b)) => Ok(Value::Bool(a > b)),
+            (BinOp::Ge, Value::Char(a), Value::Char(b)) => Ok(Value::Bool(a >= b)),
 
             // Logical
             (BinOp::And, Value::Bool(a), Value::Bool(b)) => Ok(Value::Bool(*a && *b)),

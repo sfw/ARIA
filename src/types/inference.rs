@@ -145,6 +145,371 @@ impl TypeEnv {
             TypeScheme { vars: vec![err_t, err_e], ty: err_type },
         );
 
+        // ===== Built-in functions =====
+
+        // I/O
+        // print: ...Any -> Unit
+        let print_var = TypeVar::fresh();
+        env.bindings.insert(
+            "print".to_string(),
+            TypeScheme { vars: vec![print_var], ty: Ty::Fn(vec![Ty::Var(print_var)], Box::new(Ty::Unit)) },
+        );
+
+        // Vec operations
+        // vec_new: () -> [T]
+        let vec_new_t = TypeVar::fresh();
+        env.bindings.insert(
+            "vec_new".to_string(),
+            TypeScheme { vars: vec![vec_new_t], ty: Ty::Fn(vec![], Box::new(Ty::List(Box::new(Ty::Var(vec_new_t))))) },
+        );
+
+        // vec_len: [T] -> Int
+        let vec_len_t = TypeVar::fresh();
+        env.bindings.insert(
+            "vec_len".to_string(),
+            TypeScheme { vars: vec![vec_len_t], ty: Ty::Fn(vec![Ty::List(Box::new(Ty::Var(vec_len_t)))], Box::new(Ty::Int)) },
+        );
+
+        // vec_push: ([T], T) -> [T]
+        let vec_push_t = TypeVar::fresh();
+        env.bindings.insert(
+            "vec_push".to_string(),
+            TypeScheme {
+                vars: vec![vec_push_t],
+                ty: Ty::Fn(
+                    vec![Ty::List(Box::new(Ty::Var(vec_push_t))), Ty::Var(vec_push_t)],
+                    Box::new(Ty::List(Box::new(Ty::Var(vec_push_t))))
+                )
+            },
+        );
+
+        // vec_pop: [T] -> ([T], T?)
+        let vec_pop_t = TypeVar::fresh();
+        env.bindings.insert(
+            "vec_pop".to_string(),
+            TypeScheme {
+                vars: vec![vec_pop_t],
+                ty: Ty::Fn(
+                    vec![Ty::List(Box::new(Ty::Var(vec_pop_t)))],
+                    Box::new(Ty::Tuple(vec![
+                        Ty::List(Box::new(Ty::Var(vec_pop_t))),
+                        Ty::Option(Box::new(Ty::Var(vec_pop_t)))
+                    ]))
+                )
+            },
+        );
+
+        // vec_get: ([T], Int) -> T?
+        let vec_get_t = TypeVar::fresh();
+        env.bindings.insert(
+            "vec_get".to_string(),
+            TypeScheme {
+                vars: vec![vec_get_t],
+                ty: Ty::Fn(
+                    vec![Ty::List(Box::new(Ty::Var(vec_get_t))), Ty::Int],
+                    Box::new(Ty::Option(Box::new(Ty::Var(vec_get_t))))
+                )
+            },
+        );
+
+        // vec_set: ([T], Int, T) -> [T]
+        let vec_set_t = TypeVar::fresh();
+        env.bindings.insert(
+            "vec_set".to_string(),
+            TypeScheme {
+                vars: vec![vec_set_t],
+                ty: Ty::Fn(
+                    vec![Ty::List(Box::new(Ty::Var(vec_set_t))), Ty::Int, Ty::Var(vec_set_t)],
+                    Box::new(Ty::List(Box::new(Ty::Var(vec_set_t))))
+                )
+            },
+        );
+
+        // vec_first: [T] -> T?
+        let vec_first_t = TypeVar::fresh();
+        env.bindings.insert(
+            "vec_first".to_string(),
+            TypeScheme {
+                vars: vec![vec_first_t],
+                ty: Ty::Fn(
+                    vec![Ty::List(Box::new(Ty::Var(vec_first_t)))],
+                    Box::new(Ty::Option(Box::new(Ty::Var(vec_first_t))))
+                )
+            },
+        );
+
+        // vec_last: [T] -> T?
+        let vec_last_t = TypeVar::fresh();
+        env.bindings.insert(
+            "vec_last".to_string(),
+            TypeScheme {
+                vars: vec![vec_last_t],
+                ty: Ty::Fn(
+                    vec![Ty::List(Box::new(Ty::Var(vec_last_t)))],
+                    Box::new(Ty::Option(Box::new(Ty::Var(vec_last_t))))
+                )
+            },
+        );
+
+        // vec_concat: ([T], [T]) -> [T]
+        let vec_concat_t = TypeVar::fresh();
+        env.bindings.insert(
+            "vec_concat".to_string(),
+            TypeScheme {
+                vars: vec![vec_concat_t],
+                ty: Ty::Fn(
+                    vec![Ty::List(Box::new(Ty::Var(vec_concat_t))), Ty::List(Box::new(Ty::Var(vec_concat_t)))],
+                    Box::new(Ty::List(Box::new(Ty::Var(vec_concat_t))))
+                )
+            },
+        );
+
+        // vec_slice: ([T], Int, Int) -> [T]
+        let vec_slice_t = TypeVar::fresh();
+        env.bindings.insert(
+            "vec_slice".to_string(),
+            TypeScheme {
+                vars: vec![vec_slice_t],
+                ty: Ty::Fn(
+                    vec![Ty::List(Box::new(Ty::Var(vec_slice_t))), Ty::Int, Ty::Int],
+                    Box::new(Ty::List(Box::new(Ty::Var(vec_slice_t))))
+                )
+            },
+        );
+
+        // vec_reverse: [T] -> [T]
+        let vec_reverse_t = TypeVar::fresh();
+        env.bindings.insert(
+            "vec_reverse".to_string(),
+            TypeScheme {
+                vars: vec![vec_reverse_t],
+                ty: Ty::Fn(
+                    vec![Ty::List(Box::new(Ty::Var(vec_reverse_t)))],
+                    Box::new(Ty::List(Box::new(Ty::Var(vec_reverse_t))))
+                )
+            },
+        );
+
+        // String operations
+        // str_len: Str -> Int
+        env.bindings.insert(
+            "str_len".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str], Box::new(Ty::Int)) },
+        );
+
+        // str_char_at: (Str, Int) -> Char?
+        env.bindings.insert(
+            "str_char_at".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str, Ty::Int], Box::new(Ty::Option(Box::new(Ty::Char)))) },
+        );
+
+        // str_slice: (Str, Int, Int) -> Str
+        env.bindings.insert(
+            "str_slice".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str, Ty::Int, Ty::Int], Box::new(Ty::Str)) },
+        );
+
+        // str_contains: (Str, Str) -> Bool
+        env.bindings.insert(
+            "str_contains".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str, Ty::Str], Box::new(Ty::Bool)) },
+        );
+
+        // str_starts_with: (Str, Str) -> Bool
+        env.bindings.insert(
+            "str_starts_with".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str, Ty::Str], Box::new(Ty::Bool)) },
+        );
+
+        // str_ends_with: (Str, Str) -> Bool
+        env.bindings.insert(
+            "str_ends_with".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str, Ty::Str], Box::new(Ty::Bool)) },
+        );
+
+        // str_split: (Str, Str) -> [Str]
+        env.bindings.insert(
+            "str_split".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str, Ty::Str], Box::new(Ty::List(Box::new(Ty::Str)))) },
+        );
+
+        // str_trim: Str -> Str
+        env.bindings.insert(
+            "str_trim".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str], Box::new(Ty::Str)) },
+        );
+
+        // str_to_int: Str -> Int?
+        env.bindings.insert(
+            "str_to_int".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str], Box::new(Ty::Option(Box::new(Ty::Int)))) },
+        );
+
+        // int_to_str: Int -> Str
+        env.bindings.insert(
+            "int_to_str".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Int], Box::new(Ty::Str)) },
+        );
+
+        // str_concat: (Str, Str) -> Str
+        env.bindings.insert(
+            "str_concat".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str, Ty::Str], Box::new(Ty::Str)) },
+        );
+
+        // Char operations
+        // char_is_digit: Char -> Bool
+        env.bindings.insert(
+            "char_is_digit".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Char], Box::new(Ty::Bool)) },
+        );
+
+        // char_is_alpha: Char -> Bool
+        env.bindings.insert(
+            "char_is_alpha".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Char], Box::new(Ty::Bool)) },
+        );
+
+        // char_is_alphanumeric: Char -> Bool
+        env.bindings.insert(
+            "char_is_alphanumeric".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Char], Box::new(Ty::Bool)) },
+        );
+
+        // char_is_whitespace: Char -> Bool
+        env.bindings.insert(
+            "char_is_whitespace".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Char], Box::new(Ty::Bool)) },
+        );
+
+        // char_to_int: Char -> Int
+        env.bindings.insert(
+            "char_to_int".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Char], Box::new(Ty::Int)) },
+        );
+
+        // int_to_char: Int -> Char?
+        env.bindings.insert(
+            "int_to_char".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Int], Box::new(Ty::Option(Box::new(Ty::Char)))) },
+        );
+
+        // Map operations (using Str keys for simplicity)
+        // map_new: () -> Map
+        let map_v = TypeVar::fresh();
+        env.bindings.insert(
+            "map_new".to_string(),
+            TypeScheme { vars: vec![map_v], ty: Ty::Fn(vec![], Box::new(Ty::Named(TypeId::new("Map"), vec![Ty::Var(map_v)]))) },
+        );
+
+        // map_len: Map -> Int
+        let map_len_v = TypeVar::fresh();
+        env.bindings.insert(
+            "map_len".to_string(),
+            TypeScheme { vars: vec![map_len_v], ty: Ty::Fn(vec![Ty::Named(TypeId::new("Map"), vec![Ty::Var(map_len_v)])], Box::new(Ty::Int)) },
+        );
+
+        // map_get: (Map, Str) -> V?
+        let map_get_v = TypeVar::fresh();
+        env.bindings.insert(
+            "map_get".to_string(),
+            TypeScheme {
+                vars: vec![map_get_v],
+                ty: Ty::Fn(
+                    vec![Ty::Named(TypeId::new("Map"), vec![Ty::Var(map_get_v)]), Ty::Str],
+                    Box::new(Ty::Option(Box::new(Ty::Var(map_get_v))))
+                )
+            },
+        );
+
+        // map_insert: (Map, Str, V) -> Map
+        let map_insert_v = TypeVar::fresh();
+        env.bindings.insert(
+            "map_insert".to_string(),
+            TypeScheme {
+                vars: vec![map_insert_v],
+                ty: Ty::Fn(
+                    vec![Ty::Named(TypeId::new("Map"), vec![Ty::Var(map_insert_v)]), Ty::Str, Ty::Var(map_insert_v)],
+                    Box::new(Ty::Named(TypeId::new("Map"), vec![Ty::Var(map_insert_v)]))
+                )
+            },
+        );
+
+        // map_contains: (Map, Str) -> Bool
+        let map_contains_v = TypeVar::fresh();
+        env.bindings.insert(
+            "map_contains".to_string(),
+            TypeScheme {
+                vars: vec![map_contains_v],
+                ty: Ty::Fn(
+                    vec![Ty::Named(TypeId::new("Map"), vec![Ty::Var(map_contains_v)]), Ty::Str],
+                    Box::new(Ty::Bool)
+                )
+            },
+        );
+
+        // map_remove: (Map, Str) -> (Map, V?)
+        let map_remove_v = TypeVar::fresh();
+        env.bindings.insert(
+            "map_remove".to_string(),
+            TypeScheme {
+                vars: vec![map_remove_v],
+                ty: Ty::Fn(
+                    vec![Ty::Named(TypeId::new("Map"), vec![Ty::Var(map_remove_v)]), Ty::Str],
+                    Box::new(Ty::Tuple(vec![
+                        Ty::Named(TypeId::new("Map"), vec![Ty::Var(map_remove_v)]),
+                        Ty::Option(Box::new(Ty::Var(map_remove_v)))
+                    ]))
+                )
+            },
+        );
+
+        // map_keys: Map -> [Str]
+        let map_keys_v = TypeVar::fresh();
+        env.bindings.insert(
+            "map_keys".to_string(),
+            TypeScheme {
+                vars: vec![map_keys_v],
+                ty: Ty::Fn(
+                    vec![Ty::Named(TypeId::new("Map"), vec![Ty::Var(map_keys_v)])],
+                    Box::new(Ty::List(Box::new(Ty::Str)))
+                )
+            },
+        );
+
+        // map_values: Map -> [V]
+        let map_values_v = TypeVar::fresh();
+        env.bindings.insert(
+            "map_values".to_string(),
+            TypeScheme {
+                vars: vec![map_values_v],
+                ty: Ty::Fn(
+                    vec![Ty::Named(TypeId::new("Map"), vec![Ty::Var(map_values_v)])],
+                    Box::new(Ty::List(Box::new(Ty::Var(map_values_v))))
+                )
+            },
+        );
+
+        // Debug/Utility operations
+        // type_of: T -> Str
+        let type_of_t = TypeVar::fresh();
+        env.bindings.insert(
+            "type_of".to_string(),
+            TypeScheme { vars: vec![type_of_t], ty: Ty::Fn(vec![Ty::Var(type_of_t)], Box::new(Ty::Str)) },
+        );
+
+        // panic: Str -> !
+        env.bindings.insert(
+            "panic".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str], Box::new(Ty::Never)) },
+        );
+
+        // assert: (Bool, Str?) -> Unit
+        env.bindings.insert(
+            "assert".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Bool], Box::new(Ty::Unit)) },
+        );
+
         env
     }
 
