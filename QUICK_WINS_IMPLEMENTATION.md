@@ -11,13 +11,13 @@
 |---------|---------|--------|-------|
 | 1 | Range Iteration | ✅ DONE | |
 | 2 | Integer Types | ⬜ TODO | |
-| 3 | String Interpolation | ⬜ TODO | |
-| 4 | Random Numbers | ⬜ TODO | |
-| 5 | Float Math | ⬜ TODO | |
-| 6 | Time/Duration | ⬜ TODO | |
+| 3 | String Interpolation | ✅ DONE | |
+| 4 | Random Numbers | ✅ DONE | |
+| 5 | Float Math | ✅ DONE | |
+| 6 | Time/Duration | ✅ DONE | |
 | 7 | REPL | ⬜ TODO | |
 | 8 | Formatter | ⬜ TODO | |
-| 9 | VS Code Syntax | ⬜ TODO | |
+| 9 | VS Code Syntax | ✅ DONE | |
 | 10 | Trait Fixes | ⬜ TODO | |
 | 11 | Default Parameters | ⬜ TODO | |
 
@@ -100,22 +100,22 @@ f main() -> i32 {
 
 ## SECTION 3: STRING FORMATTING / INTERPOLATION
 
-**Status:** ⬜ TODO
+**Status:** ✅ DONE
 
 Add string interpolation with `{expr}` syntax.
 
 ### 3.1 Update lexer to recognize interpolated strings:
-- [ ] `f"Hello {name}!"` should tokenize as an interpolated string
-- [ ] Use `f"..."` prefix (like Python)
+- [x] `f"Hello {name}!"` should tokenize as an interpolated string
+- [x] Use `f"..."` prefix (like Python)
 
 ### 3.2 Update parser:
-- [ ] Parse interpolated strings into a series of concatenations
-- [ ] `f"Hello {name}!"` becomes `"Hello " + str(name) + "!"`
+- [x] Parse interpolated strings into a series of concatenations
+- [x] `f"Hello {name}!"` becomes `"Hello " + str(name) + "!"`
 
 ### 3.3 Add `str()` conversion function to builtins:
-- [ ] `str(42)` -> `"42"`
-- [ ] `str(true)` -> `"true"`
-- [ ] `str(3.14)` -> `"3.14"`
+- [x] `str(42)` -> `"42"`
+- [x] `str(true)` -> `"true"`
+- [x] `str(3.14)` -> `"3.14"`
 
 ### Test:
 ```forma
@@ -132,18 +132,18 @@ f main() {
 
 ## SECTION 4: RANDOM NUMBER GENERATION
 
-**Status:** ⬜ TODO
+**Status:** ✅ DONE
 
 Add random number support to the interpreter builtins.
 
 ### 4.1 Add to Cargo.toml:
-- [ ] `rand = "0.8"`
+- [x] `rand = "0.8"`
 
 ### 4.2 Add to src/mir/interp.rs:
-- [ ] `random()` -> Float (0.0 to 1.0)
-- [ ] `random_int(min: Int, max: Int)` -> Int
-- [ ] `random_bool()` -> Bool
-- [ ] `random_choice(arr: [T])` -> T
+- [x] `random()` -> Float (0.0 to 1.0)
+- [x] `random_int(min: Int, max: Int)` -> Int
+- [x] `random_bool()` -> Bool
+- [x] `random_choice(arr: [T])` -> T
 
 ### Test:
 ```forma
@@ -161,23 +161,23 @@ f main() {
 
 ## SECTION 5: FLOAT MATH OPERATIONS
 
-**Status:** ⬜ TODO
+**Status:** ✅ DONE
 
 Add standard math functions for floats.
 
 ### 5.1 Add to builtins (src/mir/interp.rs):
-- [ ] `sqrt(x: Float)` -> Float
-- [ ] `pow(base: Float, exp: Float)` -> Float
-- [ ] `sin(x: Float)` -> Float
-- [ ] `cos(x: Float)` -> Float
-- [ ] `tan(x: Float)` -> Float
-- [ ] `log(x: Float)` -> Float (natural log)
-- [ ] `log10(x: Float)` -> Float
-- [ ] `exp(x: Float)` -> Float
-- [ ] `floor(x: Float)` -> Int
-- [ ] `ceil(x: Float)` -> Int
-- [ ] `round(x: Float)` -> Int
-- [ ] `abs_float(x: Float)` -> Float
+- [x] `sqrt(x: Float)` -> Float
+- [x] `pow(base: Float, exp: Float)` -> Float
+- [x] `sin(x: Float)` -> Float
+- [x] `cos(x: Float)` -> Float
+- [x] `tan(x: Float)` -> Float
+- [x] `log(x: Float)` -> Float (natural log)
+- [x] `log10(x: Float)` -> Float
+- [x] `exp(x: Float)` -> Float
+- [x] `floor(x: Float)` -> Int
+- [x] `ceil(x: Float)` -> Int
+- [x] `round(x: Float)` -> Int
+- [x] `abs_float(x: Float)` -> Float
 
 ### Test:
 ```forma
@@ -197,14 +197,14 @@ f main() {
 
 ## SECTION 6: TIME AND DURATION
 
-**Status:** ⬜ TODO
+**Status:** ✅ DONE
 
 Add basic time support.
 
 ### 6.1 Add to builtins (src/mir/interp.rs):
-- [ ] `time_now()` -> Int (unix timestamp in seconds)
-- [ ] `time_now_ms()` -> Int (unix timestamp in milliseconds)
-- [ ] `time_sleep(ms: Int)` -> () (sleep for milliseconds)
+- [x] `time_now()` -> Int (unix timestamp in seconds)
+- [x] `time_now_ms()` -> Int (unix timestamp in milliseconds)
+- [x] `time_sleep(ms: Int)` -> () (sleep for milliseconds)
 
 ### Test:
 ```forma
@@ -270,28 +270,28 @@ Create a basic code formatter.
 
 ## SECTION 9: VS CODE SYNTAX HIGHLIGHTING
 
-**Status:** ⬜ TODO
+**Status:** ✅ DONE
 
 Create a TextMate grammar for VS Code.
 
 ### 9.1 Create directory structure:
-- [ ] `editors/vscode/`
-- [ ] `editors/vscode/syntaxes/`
+- [x] `editors/vscode/`
+- [x] `editors/vscode/syntaxes/`
 
 ### 9.2 Create `editors/vscode/syntaxes/forma.tmLanguage.json`:
-- [ ] Keywords: f, s, e, t, m, i, v, us, ret, br, ct, if, else, wh, as, aw
-- [ ] Types: Int, Float, Bool, Str, Char + integer types
-- [ ] Operators
-- [ ] Comments: # line comments
-- [ ] Strings with escapes
-- [ ] Numbers with suffixes
+- [x] Keywords: f, s, e, t, m, i, v, us, ret, br, ct, if, else, wh, as, aw
+- [x] Types: Int, Float, Bool, Str, Char + integer types
+- [x] Operators
+- [x] Comments: # line comments
+- [x] Strings with escapes
+- [x] Numbers with suffixes
 
 ### 9.3 Create `editors/vscode/package.json`
 
 ### 9.4 Create `editors/vscode/language-configuration.json`:
-- [ ] Bracket matching
-- [ ] Auto-closing pairs
-- [ ] Comment toggling
+- [x] Bracket matching
+- [x] Auto-closing pairs
+- [x] Comment toggling
 
 ### 9.5 Create README with installation instructions
 
@@ -404,4 +404,32 @@ If time is limited, do in this order:
 - **MIR lowering**: Added `lower_for_range()` function in src/mir/lower.rs that handles Range expressions by extracting start/end values and using appropriate comparison (< for exclusive, <= for inclusive).
 - **Type inference**: Updated ExprKind::For handling in src/types/inference.rs to accept both Range[T] and List[T] types.
 - All tests verified: `0..10`, `0..=10`, and `start..end` with variables all work correctly.
+
+### Section 4: Random Numbers
+- **Cargo.toml**: Added `rand = "0.8"` dependency.
+- **Type environment**: Added type signatures for `random`, `random_int`, `random_bool`, `random_choice` in src/types/inference.rs.
+- **Interpreter**: Added builtin implementations in src/mir/interp.rs using `rand::thread_rng()`.
+- **Note**: Used `r#gen` instead of `gen` because `gen` is a reserved keyword in Rust 2024 edition.
+
+### Section 5: Float Math
+- All 12 math functions implemented using Rust's f64 methods: sqrt, pow, sin, cos, tan, log, log10, exp, floor, ceil, round, abs_float.
+- Functions accept Int as well as Float for convenience (auto-converts to f64).
+
+### Section 6: Time Functions
+- Added imports: `std::time::{SystemTime, UNIX_EPOCH, Duration}` and `std::thread`.
+- `time_now()`: Uses `SystemTime::now().duration_since(UNIX_EPOCH)` to get seconds.
+- `time_now_ms()`: Same but returns milliseconds.
+- `time_sleep()`: Uses `thread::sleep(Duration::from_millis(ms))`.
+
+### Section 3: String Interpolation
+- **Token**: Added `FString(Vec<FStringPart>)` token with `FStringPart::Text(String)` and `FStringPart::Expr(String)` variants.
+- **Lexer**: Modified `scan_identifier` to detect `f"..."` prefix and parse f-strings with `{expr}` interpolation.
+- **Parser**: Added `parse_fstring` that converts parts to concatenation: `f"Hello {x}!"` → `"Hello " + str(x) + "!"`.
+- **Builtin**: Added `str()` function that converts any value to string (strings pass through without quotes).
+
+### Section 9: VS Code Syntax Highlighting
+- Created `editors/vscode/` directory with full extension structure.
+- TextMate grammar (`forma.tmLanguage.json`) supports all keywords, types, operators, strings, f-strings, and numbers.
+- Language configuration enables bracket matching, auto-closing pairs, comment toggling (#), and indentation-based folding.
+- README includes three installation methods: copy, symlink, or VSIX packaging.
 
