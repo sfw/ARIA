@@ -1,0 +1,178 @@
+# ARIA Standard Library - Vec Module
+# Provides functional operations on arrays/vectors
+
+# ============================================================
+# Basic operations
+# ============================================================
+
+# Check if array is empty
+f vec_is_empty(arr: [Int]) -> Bool
+    vec_len(arr) == 0
+
+# Get first element or None
+f vec_head(arr: [Int]) -> Option[Int]
+    if vec_is_empty(arr) then None
+    else Some(arr[0])
+
+# Get last element or None
+f vec_tail_elem(arr: [Int]) -> Option[Int]
+    len := vec_len(arr)
+    if len == 0 then None
+    else Some(arr[len - 1])
+
+# ============================================================
+# Functional operations
+# ============================================================
+
+# Map a function over each element
+f vec_map(arr: [Int], mapper: |Int| -> Int) -> [Int]
+    result := []
+    for x in arr
+        result = vec_push(result, mapper(x))
+    result
+
+# Filter elements that satisfy predicate
+f vec_filter(arr: [Int], pred: |Int| -> Bool) -> [Int]
+    result := []
+    for x in arr
+        if pred(x) then result = vec_push(result, x) else result = result
+    result
+
+# Fold/reduce from left
+f vec_fold(arr: [Int], init: Int, folder: |Int, Int| -> Int) -> Int
+    acc := init
+    for x in arr
+        acc = folder(acc, x)
+    acc
+
+# Sum all elements
+f vec_sum(arr: [Int]) -> Int
+    vec_fold(arr, 0, |acc, x| acc + x)
+
+# Product of all elements
+f vec_product(arr: [Int]) -> Int
+    vec_fold(arr, 1, |acc, x| acc * x)
+
+# Find first element satisfying predicate
+f vec_find(arr: [Int], pred: |Int| -> Bool) -> Option[Int]
+    result := None
+    for x in arr
+        if pred(x) && option_is_none(result) then result = Some(x) else result = result
+    result
+
+# Check if predicate holds for any element
+f vec_any(arr: [Int], pred: |Int| -> Bool) -> Bool
+    found := false
+    for x in arr
+        if pred(x) then found = true else found = found
+    found
+
+# Check if predicate holds for all elements
+f vec_all(arr: [Int], pred: |Int| -> Bool) -> Bool
+    result := true
+    for x in arr
+        if !pred(x) then result = false else result = result
+    result
+
+# Count elements satisfying predicate
+f vec_count(arr: [Int], pred: |Int| -> Bool) -> Int
+    count := 0
+    for x in arr
+        if pred(x) then count = count + 1 else count = count
+    count
+
+# ============================================================
+# Transformation operations
+# ============================================================
+
+# Take first n elements
+f vec_take(arr: [Int], n: Int) -> [Int]
+    result := []
+    idx := 0
+    for x in arr
+        if i < n then result = vec_push(result, x) else result = result
+        idx = idx + 1
+    result
+
+# Drop first n elements
+f vec_drop(arr: [Int], n: Int) -> [Int]
+    result := []
+    idx := 0
+    for x in arr
+        if i >= n then result = vec_push(result, x) else result = result
+        idx = idx + 1
+    result
+
+# Take elements while predicate holds
+f vec_take_while(arr: [Int], pred: |Int| -> Bool) -> [Int]
+    result := []
+    taking := true
+    for x in arr
+        if taking && pred(x) then result = vec_push(result, x) else taking = false
+    result
+
+# Drop elements while predicate holds
+f vec_drop_while(arr: [Int], pred: |Int| -> Bool) -> [Int]
+    result := []
+    dropping := true
+    for x in arr
+        if dropping && pred(x) then dropping = dropping
+        else
+            dropping = false
+            result = vec_push(result, x)
+    result
+
+# Zip two arrays together (stops at shorter array)
+f vec_zip(arr1: [Int], arr2: [Int]) -> [(Int, Int)]
+    result := []
+    len1 := vec_len(arr1)
+    len2 := vec_len(arr2)
+    min_len := if len1 < len2 then len1 else len2
+    idx := 0
+    wh idx < min_len
+        result = vec_push(result, (arr1[i], arr2[i]))
+        idx = idx + 1
+    result
+
+# ============================================================
+# Search and sort helpers
+# ============================================================
+
+# Find index of first occurrence, or -1
+f vec_index_of(arr: [Int], target: Int) -> Int
+    result := 0 - 1
+    idx := 0
+    for x in arr
+        if x == target && result < 0 then result = i else result = result
+        idx = idx + 1
+    result
+
+# Check if array contains element
+f vec_contains(arr: [Int], target: Int) -> Bool
+    vec_index_of(arr, target) >= 0
+
+# Find minimum element (returns 0 for empty array)
+f vec_min(arr: [Int]) -> Int
+    if vec_is_empty(arr) then 0
+    else
+        result := arr[0]
+        for x in arr
+            if x < result then result = x else result = result
+        result
+
+# Find maximum element (returns 0 for empty array)
+f vec_max(arr: [Int]) -> Int
+    if vec_is_empty(arr) then 0
+    else
+        result := arr[0]
+        for x in arr
+            if x > result then result = x else result = result
+        result
+
+# ============================================================
+# Helper: option_is_none for use in this module
+# ============================================================
+f option_is_none(opt: Option[Int]) -> Bool
+    m opt
+        Some(_) -> false
+        None -> true

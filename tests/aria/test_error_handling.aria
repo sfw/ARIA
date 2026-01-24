@@ -1,0 +1,71 @@
+# Test error handling (Option/Result, pattern matching, etc.)
+# Expected output: All tests pass, final result: 1
+
+# Test Option pattern matching
+f test_option_some() -> Bool
+    opt := Some(42)
+    m opt
+        Some(v) -> v == 42
+        None -> false
+
+f test_option_none() -> Bool
+    opt := None
+    m opt
+        Some(_) -> false
+        None -> true
+
+# Test Result pattern matching
+f test_result_ok() -> Bool
+    res := Ok(42)
+    m res
+        Ok(v) -> v == 42
+        Err(_) -> false
+
+f test_result_err() -> Bool
+    res := Err("error")
+    m res
+        Ok(_) -> false
+        Err(msg) -> str_len(msg) > 0
+
+# Test unwrap_or with pattern matching approach
+f test_get_or_default_some() -> Bool
+    opt := Some(42)
+    result := m opt
+        Some(v) -> v
+        None -> 100
+    result == 42
+
+f test_get_or_default_none() -> Bool
+    opt := None
+    result := m opt
+        Some(v) -> v
+        None -> 100
+    result == 100
+
+# Test nested Option
+f test_option_map_like() -> Bool
+    opt := Some(10)
+    result := m opt
+        Some(v) -> Some(v * 2)
+        None -> None
+    m result
+        Some(v) -> v == 20
+        None -> false
+
+f run_all_tests() -> Int
+    passed := 0
+    if test_option_some() then passed = passed + 1 else print("FAIL: test_option_some")
+    if test_option_none() then passed = passed + 1 else print("FAIL: test_option_none")
+    if test_result_ok() then passed = passed + 1 else print("FAIL: test_result_ok")
+    if test_result_err() then passed = passed + 1 else print("FAIL: test_result_err")
+    if test_get_or_default_some() then passed = passed + 1 else print("FAIL: test_get_or_default_some")
+    if test_get_or_default_none() then passed = passed + 1 else print("FAIL: test_get_or_default_none")
+    if test_option_map_like() then passed = passed + 1 else print("FAIL: test_option_map_like")
+
+    print("Error handling tests passed:")
+    print(passed)
+    print("of 7")
+
+    if passed == 7 then 1 else 0
+
+f main() -> Int = run_all_tests()

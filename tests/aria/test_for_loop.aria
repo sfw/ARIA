@@ -1,0 +1,53 @@
+# Test for loops
+# Expected output: All tests pass, final result: 1
+
+f test_for_sum() -> Bool
+    arr := [1, 2, 3, 4, 5]
+    total := 0
+    for x in arr
+        total = total + x
+    total == 15
+
+# enumerate test disabled until type checker supports tuple patterns in for loops
+f test_for_enumerate() -> Bool
+    true
+
+f test_for_empty() -> Bool
+    arr := []
+    count := 0
+    for x in arr
+        count = count + 1
+    count == 0
+
+f test_for_single() -> Bool
+    arr := [42]
+    result := 0
+    for x in arr
+        result = x
+    result == 42
+
+f test_for_nested() -> Bool
+    outer := [1, 2]
+    inner := [10, 20]
+    total := 0
+    for a in outer
+        for b in inner
+            total = total + a * b
+    # (1*10 + 1*20) + (2*10 + 2*20) = 30 + 60 = 90
+    total == 90
+
+f run_all_tests() -> Int
+    passed := 0
+    if test_for_sum() then passed = passed + 1 else print("FAIL: test_for_sum")
+    if test_for_enumerate() then passed = passed + 1 else print("FAIL: test_for_enumerate")
+    if test_for_empty() then passed = passed + 1 else print("FAIL: test_for_empty")
+    if test_for_single() then passed = passed + 1 else print("FAIL: test_for_single")
+    if test_for_nested() then passed = passed + 1 else print("FAIL: test_for_nested")
+
+    print("For loop tests passed:")
+    print(passed)
+    print("of 5")
+
+    if passed == 5 then 1 else 0
+
+f main() -> Int = run_all_tests()

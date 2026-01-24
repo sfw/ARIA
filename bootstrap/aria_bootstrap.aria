@@ -1,0 +1,590 @@
+# ARIA Bootstrap Compiler - Full Pipeline
+# Demonstrates: scan_all → parse → lower → interpret
+#
+# This file creates a working MIR interpreter that can execute
+# manually-constructed or lowered MIR programs.
+
+# ============================================================================
+# MIR Types
+# ============================================================================
+
+s Program
+    functions: [Function]
+    function_names: [Str]
+    entry: Int
+
+s Function
+    name: Str
+    params: [Param]
+    return_ty: Str
+    locals: [LocalDecl]
+    blocks: [BasicBlock]
+    entry_block: Int
+
+s Param
+    local: Int
+    ty: Str
+
+s LocalDecl
+    ty: Str
+    name: Str
+
+s BasicBlock
+    id: Int
+    stmts: [Statement]
+    terminator: Terminator
+
+s Statement
+    kind: Int
+    local: Int
+    rvalue: Rvalue
+
+f STMT_ASSIGN() -> Int = 1
+f STMT_NOP() -> Int = 2
+
+s Rvalue
+    kind: Int
+    operand: Operand
+    operand2: Operand
+    binop: Int
+    unop: Int
+    name: Str
+    idx: Int
+    args: [Operand]
+
+f RV_USE() -> Int = 1
+f RV_BINOP() -> Int = 2
+f RV_UNOP() -> Int = 3
+f RV_CALL() -> Int = 10
+
+s Operand
+    kind: Int
+    int_val: Int
+    str_val: Str
+    bool_val: Bool
+    local: Int
+
+f OP_CONST_UNIT() -> Int = 1
+f OP_CONST_BOOL() -> Int = 2
+f OP_CONST_INT() -> Int = 3
+f OP_CONST_STR() -> Int = 4
+f OP_LOCAL() -> Int = 5
+f OP_COPY() -> Int = 6
+
+f BIN_ADD() -> Int = 1
+f BIN_SUB() -> Int = 2
+f BIN_MUL() -> Int = 3
+f BIN_DIV() -> Int = 4
+f BIN_REM() -> Int = 5
+f BIN_EQ() -> Int = 6
+f BIN_NE() -> Int = 7
+f BIN_LT() -> Int = 8
+f BIN_LE() -> Int = 9
+f BIN_GT() -> Int = 10
+f BIN_GE() -> Int = 11
+
+f UN_NEG() -> Int = 1
+f UN_NOT() -> Int = 2
+
+s Terminator
+    kind: Int
+    operand: Operand
+    block1: Int
+    block2: Int
+    func_name: Str
+    args: [Operand]
+    dest: Int
+
+f TERM_RETURN() -> Int = 1
+f TERM_RETURN_VOID() -> Int = 2
+f TERM_GOTO() -> Int = 3
+f TERM_IF() -> Int = 4
+f TERM_CALL() -> Int = 6
+
+# ============================================================================
+# Runtime Values
+# ============================================================================
+
+s Value
+    kind: Int
+    int_val: Int
+    str_val: Str
+    bool_val: Bool
+
+f VAL_UNIT() -> Int = 1
+f VAL_BOOL() -> Int = 2
+f VAL_INT() -> Int = 3
+f VAL_STR() -> Int = 4
+
+f value_unit() -> Value
+    Value { kind: VAL_UNIT(), int_val: 0, str_val: "", bool_val: false }
+
+f value_int(n: Int) -> Value
+    Value { kind: VAL_INT(), int_val: n, str_val: "", bool_val: false }
+
+f value_bool(b: Bool) -> Value
+    Value { kind: VAL_BOOL(), int_val: 0, str_val: "", bool_val: b }
+
+f value_str(s: Str) -> Value
+    Value { kind: VAL_STR(), int_val: 0, str_val: s, bool_val: false }
+
+# ============================================================================
+# Constructors
+# ============================================================================
+
+f operand_unit() -> Operand
+    Operand { kind: OP_CONST_UNIT(), int_val: 0, str_val: "", bool_val: false, local: 0 }
+
+f operand_int(n: Int) -> Operand
+    Operand { kind: OP_CONST_INT(), int_val: n, str_val: "", bool_val: false, local: 0 }
+
+f operand_bool(b: Bool) -> Operand
+    Operand { kind: OP_CONST_BOOL(), int_val: 0, str_val: "", bool_val: b, local: 0 }
+
+f operand_local(l: Int) -> Operand
+    Operand { kind: OP_LOCAL(), int_val: 0, str_val: "", bool_val: false, local: l }
+
+f operand_copy(l: Int) -> Operand
+    Operand { kind: OP_COPY(), int_val: 0, str_val: "", bool_val: false, local: l }
+
+f rvalue_use(op: Operand) -> Rvalue
+    Rvalue { kind: RV_USE(), operand: op, operand2: operand_unit(), binop: 0, unop: 0, name: "", idx: 0, args: [] }
+
+f rvalue_binop(binop: Int, left: Operand, right: Operand) -> Rvalue
+    Rvalue { kind: RV_BINOP(), operand: left, operand2: right, binop: binop, unop: 0, name: "", idx: 0, args: [] }
+
+f rvalue_unop(unop: Int, op: Operand) -> Rvalue
+    Rvalue { kind: RV_UNOP(), operand: op, operand2: operand_unit(), binop: 0, unop: unop, name: "", idx: 0, args: [] }
+
+f rvalue_call(func: Str, args: [Operand]) -> Rvalue
+    Rvalue { kind: RV_CALL(), operand: operand_unit(), operand2: operand_unit(), binop: 0, unop: 0, name: func, idx: 0, args: args }
+
+f terminator_return(op: Operand) -> Terminator
+    Terminator { kind: TERM_RETURN(), operand: op, block1: 0, block2: 0, func_name: "", args: [], dest: 0 }
+
+f terminator_return_void() -> Terminator
+    Terminator { kind: TERM_RETURN_VOID(), operand: operand_unit(), block1: 0, block2: 0, func_name: "", args: [], dest: 0 }
+
+f terminator_goto(block: Int) -> Terminator
+    Terminator { kind: TERM_GOTO(), operand: operand_unit(), block1: block, block2: 0, func_name: "", args: [], dest: 0 }
+
+f terminator_if(cond: Operand, then_block: Int, else_block: Int) -> Terminator
+    Terminator { kind: TERM_IF(), operand: cond, block1: then_block, block2: else_block, func_name: "", args: [], dest: 0 }
+
+f terminator_call(func: Str, args: [Operand], dest: Int, next: Int) -> Terminator
+    Terminator { kind: TERM_CALL(), operand: operand_unit(), block1: next, block2: 0, func_name: func, args: args, dest: dest }
+
+f stmt_assign(local_id: Int, rv: Rvalue) -> Statement
+    Statement { kind: STMT_ASSIGN(), local: local_id, rvalue: rv }
+
+f stmt_nop() -> Statement
+    Statement { kind: STMT_NOP(), local: 0, rvalue: rvalue_use(operand_unit()) }
+
+# ============================================================================
+# Interpreter State
+# ============================================================================
+
+s Frame
+    func: Function
+    locals: [Value]
+    current_block: Int
+
+# ============================================================================
+# Interpreter Core
+# ============================================================================
+
+f interpret(prog: Program) -> Value
+    if prog.entry < 0
+        print("Error: No main function")
+        value_unit()
+    else
+        m vec_get(prog.functions, prog.entry)
+            Some(main_func) -> interpret_function(prog, main_func, [])
+            None ->
+                print("Error: Entry function not found")
+                value_unit()
+
+f interpret_function(prog: Program, func: Function, args: [Value]) -> Value
+    # First, initialize all locals to unit
+    locals := init_locals_empty(vec_len(func.locals), 0, [])
+    # Then, place arguments according to params
+    locals2 := place_args(locals, func.params, args, 0)
+    frame := Frame { func: func, locals: locals2, current_block: func.entry_block }
+    interpret_loop(prog, frame)
+
+f init_locals_empty(n: Int, idx: Int, acc: [Value]) -> [Value]
+    if idx >= n
+        acc
+    else
+        new_acc := vec_push(acc, value_unit())
+        init_locals_empty(n, idx + 1, new_acc)
+
+f place_args(locals: [Value], params: [Param], args: [Value], idx: Int) -> [Value]
+    if idx >= vec_len(params)
+        locals
+    else if idx >= vec_len(args)
+        locals
+    else
+        m vec_get(params, idx)
+            Some(param) ->
+                m vec_get(args, idx)
+                    Some(arg_val) ->
+                        new_locals := vec_set(locals, param.local, arg_val)
+                        place_args(new_locals, params, args, idx + 1)
+                    None -> locals
+            None -> locals
+
+f interpret_loop(prog: Program, frame: Frame) -> Value
+    m vec_get(frame.func.blocks, frame.current_block)
+        Some(block) ->
+            frame2 := execute_stmts(prog, frame, block.stmts, 0)
+            execute_terminator(prog, frame2, block.terminator)
+        None ->
+            print("Error: Block not found")
+            value_unit()
+
+f execute_stmts(prog: Program, frame: Frame, stmts: [Statement], idx: Int) -> Frame
+    if idx >= vec_len(stmts)
+        frame
+    else
+        m vec_get(stmts, idx)
+            Some(stmt) ->
+                frame2 := execute_stmt(prog, frame, stmt)
+                execute_stmts(prog, frame2, stmts, idx + 1)
+            None -> frame
+
+f execute_stmt(prog: Program, frame: Frame, stmt: Statement) -> Frame
+    if stmt.kind == STMT_NOP()
+        frame
+    else
+        val := eval_rvalue(prog, frame, stmt.rvalue)
+        new_locals := vec_set(frame.locals, stmt.local, val)
+        Frame { func: frame.func, locals: new_locals, current_block: frame.current_block }
+
+f execute_terminator(prog: Program, frame: Frame, term: Terminator) -> Value
+    if term.kind == TERM_RETURN()
+        eval_operand(frame, term.operand)
+    else if term.kind == TERM_RETURN_VOID()
+        value_unit()
+    else if term.kind == TERM_GOTO()
+        new_frame := Frame { func: frame.func, locals: frame.locals, current_block: term.block1 }
+        interpret_loop(prog, new_frame)
+    else if term.kind == TERM_IF()
+        cond := eval_operand(frame, term.operand)
+        next_block := if cond.bool_val then term.block1 else term.block2
+        new_frame := Frame { func: frame.func, locals: frame.locals, current_block: next_block }
+        interpret_loop(prog, new_frame)
+    else if term.kind == TERM_CALL()
+        result := execute_call(prog, frame, term)
+        new_locals := vec_set(frame.locals, term.dest, result)
+        new_frame := Frame { func: frame.func, locals: new_locals, current_block: term.block1 }
+        interpret_loop(prog, new_frame)
+    else
+        print("Error: Unknown terminator")
+        value_unit()
+
+f execute_call(prog: Program, frame: Frame, term: Terminator) -> Value
+    args := eval_args(frame, term.args, 0, [])
+    if term.func_name == "print"
+        do_print(args)
+        value_unit()
+    else
+        call_user_func(prog, term.func_name, args)
+
+f call_user_func(prog: Program, name: Str, args: [Value]) -> Value
+    m find_function(prog, name, 0)
+        Some(func) -> interpret_function(prog, func, args)
+        None ->
+            print("Error: Function not found:")
+            print(name)
+            value_unit()
+
+f find_function(prog: Program, name: Str, idx: Int) -> Option[Function]
+    if idx >= vec_len(prog.functions)
+        None
+    else
+        m vec_get(prog.functions, idx)
+            Some(func) ->
+                if func.name == name
+                    Some(func)
+                else
+                    find_function(prog, name, idx + 1)
+            None -> None
+
+f do_print(args: [Value]) -> Int
+    if vec_len(args) > 0
+        m vec_get(args, 0)
+            Some(v) -> print_value(v)
+            None -> 0
+    else
+        0
+
+f print_value(val: Value) -> Int
+    if val.kind == VAL_INT()
+        print(val.int_val)
+    else if val.kind == VAL_STR()
+        print(val.str_val)
+    else if val.kind == VAL_BOOL()
+        if val.bool_val then print("true") else print("false")
+    else
+        print("()")
+    0
+
+f eval_args(frame: Frame, ops: [Operand], idx: Int, acc: [Value]) -> [Value]
+    if idx >= vec_len(ops)
+        acc
+    else
+        m vec_get(ops, idx)
+            Some(op) ->
+                val := eval_operand(frame, op)
+                new_acc := vec_push(acc, val)
+                eval_args(frame, ops, idx + 1, new_acc)
+            None -> acc
+
+# ============================================================================
+# Evaluate Rvalues
+# ============================================================================
+
+f eval_rvalue(prog: Program, frame: Frame, rv: Rvalue) -> Value
+    if rv.kind == RV_USE()
+        eval_operand(frame, rv.operand)
+    else if rv.kind == RV_BINOP()
+        left := eval_operand(frame, rv.operand)
+        right := eval_operand(frame, rv.operand2)
+        apply_binop(rv.binop, left, right)
+    else if rv.kind == RV_UNOP()
+        val := eval_operand(frame, rv.operand)
+        apply_unop(rv.unop, val)
+    else if rv.kind == RV_CALL()
+        args := eval_args(frame, rv.args, 0, [])
+        if rv.name == "print"
+            do_print(args)
+            value_unit()
+        else
+            call_user_func(prog, rv.name, args)
+    else
+        value_unit()
+
+f apply_binop(op: Int, left: Value, right: Value) -> Value
+    if op == BIN_ADD()
+        value_int(left.int_val + right.int_val)
+    else if op == BIN_SUB()
+        value_int(left.int_val - right.int_val)
+    else if op == BIN_MUL()
+        value_int(left.int_val * right.int_val)
+    else if op == BIN_DIV()
+        value_int(left.int_val / right.int_val)
+    else if op == BIN_REM()
+        value_int(left.int_val % right.int_val)
+    else if op == BIN_EQ()
+        value_bool(left.int_val == right.int_val)
+    else if op == BIN_NE()
+        value_bool(left.int_val != right.int_val)
+    else if op == BIN_LT()
+        value_bool(left.int_val < right.int_val)
+    else if op == BIN_LE()
+        value_bool(left.int_val <= right.int_val)
+    else if op == BIN_GT()
+        value_bool(left.int_val > right.int_val)
+    else if op == BIN_GE()
+        value_bool(left.int_val >= right.int_val)
+    else
+        value_unit()
+
+f apply_unop(op: Int, val: Value) -> Value
+    if op == UN_NEG()
+        value_int(0 - val.int_val)
+    else
+        value_bool(!val.bool_val)
+
+f eval_operand(frame: Frame, op: Operand) -> Value
+    if op.kind == OP_CONST_UNIT()
+        value_unit()
+    else if op.kind == OP_CONST_BOOL()
+        value_bool(op.bool_val)
+    else if op.kind == OP_CONST_INT()
+        value_int(op.int_val)
+    else if op.kind == OP_CONST_STR()
+        value_str(op.str_val)
+    else if op.kind == OP_LOCAL()
+        get_local(frame, op.local)
+    else if op.kind == OP_COPY()
+        get_local(frame, op.local)
+    else
+        value_unit()
+
+f get_local(frame: Frame, idx: Int) -> Value
+    m vec_get(frame.locals, idx)
+        Some(v) -> v
+        None -> value_unit()
+
+# ============================================================================
+# Test Programs - Manually Constructed MIR
+# ============================================================================
+
+# Test 1: f main() -> Int = 42
+f build_prog_42() -> Program
+    # Local 0 = return value
+    locals := [LocalDecl { ty: "Int", name: "_ret" }]
+
+    # Block 0: return 42
+    stmt := stmt_assign(0, rvalue_use(operand_int(42)))
+    term := terminator_return(operand_local(0))
+    block := BasicBlock { id: 0, stmts: [stmt], terminator: term }
+
+    func := Function {
+        name: "main",
+        params: [],
+        return_ty: "Int",
+        locals: locals,
+        blocks: [block],
+        entry_block: 0
+    }
+
+    Program { functions: [func], function_names: ["main"], entry: 0 }
+
+# Test 2: f main() -> Int = 2 + 3 * 4
+f build_prog_arithmetic() -> Program
+    # Local 0 = result
+    # Local 1 = tmp1 (3 * 4)
+    # Local 2 = tmp2 (2 + tmp1)
+    local0 := LocalDecl { ty: "Int", name: "_ret" }
+    local1 := LocalDecl { ty: "Int", name: "_tmp1" }
+    local2 := LocalDecl { ty: "Int", name: "_tmp2" }
+    locals := [local0, local1, local2]
+
+    # Block 0:
+    #   _tmp1 = 3 * 4
+    #   _tmp2 = 2 + _tmp1
+    #   return _tmp2
+    stmt1 := stmt_assign(1, rvalue_binop(BIN_MUL(), operand_int(3), operand_int(4)))
+    stmt2 := stmt_assign(2, rvalue_binop(BIN_ADD(), operand_int(2), operand_local(1)))
+    term := terminator_return(operand_local(2))
+    block := BasicBlock { id: 0, stmts: [stmt1, stmt2], terminator: term }
+
+    func := Function {
+        name: "main",
+        params: [],
+        return_ty: "Int",
+        locals: locals,
+        blocks: [block],
+        entry_block: 0
+    }
+
+    Program { functions: [func], function_names: ["main"], entry: 0 }
+
+# Test 3: f add(a: Int, b: Int) -> Int = a + b
+#         f main() -> Int = add(10, 20)
+f build_prog_function_call() -> Program
+    # add function
+    add_l0 := LocalDecl { ty: "Int", name: "_ret" }
+    add_l1 := LocalDecl { ty: "Int", name: "a" }
+    add_l2 := LocalDecl { ty: "Int", name: "b" }
+    add_locals := [add_l0, add_l1, add_l2]
+    add_stmt := stmt_assign(0, rvalue_binop(BIN_ADD(), operand_local(1), operand_local(2)))
+    add_term := terminator_return(operand_local(0))
+    add_block := BasicBlock { id: 0, stmts: [add_stmt], terminator: add_term }
+    add_p1 := Param { local: 1, ty: "Int" }
+    add_p2 := Param { local: 2, ty: "Int" }
+    add_func := Function { name: "add", params: [add_p1, add_p2], return_ty: "Int", locals: add_locals, blocks: [add_block], entry_block: 0 }
+
+    # main function
+    main_l0 := LocalDecl { ty: "Int", name: "_ret" }
+    main_l1 := LocalDecl { ty: "Int", name: "_tmp" }
+    main_locals := [main_l0, main_l1]
+    # Call add(10, 20), store result in _tmp
+    main_term1 := terminator_call("add", [operand_int(10), operand_int(20)], 1, 1)
+    main_block0 := BasicBlock { id: 0, stmts: [], terminator: main_term1 }
+    # Return _tmp
+    main_term2 := terminator_return(operand_local(1))
+    main_block1 := BasicBlock { id: 1, stmts: [], terminator: main_term2 }
+    main_func := Function { name: "main", params: [], return_ty: "Int", locals: main_locals, blocks: [main_block0, main_block1], entry_block: 0 }
+
+    Program { functions: [add_func, main_func], function_names: ["add", "main"], entry: 1 }
+
+# Test 4: Recursive factorial
+# f factorial(n: Int) -> Int = if n <= 1 then 1 else n * factorial(n - 1)
+# f main() -> Int = factorial(5)
+f build_prog_factorial() -> Program
+    # factorial function locals
+    fl0 := LocalDecl { ty: "Int", name: "_ret" }
+    fl1 := LocalDecl { ty: "Int", name: "n" }
+    fl2 := LocalDecl { ty: "Bool", name: "_cond" }
+    fl3 := LocalDecl { ty: "Int", name: "_tmp1" }
+    fl4 := LocalDecl { ty: "Int", name: "_tmp2" }
+    fl5 := LocalDecl { ty: "Int", name: "_tmp3" }
+    fact_locals := [fl0, fl1, fl2, fl3, fl4, fl5]
+
+    # Block 0: Check condition
+    cond_stmt := stmt_assign(2, rvalue_binop(BIN_LE(), operand_local(1), operand_int(1)))
+    cond_term := terminator_if(operand_local(2), 1, 2)
+    block0 := BasicBlock { id: 0, stmts: [cond_stmt], terminator: cond_term }
+
+    # Block 1: Base case - return 1
+    ret1_term := terminator_return(operand_int(1))
+    block1 := BasicBlock { id: 1, stmts: [], terminator: ret1_term }
+
+    # Block 2: Recursive case - compute n - 1
+    sub_stmt := stmt_assign(3, rvalue_binop(BIN_SUB(), operand_local(1), operand_int(1)))
+    call_term := terminator_call("factorial", [operand_local(3)], 4, 3)
+    block2 := BasicBlock { id: 2, stmts: [sub_stmt], terminator: call_term }
+
+    # Block 3: Multiply n * factorial(n-1) and return
+    mul_stmt := stmt_assign(5, rvalue_binop(BIN_MUL(), operand_local(1), operand_local(4)))
+    ret_term := terminator_return(operand_local(5))
+    block3 := BasicBlock { id: 3, stmts: [mul_stmt], terminator: ret_term }
+
+    fact_p := Param { local: 1, ty: "Int" }
+    fact_blocks := [block0, block1, block2, block3]
+    fact_func := Function { name: "factorial", params: [fact_p], return_ty: "Int", locals: fact_locals, blocks: fact_blocks, entry_block: 0 }
+
+    # main function
+    ml0 := LocalDecl { ty: "Int", name: "_ret" }
+    ml1 := LocalDecl { ty: "Int", name: "_result" }
+    main_locals := [ml0, ml1]
+    main_call := terminator_call("factorial", [operand_int(5)], 1, 1)
+    main_block0 := BasicBlock { id: 0, stmts: [], terminator: main_call }
+    main_ret := terminator_return(operand_local(1))
+    main_block1 := BasicBlock { id: 1, stmts: [], terminator: main_ret }
+    main_func := Function { name: "main", params: [], return_ty: "Int", locals: main_locals, blocks: [main_block0, main_block1], entry_block: 0 }
+
+    Program { functions: [fact_func, main_func], function_names: ["factorial", "main"], entry: 1 }
+
+# ============================================================================
+# Test Runner
+# ============================================================================
+
+f run_test(name: Str, prog: Program, expected: Int) -> Bool
+    print(name)
+    result := interpret(prog)
+    actual := result.int_val
+    if actual == expected
+        print("  PASS")
+        print(actual)
+        true
+    else
+        print("  FAIL - expected:")
+        print(expected)
+        print("  got:")
+        print(actual)
+        false
+
+f run_all_tests() -> Int
+    print("=== ARIA Bootstrap Pipeline Tests ===")
+    print("")
+
+    t1 := run_test("Test 1: return 42", build_prog_42(), 42)
+    t2 := run_test("Test 2: 2 + 3 * 4 = 14", build_prog_arithmetic(), 14)
+    t3 := run_test("Test 3: add(10, 20) = 30", build_prog_function_call(), 30)
+    t4 := run_test("Test 4: factorial(5) = 120", build_prog_factorial(), 120)
+
+    print("")
+    all_passed := t1 && t2 && t3 && t4
+    if all_passed
+        print("All tests passed!")
+        0
+    else
+        print("Some tests failed")
+        1
+
+f main() -> Int = run_all_tests()

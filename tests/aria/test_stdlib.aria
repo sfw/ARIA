@@ -1,0 +1,187 @@
+# Test stdlib modules (core, vec, string, map)
+# Expected output: All tests pass, final result: 1
+
+# ============================================================
+# Core module tests (inline since import not implemented)
+# ============================================================
+
+# min/max functions
+f min(a: Int, b: Int) -> Int
+    if a < b then a else b
+
+f max(a: Int, b: Int) -> Int
+    if a > b then a else b
+
+f abs(n: Int) -> Int
+    if n < 0 then 0 - n else n
+
+f clamp(value: Int, min_val: Int, max_val: Int) -> Int
+    if value < min_val then min_val else if value > max_val then max_val else value
+
+f test_min_max() -> Bool
+    min(3, 7) == 3 && max(3, 7) == 7
+
+f test_abs() -> Bool
+    abs(0 - 5) == 5 && abs(5) == 5 && abs(0) == 0
+
+f test_clamp() -> Bool
+    clamp(5, 0, 10) == 5 && clamp(0 - 5, 0, 10) == 0 && clamp(15, 0, 10) == 10
+
+# ============================================================
+# Vec module tests
+# ============================================================
+
+f vec_is_empty(arr: [Int]) -> Bool
+    vec_len(arr) == 0
+
+f vec_sum(arr: [Int]) -> Int
+    result := 0
+    for x in arr
+        result = result + x
+    result
+
+f test_vec_is_empty() -> Bool
+    vec_is_empty([]) && !vec_is_empty([1])
+
+f test_vec_sum() -> Bool
+    vec_sum([1, 2, 3, 4, 5]) == 15 && vec_sum([]) == 0
+
+# Test vec_map inline (closures inferred when passed as args)
+f test_vec_map() -> Bool
+    arr := [1, 2, 3]
+    doubled := []
+    for x in arr
+        doubled = vec_push(doubled, x * 2)
+    vec_len(doubled) == 3 && doubled[0] == 2 && doubled[1] == 4 && doubled[2] == 6
+
+# Test vec_filter inline
+f test_vec_filter() -> Bool
+    arr := [1, 2, 3, 4, 5, 6]
+    evens := []
+    for x in arr
+        if x % 2 == 0 then evens = vec_push(evens, x) else evens = evens
+    vec_len(evens) == 3 && evens[0] == 2 && evens[1] == 4 && evens[2] == 6
+
+# Test vec_any/vec_all inline
+f test_vec_any_all() -> Bool
+    arr := [2, 4, 6, 8]
+    all_even := true
+    any_gt_5 := false
+    any_odd := false
+    for x in arr
+        if x % 2 != 0 then all_even = false else all_even = all_even
+        if x > 5 then any_gt_5 = true else any_gt_5 = any_gt_5
+        if x % 2 != 0 then any_odd = true else any_odd = any_odd
+    all_even && any_gt_5 && !any_odd
+
+# ============================================================
+# String module tests
+# ============================================================
+
+f str_is_empty(s: Str) -> Bool
+    str_len(s) == 0
+
+f str_repeat(s: Str, n: Int) -> Str
+    result := ""
+    idx := 0
+    wh idx < n
+        result = str_concat(result, s)
+        idx = idx + 1
+    result
+
+# StringBuilder pattern
+f sb_new() -> [Str]
+    []
+
+f sb_append(builder: [Str], s: Str) -> [Str]
+    vec_push(builder, s)
+
+f sb_build(builder: [Str]) -> Str
+    result := ""
+    for s in builder
+        result = str_concat(result, s)
+    result
+
+f test_str_is_empty() -> Bool
+    str_is_empty("") && !str_is_empty("hello")
+
+f test_str_repeat() -> Bool
+    str_repeat("ab", 3) == "ababab" && str_repeat("x", 0) == ""
+
+f test_string_builder() -> Bool
+    builder := sb_new()
+    builder = sb_append(builder, "Hello")
+    builder = sb_append(builder, " ")
+    builder = sb_append(builder, "World")
+    result := sb_build(builder)
+    result == "Hello World"
+
+# ============================================================
+# Map module tests
+# ============================================================
+
+f map_is_empty(mymap: Map[Int]) -> Bool
+    map_len(mymap) == 0
+
+f map_get_or(mymap: Map[Int], key: Str, default: Int) -> Int
+    m map_get(mymap, key)
+        Some(v) -> v
+        None -> default
+
+f map_increment(mymap: Map[Int], key: Str) -> Map[Int]
+    m map_get(mymap, key)
+        Some(v) -> map_insert(mymap, key, v + 1)
+        None -> map_insert(mymap, key, 1)
+
+f test_map_is_empty() -> Bool
+    empty := map_new()
+    non_empty := map_insert(map_new(), "key", 42)
+    map_is_empty(empty) && !map_is_empty(non_empty)
+
+f test_map_get_or() -> Bool
+    mymap := map_insert(map_new(), "exists", 100)
+    map_get_or(mymap, "exists", 0) == 100 && map_get_or(mymap, "missing", 42) == 42
+
+f test_map_increment() -> Bool
+    mymap := map_new()
+    mymap = map_increment(mymap, "count")
+    mymap = map_increment(mymap, "count")
+    mymap = map_increment(mymap, "count")
+    map_get_or(mymap, "count", 0) == 3
+
+# ============================================================
+# Run all tests
+# ============================================================
+
+f run_all_tests() -> Int
+    passed := 0
+
+    # Core tests
+    if test_min_max() then passed = passed + 1 else print("FAIL: test_min_max")
+    if test_abs() then passed = passed + 1 else print("FAIL: test_abs")
+    if test_clamp() then passed = passed + 1 else print("FAIL: test_clamp")
+
+    # Vec tests
+    if test_vec_is_empty() then passed = passed + 1 else print("FAIL: test_vec_is_empty")
+    if test_vec_sum() then passed = passed + 1 else print("FAIL: test_vec_sum")
+    if test_vec_map() then passed = passed + 1 else print("FAIL: test_vec_map")
+    if test_vec_filter() then passed = passed + 1 else print("FAIL: test_vec_filter")
+    if test_vec_any_all() then passed = passed + 1 else print("FAIL: test_vec_any_all")
+
+    # String tests
+    if test_str_is_empty() then passed = passed + 1 else print("FAIL: test_str_is_empty")
+    if test_str_repeat() then passed = passed + 1 else print("FAIL: test_str_repeat")
+    if test_string_builder() then passed = passed + 1 else print("FAIL: test_string_builder")
+
+    # Map tests
+    if test_map_is_empty() then passed = passed + 1 else print("FAIL: test_map_is_empty")
+    if test_map_get_or() then passed = passed + 1 else print("FAIL: test_map_get_or")
+    if test_map_increment() then passed = passed + 1 else print("FAIL: test_map_increment")
+
+    print("Stdlib tests passed:")
+    print(passed)
+    print("of 14")
+
+    if passed == 14 then 1 else 0
+
+f main() -> Int = run_all_tests()

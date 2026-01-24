@@ -1,0 +1,186 @@
+# ARIA Standard Library - Map Module
+# Provides HashMap utilities with functional patterns
+
+# ============================================================
+# Basic operations
+# ============================================================
+
+# Check if map is empty
+f map_is_empty(mymap: Map[Int]) -> Bool
+    map_len(mymap) == 0
+
+# Get value or default
+f map_get_or(mymap: Map[Int], key: Str, default: Int) -> Int
+    m map_get(mymap, key)
+        Some(v) -> v
+        None -> default
+
+# Check if key exists (alias for map_contains)
+f map_has_key(mymap: Map[Int], key: Str) -> Bool
+    map_contains(mymap, key)
+
+# ============================================================
+# Functional operations
+# ============================================================
+
+# Update a value with a function (if key exists)
+f map_update(mymap: Map[Int], key: Str, updater: |Int| -> Int) -> Map[Int]
+    m map_get(mymap, key)
+        Some(v) -> map_insert(mymap, key, updater(v))
+        None -> mymap
+
+# Update a value or insert default
+f map_update_or_insert(mymap: Map[Int], key: Str, default: Int, updater: |Int| -> Int) -> Map[Int]
+    m map_get(mymap, key)
+        Some(v) -> map_insert(mymap, key, updater(v))
+        None -> map_insert(mymap, key, default)
+
+# Increment a counter (common pattern)
+f map_increment(mymap: Map[Int], key: Str) -> Map[Int]
+    map_update_or_insert(mymap, key, 1, |v| v + 1)
+
+# ============================================================
+# Iteration helpers
+# ============================================================
+
+# Fold over all key-value pairs
+# Note: Since map_keys returns [Str], we iterate over keys
+f map_fold(mymap: Map[Int], init: Int, folder: |Int, Str, Int| -> Int) -> Int
+    keys := map_keys(mymap)
+    acc := init
+    for key in keys
+        m map_get(mymap, key)
+            Some(v) -> acc = folder(acc, key, v)
+            None -> acc = acc
+    acc
+
+# Sum all values
+f map_sum_values(mymap: Map[Int]) -> Int
+    map_fold(mymap, 0, |acc, _key, value| acc + value)
+
+# Count entries matching predicate
+f map_count(mymap: Map[Int], pred: |Str, Int| -> Bool) -> Int
+    keys := map_keys(mymap)
+    count := 0
+    for key in keys
+        m map_get(mymap, key)
+            Some(v) -> if pred(key, v) then count = count + 1 else count = count
+            None -> count = count
+    count
+
+# ============================================================
+# Transformation
+# ============================================================
+
+# Map values with a function
+f map_map_values(mymap: Map[Int], mapper: |Int| -> Int) -> Map[Int]
+    keys := map_keys(mymap)
+    result := map_new()
+    for key in keys
+        m map_get(mymap, key)
+            Some(v) -> result = map_insert(result, key, mapper(v))
+            None -> result = result
+    result
+
+# Filter entries by predicate
+f map_filter(mymap: Map[Int], pred: |Str, Int| -> Bool) -> Map[Int]
+    keys := map_keys(mymap)
+    result := map_new()
+    for key in keys
+        m map_get(mymap, key)
+            Some(v) -> if pred(key, v) then result = map_insert(result, key, v) else result = result
+            None -> result = result
+    result
+
+# Remove entries matching predicate
+f map_remove_if(mymap: Map[Int], pred: |Str, Int| -> Bool) -> Map[Int]
+    map_filter(mymap, |k, v| !pred(k, v))
+
+# ============================================================
+# Merge operations
+# ============================================================
+
+# Merge two maps (second map's values override first)
+f map_merge(map1: Map[Int], map2: Map[Int]) -> Map[Int]
+    result := map1
+    keys2 := map_keys(map2)
+    for key in keys2
+        m map_get(map2, key)
+            Some(v) -> result = map_insert(result, key, v)
+            None -> result = result
+    result
+
+# Merge with custom conflict resolution
+f map_merge_with(map1: Map[Int], map2: Map[Int], resolver: |Int, Int| -> Int) -> Map[Int]
+    result := map1
+    keys2 := map_keys(map2)
+    for key in keys2
+        m map_get(map2, key)
+            Some(v2) ->
+                m map_get(result, key)
+                    Some(v1) -> result = map_insert(result, key, resolver(v1, v2))
+                    None -> result = map_insert(result, key, v2)
+            None -> result = result
+    result
+
+# ============================================================
+# Conversion
+# ============================================================
+
+# Get all values as array
+f map_values_array(mymap: Map[Int]) -> [Int]
+    keys := map_keys(mymap)
+    result := []
+    for key in keys
+        m map_get(mymap, key)
+            Some(v) -> result = vec_push(result, v)
+            None -> result = result
+    result
+
+# Create map from array of key-value pairs
+f map_from_pairs(pairs: [(Str, Int)]) -> Map[Int]
+    result := map_new()
+    for pair in pairs
+        # TODO: tuple destructuring
+        # For now, this won't work without tuple field access on pairs
+        result = result
+    result
+
+# ============================================================
+# Search
+# ============================================================
+
+# Find first key matching value
+f map_find_key(mymap: Map[Int], target_value: Int) -> Option[Str]
+    keys := map_keys(mymap)
+    result := None
+    for key in keys
+        m map_get(mymap, key)
+            Some(v) -> if v == target_value && option_is_none_str(result) then result = Some(key) else result = result
+            None -> result = result
+    result
+
+# Helper function for option check
+f option_is_none_str(opt: Option[Str]) -> Bool
+    m opt
+        Some(_) -> false
+        None -> true
+
+# Find max value and its key
+f map_max_entry(mymap: Map[Int]) -> Option[(Str, Int)]
+    keys := map_keys(mymap)
+    if vec_len(keys) == 0 then None
+    else
+        max_key := keys[0]
+        max_val := m map_get(mymap, max_key)
+            Some(v) -> v
+            None -> 0
+        for key in keys
+            m map_get(mymap, key)
+                Some(v) -> if v > max_val then
+                    max_key = key
+                    max_val = v
+                else
+                    max_key = max_key
+                None -> max_key = max_key
+        Some((max_key, max_val))
