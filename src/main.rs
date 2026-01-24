@@ -161,6 +161,15 @@ enum Commands {
         #[arg(long, value_enum, default_value = "ebnf")]
         format: GrammarFormat,
     },
+
+    /// Create a new ARIA project
+    New {
+        /// Project name
+        name: String,
+    },
+
+    /// Initialize an ARIA project in the current directory
+    Init,
 }
 
 fn main() {
@@ -177,6 +186,8 @@ fn main() {
         Commands::Typeof { file, position } => typeof_at(&file, &position, error_format),
         Commands::Build { file, output, opt_level } => build(&file, output.as_ref(), opt_level, error_format),
         Commands::Grammar { format } => grammar(format),
+        Commands::New { name } => new_project(&name),
+        Commands::Init => init_project(),
     };
 
     if let Err(e) = result {
@@ -1135,6 +1146,116 @@ fn build(file: &PathBuf, output: Option<&PathBuf>, opt_level: u8, error_format: 
         return Err("LLVM not available".into());
     }
 
+    Ok(())
+}
+
+/// Create a new ARIA project in a new directory
+fn new_project(name: &str) -> Result<(), String> {
+    use std::fs;
+
+    // Validate project name
+    if name.is_empty() {
+        return Err("Project name cannot be empty".into());
+    }
+    if !name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+        return Err("Project name can only contain letters, numbers, underscores, and hyphens".into());
+    }
+
+    let project_path = PathBuf::from(name);
+    if project_path.exists() {
+        return Err(format!("Directory '{}' already exists", name));
+    }
+
+    // Create project directory
+    fs::create_dir(&project_path)
+        .map_err(|e| format!("Failed to create directory: {}", e))?;
+
+    // Create aria.toml
+    let toml_content = format!(r#"[package]
+name = "{}"
+version = "0.1.0"
+authors = []
+
+[deps]
+# Add dependencies here
+# example = {{ path = "../example" }}
+"#, name);
+
+    fs::write(project_path.join("aria.toml"), toml_content)
+        .map_err(|e| format!("Failed to create aria.toml: {}", e))?;
+
+    // Create src directory
+    fs::create_dir(project_path.join("src"))
+        .map_err(|e| format!("Failed to create src directory: {}", e))?;
+
+    // Create main.aria
+    let main_content = r#"# Welcome to your new ARIA project!
+
+f main() -> Int
+    println("Hello, ARIA!")
+    0
+"#;
+
+    fs::write(project_path.join("src").join("main.aria"), main_content)
+        .map_err(|e| format!("Failed to create main.aria: {}", e))?;
+
+    println!("Created new ARIA project '{}'", name);
+    println!("  cd {}", name);
+    println!("  aria run src/main.aria");
+
+    Ok(())
+}
+
+/// Initialize an ARIA project in the current directory
+fn init_project() -> Result<(), String> {
+    use std::fs;
+
+    let toml_path = PathBuf::from("aria.toml");
+    if toml_path.exists() {
+        return Err("aria.toml already exists in this directory".into());
+    }
+
+    // Get current directory name for project name
+    let current_dir = std::env::current_dir()
+        .map_err(|e| format!("Failed to get current directory: {}", e))?;
+    let name = current_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("project");
+
+    // Create aria.toml
+    let toml_content = format!(r#"[package]
+name = "{}"
+version = "0.1.0"
+authors = []
+
+[deps]
+# Add dependencies here
+# example = {{ path = "../example" }}
+"#, name);
+
+    fs::write(&toml_path, toml_content)
+        .map_err(|e| format!("Failed to create aria.toml: {}", e))?;
+
+    // Create src directory if it doesn't exist
+    let src_path = PathBuf::from("src");
+    if !src_path.exists() {
+        fs::create_dir(&src_path)
+            .map_err(|e| format!("Failed to create src directory: {}", e))?;
+
+        // Create main.aria if src didn't exist
+        let main_content = r#"# Welcome to your ARIA project!
+
+f main() -> Int
+    println("Hello, ARIA!")
+    0
+"#;
+
+        fs::write(src_path.join("main.aria"), main_content)
+            .map_err(|e| format!("Failed to create main.aria: {}", e))?;
+    }
+
+    println!("Initialized ARIA project '{}'", name);
     Ok(())
 }
 
