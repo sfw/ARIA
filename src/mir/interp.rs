@@ -4,6 +4,7 @@
 //! for testing and validation purposes.
 
 use std::collections::HashMap;
+use rand::Rng;
 
 use super::mir::{
     BinOp, BlockId, Constant, Function, Local, Operand, Program, Rvalue,
@@ -1508,6 +1509,44 @@ impl Interpreter {
                 }
                 eprintln!();
                 Ok(Some(Value::Unit))
+            }
+
+            // ===== Random number generation =====
+            "random" => {
+                // random() -> Float (0.0 to 1.0)
+                let mut rng = rand::thread_rng();
+                Ok(Some(Value::Float(rng.r#gen::<f64>())))
+            }
+            "random_int" => {
+                // random_int(min: Int, max: Int) -> Int
+                let min = match &args[0] {
+                    Value::Int(n) => *n,
+                    _ => return Err(InterpError { message: "random_int: expected Int for min".to_string() })
+                };
+                let max = match &args[1] {
+                    Value::Int(n) => *n,
+                    _ => return Err(InterpError { message: "random_int: expected Int for max".to_string() })
+                };
+                let mut rng = rand::thread_rng();
+                Ok(Some(Value::Int(rng.gen_range(min..=max))))
+            }
+            "random_bool" => {
+                // random_bool() -> Bool
+                let mut rng = rand::thread_rng();
+                Ok(Some(Value::Bool(rng.r#gen::<bool>())))
+            }
+            "random_choice" => {
+                // random_choice(arr: [T]) -> T
+                let arr = match &args[0] {
+                    Value::Array(vals) => vals,
+                    _ => return Err(InterpError { message: "random_choice: expected array".to_string() })
+                };
+                if arr.is_empty() {
+                    return Err(InterpError { message: "random_choice: array is empty".to_string() });
+                }
+                let mut rng = rand::thread_rng();
+                let idx = rng.gen_range(0..arr.len());
+                Ok(Some(arr[idx].clone()))
             }
 
             // Not a built-in function

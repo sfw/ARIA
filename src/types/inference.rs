@@ -695,6 +695,35 @@ impl TypeEnv {
             TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str], Box::new(Ty::Unit)) },
         );
 
+        // ===== Random number generation =====
+        // random() -> Float
+        env.bindings.insert(
+            "random".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![], Box::new(Ty::Float)) },
+        );
+
+        // random_int(min: Int, max: Int) -> Int
+        env.bindings.insert(
+            "random_int".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Int, Ty::Int], Box::new(Ty::Int)) },
+        );
+
+        // random_bool() -> Bool
+        env.bindings.insert(
+            "random_bool".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![], Box::new(Ty::Bool)) },
+        );
+
+        // random_choice([T]) -> T
+        let choice_var = TypeVar::fresh();
+        env.bindings.insert(
+            "random_choice".to_string(),
+            TypeScheme {
+                vars: vec![choice_var],
+                ty: Ty::Fn(vec![Ty::List(Box::new(Ty::Var(choice_var)))], Box::new(Ty::Var(choice_var)))
+            },
+        );
+
         env
     }
 
