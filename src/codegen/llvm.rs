@@ -462,7 +462,7 @@ impl<'ctx> LLVMCodegen<'ctx> {
                 // Compare by checking if converting to f64 (bigger) or f32 (smaller)
                 if src_ty == target_float {
                     Ok(value)
-                } else if target_float.get_type() == self.context.f64_type().get_type() {
+                } else if target_float == self.context.f64_type() {
                     // Extend f32 to f64
                     let extended = self.builder.build_float_ext(fv, target_float, "fpext")
                         .map_err(|e| CodegenError { message: format!("fpext failed: {:?}", e) })?;
