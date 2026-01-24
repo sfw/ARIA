@@ -4,6 +4,8 @@
 //! for testing and validation purposes.
 
 use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH, Duration};
+use std::thread;
 use rand::Rng;
 
 use super::mir::{
@@ -1662,6 +1664,31 @@ impl Interpreter {
                     _ => return Err(InterpError { message: "abs_float: expected Float".to_string() })
                 };
                 Ok(Some(Value::Float(x.abs())))
+            }
+
+            // ===== Time functions =====
+            "time_now" => {
+                // time_now() -> Int (unix timestamp in seconds)
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or(Duration::ZERO);
+                Ok(Some(Value::Int(now.as_secs() as i64)))
+            }
+            "time_now_ms" => {
+                // time_now_ms() -> Int (unix timestamp in milliseconds)
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or(Duration::ZERO);
+                Ok(Some(Value::Int(now.as_millis() as i64)))
+            }
+            "time_sleep" => {
+                // time_sleep(ms: Int) -> ()
+                let ms = match &args[0] {
+                    Value::Int(n) => *n as u64,
+                    _ => return Err(InterpError { message: "time_sleep: expected Int".to_string() })
+                };
+                thread::sleep(Duration::from_millis(ms));
+                Ok(Some(Value::Unit))
             }
 
             // Not a built-in function

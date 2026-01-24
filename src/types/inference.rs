@@ -797,6 +797,25 @@ impl TypeEnv {
             TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Float], Box::new(Ty::Float)) },
         );
 
+        // ===== Time functions =====
+        // time_now() -> Int
+        env.bindings.insert(
+            "time_now".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![], Box::new(Ty::Int)) },
+        );
+
+        // time_now_ms() -> Int
+        env.bindings.insert(
+            "time_now_ms".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![], Box::new(Ty::Int)) },
+        );
+
+        // time_sleep(Int) -> ()
+        env.bindings.insert(
+            "time_sleep".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Int], Box::new(Ty::Unit)) },
+        );
+
         env
     }
 
