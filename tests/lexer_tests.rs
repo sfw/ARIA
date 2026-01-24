@@ -1,6 +1,6 @@
-//! Integration tests for the ARIA lexer.
+//! Integration tests for the FORMA lexer.
 
-use aria::{Scanner, TokenKind};
+use forma::{Scanner, TokenKind};
 
 fn tokens(source: &str) -> Vec<TokenKind> {
     let scanner = Scanner::new(source);
@@ -330,7 +330,7 @@ fn test_invalid_escape_error() {
 #[test]
 fn test_complete_program() {
     let source = r#"
-# A complete ARIA program
+# A complete FORMA program
 us std.io
 
 s Point

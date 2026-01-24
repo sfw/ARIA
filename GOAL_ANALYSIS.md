@@ -1,10 +1,10 @@
-# ARIA Goal Analysis: Original Vision vs Current State
+# FORMA Goal Analysis: Original Vision vs Current State
 
 ## Executive Summary
 
 **Overall Assessment: On Track with Caveats**
 
-The core vision of ARIA—an AI-optimized language with memory safety—is being realized. The implementation has successfully delivered on the primary goals while surfacing important lessons about AI-friendly language design. Some original syntax choices need revision based on real-world experience.
+The core vision of FORMA—an AI-optimized language with memory safety—is being realized. The implementation has successfully delivered on the primary goals while surfacing important lessons about AI-friendly language design. Some original syntax choices need revision based on real-world experience.
 
 ---
 
@@ -20,7 +20,7 @@ The core vision of ARIA—an AI-optimized language with memory safety—is being
 | Borrow checker | ✅ Implemented | ~36KB, working |
 | Safe by default | ✅ Yes | No `unsafe` keyword needed (yet) |
 
-**Evidence:** The bootstrap lexer (scanner_v2.aria) demonstrates complex code with references working correctly without any lifetime annotations.
+**Evidence:** The bootstrap lexer (scanner_v2.forma) demonstrates complex code with references working correctly without any lifetime annotations.
 
 ### Goal 2: AI-Optimized Token Efficiency
 **Status: ⚠️ PARTIALLY ACHIEVED - NEEDS REVISION**
@@ -35,7 +35,7 @@ The core vision of ARIA—an AI-optimized language with memory safety—is being
 
 **Measured Token Reduction:** Based on the bootstrap lexer:
 - Traditional syntax estimate: ~450 tokens
-- ARIA v2 syntax: ~310 lines, ~280 tokens
+- FORMA v2 syntax: ~310 lines, ~280 tokens
 - **Actual reduction: ~38%** (matches spec target)
 
 **Problems Found:**
@@ -73,14 +73,14 @@ The core vision of ARIA—an AI-optimized language with memory safety—is being
 
 | Component | Status |
 |-----------|--------|
-| Token definitions | ✅ Complete (token.aria) |
-| Lexer/Scanner | ✅ Complete (scanner_v2.aria) |
+| Token definitions | ✅ Complete (token.forma) |
+| Lexer/Scanner | ✅ Complete (scanner_v2.forma) |
 | Parser | ❌ Not started |
 | Type checker | ❌ Not started |
 | MIR lowering | ❌ Not started |
 | Interpreter | ❌ Not started |
 
-**Blocker:** Parser can't be written until the ARIA-in-ARIA lexer runs correctly (interpreter issues remain).
+**Blocker:** Parser can't be written until the FORMA-in-FORMA lexer runs correctly (interpreter issues remain).
 
 ---
 
@@ -89,7 +89,7 @@ The core vision of ARIA—an AI-optimized language with memory safety—is being
 ### Finding 1: "94.8% of LLM failures with Rust are compilation errors"
 **Response:** ✅ ADDRESSED
 
-ARIA's simplified borrow checker eliminates the most common Rust errors:
+FORMA's simplified borrow checker eliminates the most common Rust errors:
 - No lifetime annotations to get wrong
 - Second-class references prevent stored reference bugs
 - Simpler mental model for AI to learn
@@ -102,7 +102,7 @@ Strong type inference catches errors at compile time while reducing annotation b
 ### Finding 3: "13.5% token reduction improved AI accuracy"
 **Response:** ✅ ACHIEVED
 
-ARIA v2 achieves ~38% token reduction vs traditional syntax.
+FORMA v2 achieves ~38% token reduction vs traditional syntax.
 
 ### Finding 4: "Structured error messages with specific fixes improve self-correction by 37%"
 **Response:** ❌ NOT ADDRESSED
@@ -121,14 +121,14 @@ The grammar is well-defined but not exposed for constrained decoding. This would
 ### What Worked Well
 
 1. **Implicit let with `:=` for mutable**
-   ```aria
+   ```forma
    x = 42      # immutable
    y := 0      # mutable
    ```
    Clean and clear distinction.
 
 2. **Type shortcuts**
-   ```aria
+   ```forma
    Int?    # Option[Int]
    Int!    # Result[Int, Str]
    [Int]   # List[Int]
@@ -136,14 +136,14 @@ The grammar is well-defined but not exposed for constrained decoding. This would
    Dramatic token savings.
 
 3. **Indentation-significant blocks**
-   ```aria
+   ```forma
    f factorial(n: Int) -> Int
        if n <= 1 then 1 else n * factorial(n - 1)
    ```
    Eliminates brace noise.
 
 4. **Single-character struct/enum/fn keywords**
-   ```aria
+   ```forma
    s Point { x: Int, y: Int }
    e Color = Red | Green | Blue
    f add(a: Int, b: Int) -> Int = a + b
@@ -155,7 +155,7 @@ The grammar is well-defined but not exposed for constrained decoding. This would
 1. **Single-letter keywords conflict with variable names**
 
    **Problem:** `i`, `s`, `e`, `f`, `m`, `t` are common variable names
-   ```aria
+   ```forma
    for i in items    # 'i' conflicts with 'impl' keyword
    s := "hello"      # 's' conflicts with 'struct' keyword
    ```
@@ -172,7 +172,7 @@ The grammar is well-defined but not exposed for constrained decoding. This would
 2. **Match arm syntax is ambiguous**
 
    **Problem:** `->` vs `=>` inconsistency with function arrows
-   ```aria
+   ```forma
    m x
        Some(v) -> v     # Uses ->
        None -> 0
@@ -181,7 +181,7 @@ The grammar is well-defined but not exposed for constrained decoding. This would
    ```
 
    **Recommendation:** Use `=>` for match arms consistently
-   ```aria
+   ```forma
    m x
        Some(v) => v
        None => 0
@@ -190,7 +190,7 @@ The grammar is well-defined but not exposed for constrained decoding. This would
 3. **No way to sequence statements in expression context**
 
    **Problem:** Can't do this:
-   ```aria
+   ```forma
    result = { print("starting"); compute(); value }
    ```
 
@@ -199,7 +199,7 @@ The grammar is well-defined but not exposed for constrained decoding. This would
 4. **Pipeline operator not implemented**
 
    **Spec says:**
-   ```aria
+   ```forma
    items | filter(>0) | map(*2) | sum
    ```
 

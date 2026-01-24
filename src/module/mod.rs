@@ -1,4 +1,4 @@
-//! Module system for ARIA.
+//! Module system for FORMA.
 //!
 //! This module provides functionality for loading and resolving
 //! external modules from files.

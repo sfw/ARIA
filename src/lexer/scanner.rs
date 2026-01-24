@@ -1,12 +1,12 @@
-//! Lexer/Scanner for the ARIA language.
+//! Lexer/Scanner for the FORMA language.
 //!
-//! This module tokenizes ARIA source code into a stream of tokens,
+//! This module tokenizes FORMA source code into a stream of tokens,
 //! handling indentation-significant syntax.
 
 use crate::errors::LexError;
 use crate::lexer::token::{Span, Token, TokenKind};
 
-/// The lexer that tokenizes ARIA source code.
+/// The lexer that tokenizes FORMA source code.
 pub struct Scanner<'a> {
     source: &'a str,
     chars: std::iter::Peekable<std::str::CharIndices<'a>>,

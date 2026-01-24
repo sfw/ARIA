@@ -1,7 +1,7 @@
-# ARIA Compiler Polish Instructions
+# FORMA Compiler Polish Instructions
 
 ## Objective
-Take the ARIA compiler from B+ quality to A/A+ quality. Complete these tasks BEFORE starting on SELF_HOSTING_PLAN_EXPANDED.md.
+Take the FORMA compiler from B+ quality to A/A+ quality. Complete these tasks BEFORE starting on SELF_HOSTING_PLAN_EXPANDED.md.
 
 ## Current State Assessment
 
@@ -131,12 +131,12 @@ fn lower_type(&self, ty: &crate::parser::Type) -> Ty {
 **Test this fix:**
 ```bash
 # Create test file
-cat > /tmp/test_types.aria << 'EOF'
+cat > /tmp/test_types.forma << 'EOF'
 f identity(x: Int) -> Int = x
 f main() -> Int = identity(42)
 EOF
 
-cargo run -- run /tmp/test_types.aria
+cargo run -- run /tmp/test_types.forma
 # Should output: 42
 ```
 
@@ -535,7 +535,7 @@ fn run(file: &PathBuf) -> Result<(), String> {
     }
 
     // Parse
-    let parser = AriaParser::new(&tokens);
+    let parser = FormaParser::new(&tokens);
     let ast = parser.parse().map_err(|e| {
         ctx.error_with_help(e.span(), &format!("{}", e), e.help().unwrap_or("check syntax"));
         "parse error".to_string()
@@ -615,7 +615,7 @@ pub enum Ty {
 Create `tests/mir_tests.rs`:
 
 ```rust
-use aria::{Scanner, Parser, Lowerer};
+use forma::{Scanner, Parser, Lowerer};
 
 fn lower(source: &str) -> Result<aria::Program, String> {
     let scanner = Scanner::new(source);
@@ -682,7 +682,7 @@ f main() -> Int = unwrap_or(Some(42), 0)
 Create `tests/integration_tests.rs`:
 
 ```rust
-use aria::{Scanner, Parser, Lowerer, Interpreter, Value};
+use forma::{Scanner, Parser, Lowerer, Interpreter, Value};
 
 fn run(source: &str) -> Result<Value, String> {
     let scanner = Scanner::new(source);
@@ -813,7 +813,7 @@ insta = "1.34"
 
 Create `tests/snapshot_tests.rs`:
 ```rust
-use aria::{Scanner, Parser, Lowerer};
+use forma::{Scanner, Parser, Lowerer};
 
 fn mir_snapshot(source: &str) -> String {
     let scanner = Scanner::new(source);
@@ -893,8 +893,8 @@ Add comprehensive doc comments to each module. Example for `src/mir/mod.rs`:
 //!
 //! ## Example
 //!
-//! ARIA source:
-//! ```aria
+//! FORMA source:
+//! ```forma
 //! f add(a: Int, b: Int) -> Int = a + b
 //! ```
 //!
@@ -937,7 +937,7 @@ Add `# Examples` sections to public functions. For instance in `Interpreter::run
 /// # Examples
 ///
 /// ```
-/// use aria::{Scanner, Parser, Lowerer, Interpreter};
+/// use forma::{Scanner, Parser, Lowerer, Interpreter};
 ///
 /// let source = "f main() -> Int = 42";
 /// let scanner = Scanner::new(source);
@@ -963,7 +963,7 @@ pub fn run(&mut self, fn_name: &str, args: &[Value]) -> Result<Value, InterpErro
 Create `src/errors/codes.rs`:
 
 ```rust
-/// Error codes for ARIA compiler diagnostics.
+/// Error codes for FORMA compiler diagnostics.
 ///
 /// Format: EXXXX where X is category:
 /// - E0XXX: Syntax/Parse errors
@@ -1055,15 +1055,15 @@ After completing all phases, verify:
 
 ```bash
 # Test 1: Basic types
-echo 'f main() -> Int = 42' > /tmp/t1.aria
-cargo run -- run /tmp/t1.aria  # Should print: 42
+echo 'f main() -> Int = 42' > /tmp/t1.forma
+cargo run -- run /tmp/t1.forma  # Should print: 42
 
 # Test 2: Option
-echo 'f main() -> Int = m Some(42) { Some(x) => x, None => 0 }' > /tmp/t2.aria
-cargo run -- run /tmp/t2.aria  # Should print: 42
+echo 'f main() -> Int = m Some(42) { Some(x) => x, None => 0 }' > /tmp/t2.forma
+cargo run -- run /tmp/t2.forma  # Should print: 42
 
 # Test 3: User enum
-cat > /tmp/t3.aria << 'EOF'
+cat > /tmp/t3.forma << 'EOF'
 e Color = Red | Green | Blue
 f to_num(c: Color) -> Int
     m c
@@ -1072,10 +1072,10 @@ f to_num(c: Color) -> Int
         Blue => 3
 f main() -> Int = to_num(Green)
 EOF
-cargo run -- run /tmp/t3.aria  # Should print: 2
+cargo run -- run /tmp/t3.forma  # Should print: 2
 
 # Test 4: Result
-cat > /tmp/t4.aria << 'EOF'
+cat > /tmp/t4.forma << 'EOF'
 f safe_div(a: Int, b: Int) -> Int!
     if b == 0 then Err("div by zero") else Ok(a / b)
 f main() -> Int
@@ -1083,7 +1083,7 @@ f main() -> Int
         Ok(x) => x
         Err(_) => -1
 EOF
-cargo run -- run /tmp/t4.aria  # Should print: 5
+cargo run -- run /tmp/t4.forma  # Should print: 5
 ```
 
 ---

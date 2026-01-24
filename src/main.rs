@@ -1,12 +1,12 @@
-//! ARIA Compiler CLI
+//! FORMA Compiler CLI
 //!
-//! Command-line interface for the ARIA compiler.
+//! Command-line interface for the FORMA compiler.
 
-use aria::errors::ErrorContext;
-use aria::lexer::Span;
-use aria::mir::{Interpreter, Lowerer};
-use aria::module::ModuleLoader;
-use aria::{BorrowChecker, Parser as AriaParser, Scanner, TypeChecker};
+use forma::errors::ErrorContext;
+use forma::lexer::Span;
+use forma::mir::{Interpreter, Lowerer};
+use forma::module::ModuleLoader;
+use forma::{BorrowChecker, Parser as FormaParser, Scanner, TypeChecker};
 use clap::{Parser, Subcommand, ValueEnum};
 use serde::Serialize;
 use std::fs;
@@ -58,9 +58,9 @@ struct JsonOutput {
 }
 
 #[derive(Parser)]
-#[command(name = "aria")]
+#[command(name = "forma")]
 #[command(version = "0.1.0")]
-#[command(about = "ARIA v2 compiler - AI-optimized systems programming language")]
+#[command(about = "FORMA v2 compiler - AI-optimized systems programming language")]
 struct Cli {
     /// Error output format
     #[arg(long, value_enum, default_value = "human", global = true)]
@@ -72,7 +72,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Compile an ARIA source file
+    /// Compile a FORMA source file
     Compile {
         /// Input file
         file: PathBuf,
@@ -82,7 +82,7 @@ enum Commands {
         output: Option<PathBuf>,
     },
 
-    /// Run an ARIA program
+    /// Run a FORMA program
     Run {
         /// Input file
         file: PathBuf,
@@ -155,20 +155,20 @@ enum Commands {
         opt_level: u8,
     },
 
-    /// Export the ARIA grammar
+    /// Export the FORMA grammar
     Grammar {
         /// Output format (ebnf, json)
         #[arg(long, value_enum, default_value = "ebnf")]
         format: GrammarFormat,
     },
 
-    /// Create a new ARIA project
+    /// Create a new FORMA project
     New {
         /// Project name
         name: String,
     },
 
-    /// Initialize an ARIA project in the current directory
+    /// Initialize a FORMA project in the current directory
     Init,
 }
 
@@ -272,7 +272,7 @@ fn run(file: &PathBuf, dump_mir: bool, check_contracts: bool, error_format: Erro
     }
 
     // Parse
-    let parser = AriaParser::new(&tokens);
+    let parser = FormaParser::new(&tokens);
     let parsed_ast = match parser.parse() {
         Ok(ast) => ast,
         Err(e) => {
@@ -304,7 +304,7 @@ fn run(file: &PathBuf, dump_mir: bool, check_contracts: bool, error_format: Erro
             // Combine imports with main file items
             let mut combined_items = imported_items;
             combined_items.extend(parsed_ast.items);
-            aria::parser::SourceFile {
+            forma::parser::SourceFile {
                 items: combined_items,
                 span: parsed_ast.span,
             }
@@ -312,7 +312,7 @@ fn run(file: &PathBuf, dump_mir: bool, check_contracts: bool, error_format: Erro
         Err(e) => {
             match error_format {
                 ErrorFormat::Human => {
-                    ctx.error(aria::lexer::Span { start: 0, end: 0, line: 1, column: 1 }, &format!("module error: {}", e));
+                    ctx.error(forma::lexer::Span { start: 0, end: 0, line: 1, column: 1 }, &format!("module error: {}", e));
                 }
                 ErrorFormat::Json => {
                     json_errors.push(JsonError {
@@ -530,7 +530,7 @@ fn parse(file: &PathBuf, error_format: ErrorFormat) -> Result<(), String> {
         return Err(format!("{} lexer error(s)", lex_errors.len()));
     }
 
-    let parser = AriaParser::new(&tokens);
+    let parser = FormaParser::new(&tokens);
     match parser.parse() {
         Ok(ast) => {
             match error_format {
@@ -568,42 +568,42 @@ fn parse(file: &PathBuf, error_format: ErrorFormat) -> Result<(), String> {
     }
 }
 
-fn print_item(item: &aria::parser::Item, indent: usize) {
+fn print_item(item: &forma::parser::Item, indent: usize) {
     let prefix = "  ".repeat(indent);
     match &item.kind {
-        aria::parser::ItemKind::Function(f) => {
+        forma::parser::ItemKind::Function(f) => {
             let async_str = if f.is_async { "async " } else { "" };
             println!("{}{}fn {} ({} params)", prefix, async_str, f.name.name, f.params.len());
         }
-        aria::parser::ItemKind::Struct(s) => {
+        forma::parser::ItemKind::Struct(s) => {
             let fields = match &s.kind {
-                aria::parser::StructKind::Named(f) => f.len(),
-                aria::parser::StructKind::Tuple(t) => t.len(),
-                aria::parser::StructKind::Unit => 0,
+                forma::parser::StructKind::Named(f) => f.len(),
+                forma::parser::StructKind::Tuple(t) => t.len(),
+                forma::parser::StructKind::Unit => 0,
             };
             println!("{}struct {} ({} fields)", prefix, s.name.name, fields);
         }
-        aria::parser::ItemKind::Enum(e) => {
+        forma::parser::ItemKind::Enum(e) => {
             println!("{}enum {} ({} variants)", prefix, e.name.name, e.variants.len());
         }
-        aria::parser::ItemKind::Trait(t) => {
+        forma::parser::ItemKind::Trait(t) => {
             println!("{}trait {} ({} items)", prefix, t.name.name, t.items.len());
         }
-        aria::parser::ItemKind::Impl(i) => {
+        forma::parser::ItemKind::Impl(i) => {
             let trait_str = i.trait_.as_ref().map(|_| "trait ").unwrap_or("");
             println!("{}{}impl ({} items)", prefix, trait_str, i.items.len());
         }
-        aria::parser::ItemKind::TypeAlias(t) => {
+        forma::parser::ItemKind::TypeAlias(t) => {
             println!("{}type {}", prefix, t.name.name);
         }
-        aria::parser::ItemKind::Use(u) => {
+        forma::parser::ItemKind::Use(u) => {
             println!("{}use {:?}", prefix, u.tree);
         }
-        aria::parser::ItemKind::Module(m) => {
+        forma::parser::ItemKind::Module(m) => {
             let items = m.items.as_ref().map(|i| i.len()).unwrap_or(0);
             println!("{}mod {} ({} items)", prefix, m.name.name, items);
         }
-        aria::parser::ItemKind::Const(c) => {
+        forma::parser::ItemKind::Const(c) => {
             println!("{}const {}", prefix, c.name.name);
         }
     }
@@ -639,7 +639,7 @@ fn check(file: &PathBuf, partial: bool, error_format: ErrorFormat) -> Result<(),
     }
 
     // Parse
-    let parser = AriaParser::new(&tokens);
+    let parser = FormaParser::new(&tokens);
     let ast = match parser.parse() {
         Ok(ast) => ast,
         Err(e) => {
@@ -762,7 +762,7 @@ fn complete(file: &PathBuf, position: &str, error_format: ErrorFormat) -> Result
     let (tokens, _lex_errors) = scanner.scan_all();
 
     // Parse (allow partial)
-    let parser = AriaParser::new(&tokens);
+    let parser = FormaParser::new(&tokens);
     let ast = parser.parse().ok();
 
     // Find the token at position
@@ -805,7 +805,7 @@ fn complete(file: &PathBuf, position: &str, error_format: ErrorFormat) -> Result
 }
 
 /// Get valid completion tokens for a context
-fn get_completions_for_context(prev_tokens: &[String], _ast: &Option<aria::parser::SourceFile>) -> Vec<String> {
+fn get_completions_for_context(prev_tokens: &[String], _ast: &Option<forma::parser::SourceFile>) -> Vec<String> {
     // Basic context-aware completions
     let last = prev_tokens.last().map(|s| s.as_str()).unwrap_or("");
 
@@ -845,7 +845,7 @@ fn get_completions_for_context(prev_tokens: &[String], _ast: &Option<aria::parse
 }
 
 /// Infer the expected type at position
-fn infer_expected_type(prev_tokens: &[String], _ast: &Option<aria::parser::SourceFile>) -> Option<String> {
+fn infer_expected_type(prev_tokens: &[String], _ast: &Option<forma::parser::SourceFile>) -> Option<String> {
     let last = prev_tokens.last().map(|s| s.as_str()).unwrap_or("");
 
     // Simple heuristics - in a real implementation this would use the type checker
@@ -874,7 +874,7 @@ fn typeof_at(file: &PathBuf, position: &str, error_format: ErrorFormat) -> Resul
     }
 
     // Parse
-    let parser = AriaParser::new(&tokens);
+    let parser = FormaParser::new(&tokens);
     let ast = match parser.parse() {
         Ok(ast) => ast,
         Err(e) => {
@@ -898,28 +898,28 @@ fn typeof_at(file: &PathBuf, position: &str, error_format: ErrorFormat) -> Resul
            col < token.span.column + token.span.end.saturating_sub(token.span.start) {
             // Found token at position - infer its type from context
             match &token.kind {
-                aria::lexer::TokenKind::Ident(_) => {
+                forma::lexer::TokenKind::Ident(_) => {
                     // Look up identifier in type environment
                     result_type = Some("(identifier - run type checker for actual type)".into());
                     context = "identifier";
                 }
-                aria::lexer::TokenKind::Int(_) => {
+                forma::lexer::TokenKind::Int(_) => {
                     result_type = Some("Int".into());
                     context = "literal";
                 }
-                aria::lexer::TokenKind::Float(_) => {
+                forma::lexer::TokenKind::Float(_) => {
                     result_type = Some("Float".into());
                     context = "literal";
                 }
-                aria::lexer::TokenKind::String(_) => {
+                forma::lexer::TokenKind::String(_) => {
                     result_type = Some("Str".into());
                     context = "literal";
                 }
-                aria::lexer::TokenKind::Char(_) => {
+                forma::lexer::TokenKind::Char(_) => {
                     result_type = Some("Char".into());
                     context = "literal";
                 }
-                aria::lexer::TokenKind::True | aria::lexer::TokenKind::False => {
+                forma::lexer::TokenKind::True | forma::lexer::TokenKind::False => {
                     result_type = Some("Bool".into());
                     context = "literal";
                 }
@@ -981,7 +981,7 @@ fn build(file: &PathBuf, output: Option<&PathBuf>, opt_level: u8, error_format: 
     }
 
     // Parse
-    let parser = AriaParser::new(&tokens);
+    let parser = FormaParser::new(&tokens);
     let parsed_ast = match parser.parse() {
         Ok(ast) => ast,
         Err(e) => {
@@ -1005,7 +1005,7 @@ fn build(file: &PathBuf, output: Option<&PathBuf>, opt_level: u8, error_format: 
         Ok(imported_items) => {
             let mut combined_items = imported_items;
             combined_items.extend(parsed_ast.items);
-            aria::parser::SourceFile {
+            forma::parser::SourceFile {
                 items: combined_items,
                 span: parsed_ast.span,
             }
@@ -1062,7 +1062,7 @@ fn build(file: &PathBuf, output: Option<&PathBuf>, opt_level: u8, error_format: 
     // LLVM codegen
     #[cfg(feature = "llvm")]
     {
-        use aria::codegen::LLVMCodegen;
+        use forma::codegen::LLVMCodegen;
         use inkwell::context::Context;
 
         let context = Context::create();
@@ -1149,7 +1149,7 @@ fn build(file: &PathBuf, output: Option<&PathBuf>, opt_level: u8, error_format: 
     Ok(())
 }
 
-/// Create a new ARIA project in a new directory
+/// Create a new FORMA project in a new directory
 fn new_project(name: &str) -> Result<(), String> {
     use std::fs;
 
@@ -1170,7 +1170,7 @@ fn new_project(name: &str) -> Result<(), String> {
     fs::create_dir(&project_path)
         .map_err(|e| format!("Failed to create directory: {}", e))?;
 
-    // Create aria.toml
+    // Create forma.toml
     let toml_content = format!(r#"[package]
 name = "{}"
 version = "0.1.0"
@@ -1181,38 +1181,38 @@ authors = []
 # example = {{ path = "../example" }}
 "#, name);
 
-    fs::write(project_path.join("aria.toml"), toml_content)
-        .map_err(|e| format!("Failed to create aria.toml: {}", e))?;
+    fs::write(project_path.join("forma.toml"), toml_content)
+        .map_err(|e| format!("Failed to create forma.toml: {}", e))?;
 
     // Create src directory
     fs::create_dir(project_path.join("src"))
         .map_err(|e| format!("Failed to create src directory: {}", e))?;
 
-    // Create main.aria
-    let main_content = r#"# Welcome to your new ARIA project!
+    // Create main.forma
+    let main_content = r#"# Welcome to your new FORMA project!
 
 f main() -> Int
-    println("Hello, ARIA!")
+    println("Hello, FORMA!")
     0
 "#;
 
-    fs::write(project_path.join("src").join("main.aria"), main_content)
-        .map_err(|e| format!("Failed to create main.aria: {}", e))?;
+    fs::write(project_path.join("src").join("main.forma"), main_content)
+        .map_err(|e| format!("Failed to create main.forma: {}", e))?;
 
-    println!("Created new ARIA project '{}'", name);
+    println!("Created new FORMA project '{}'", name);
     println!("  cd {}", name);
-    println!("  aria run src/main.aria");
+    println!("  forma run src/main.forma");
 
     Ok(())
 }
 
-/// Initialize an ARIA project in the current directory
+/// Initialize a FORMA project in the current directory
 fn init_project() -> Result<(), String> {
     use std::fs;
 
-    let toml_path = PathBuf::from("aria.toml");
+    let toml_path = PathBuf::from("forma.toml");
     if toml_path.exists() {
-        return Err("aria.toml already exists in this directory".into());
+        return Err("forma.toml already exists in this directory".into());
     }
 
     // Get current directory name for project name
@@ -1223,7 +1223,7 @@ fn init_project() -> Result<(), String> {
         .and_then(|n| n.to_str())
         .unwrap_or("project");
 
-    // Create aria.toml
+    // Create forma.toml
     let toml_content = format!(r#"[package]
 name = "{}"
 version = "0.1.0"
@@ -1235,7 +1235,7 @@ authors = []
 "#, name);
 
     fs::write(&toml_path, toml_content)
-        .map_err(|e| format!("Failed to create aria.toml: {}", e))?;
+        .map_err(|e| format!("Failed to create forma.toml: {}", e))?;
 
     // Create src directory if it doesn't exist
     let src_path = PathBuf::from("src");
@@ -1243,19 +1243,19 @@ authors = []
         fs::create_dir(&src_path)
             .map_err(|e| format!("Failed to create src directory: {}", e))?;
 
-        // Create main.aria if src didn't exist
-        let main_content = r#"# Welcome to your ARIA project!
+        // Create main.forma if src didn't exist
+        let main_content = r#"# Welcome to your FORMA project!
 
 f main() -> Int
-    println("Hello, ARIA!")
+    println("Hello, FORMA!")
     0
 "#;
 
-        fs::write(src_path.join("main.aria"), main_content)
-            .map_err(|e| format!("Failed to create main.aria: {}", e))?;
+        fs::write(src_path.join("main.forma"), main_content)
+            .map_err(|e| format!("Failed to create main.forma: {}", e))?;
     }
 
-    println!("Initialized ARIA project '{}'", name);
+    println!("Initialized FORMA project '{}'", name);
     Ok(())
 }
 
@@ -1269,7 +1269,7 @@ fn grammar(format: GrammarFormat) -> Result<(), String> {
 
 fn print_grammar_ebnf() {
     println!(
-        r#"(* ARIA Programming Language Grammar - EBNF *)
+        r#"(* FORMA Programming Language Grammar - EBNF *)
 (* Version 0.1.0 *)
 
 (* ============================================ *)
@@ -1603,16 +1603,16 @@ DEDENT = ? decrease in indentation level ? ;
 (* Function types: fn(Args) -> Ret *)
 (* Reference types: &T, &mut T *)
 
-(* End of ARIA Grammar *)
+(* End of FORMA Grammar *)
 "#
     );
 }
 
 fn print_grammar_json() {
     let grammar = serde_json::json!({
-        "name": "ARIA",
+        "name": "FORMA",
         "version": "0.1.0",
-        "fileExtensions": [".aria"],
+        "fileExtensions": [".forma"],
         "rules": {
             "Program": {
                 "type": "sequence",

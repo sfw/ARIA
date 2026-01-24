@@ -1,4 +1,4 @@
-//! Type system for ARIA.
+//! Type system for FORMA.
 //!
 //! This module provides:
 //! - Type representations (`types`)
@@ -18,7 +18,7 @@
 //! # Usage
 //!
 //! ```ignore
-//! use aria::types::{TypeChecker, Ty};
+//! use forma::types::{TypeChecker, Ty};
 //!
 //! let mut checker = TypeChecker::new();
 //! let result = checker.check(&ast)?;

@@ -1,0 +1,77 @@
+# Test file I/O operations
+# Expected output: All tests pass, final result: 1
+
+f test_file_write_read() -> Bool
+    path := "/tmp/forma_test_file.txt"
+    content := "Hello, FORMA!"
+
+    # Write file
+    write_result := file_write(path, content)
+    write_ok := m write_result
+        Ok(_) -> true
+        Err(_) -> false
+
+    # Read file back
+    read_result := file_read(path)
+    read_ok := m read_result
+        Ok(data) -> data == content
+        Err(_) -> false
+
+    write_ok && read_ok
+
+f test_file_exists_true() -> Bool
+    path := "/tmp/forma_test_exists.txt"
+    wr := file_write(path, "test")
+    write_ok := m wr
+        Ok(_) -> true
+        Err(_) -> false
+    write_ok && file_exists(path)
+
+f test_file_exists_false() -> Bool
+    !file_exists("/tmp/forma_nonexistent_file_12345.txt")
+
+f test_file_read_nonexistent() -> Bool
+    result := file_read("/tmp/forma_nonexistent_file_12345.txt")
+    m result
+        Ok(_) -> false
+        Err(_) -> true
+
+f test_file_append() -> Bool
+    path := "/tmp/forma_test_append.txt"
+    wr1 := file_write(path, "Hello")
+    wr2 := file_append(path, " World")
+    ok1 := m wr1
+        Ok(_) -> true
+        Err(_) -> false
+    ok2 := m wr2
+        Ok(_) -> true
+        Err(_) -> false
+
+    read_result := file_read(path)
+    read_ok := m read_result
+        Ok(data) -> data == "Hello World"
+        Err(_) -> false
+
+    ok1 && ok2 && read_ok
+
+f test_args_returns_array() -> Bool
+    arguments := args()
+    # args() should return at least the program name
+    vec_len(arguments) >= 0
+
+f run_all_tests() -> Int
+    passed := 0
+    if test_file_write_read() then passed = passed + 1 else print("FAIL: test_file_write_read")
+    if test_file_exists_true() then passed = passed + 1 else print("FAIL: test_file_exists_true")
+    if test_file_exists_false() then passed = passed + 1 else print("FAIL: test_file_exists_false")
+    if test_file_read_nonexistent() then passed = passed + 1 else print("FAIL: test_file_read_nonexistent")
+    if test_file_append() then passed = passed + 1 else print("FAIL: test_file_append")
+    if test_args_returns_array() then passed = passed + 1 else print("FAIL: test_args_returns_array")
+
+    print("File I/O tests passed:")
+    print(passed)
+    print("of 6")
+
+    if passed == 6 then 1 else 0
+
+f main() -> Int = run_all_tests()

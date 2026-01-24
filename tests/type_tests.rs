@@ -1,9 +1,9 @@
-//! Integration tests for the ARIA type system.
+//! Integration tests for the FORMA type system.
 
-use aria::{Parser, Scanner, TypeChecker};
-use aria::types::{Ty, TypeId};
+use forma::{Parser, Scanner, TypeChecker};
+use forma::types::{Ty, TypeId};
 
-fn check_source(source: &str) -> Result<aria::types::TypedAst, Vec<aria::types::TypeError>> {
+fn check_source(source: &str) -> Result<forma::types::TypedAst, Vec<forma::types::TypeError>> {
     let scanner = Scanner::new(source);
     let (tokens, _errors) = scanner.scan_all();
     let parser = Parser::new(&tokens);
@@ -338,7 +338,7 @@ s Container[T]
 
 #[test]
 fn test_type_relations_coerce() {
-    use aria::types::TypeRelations;
+    use forma::types::TypeRelations;
 
     // Same type
     assert!(TypeRelations::can_coerce(&Ty::Int, &Ty::Int));
@@ -360,7 +360,7 @@ fn test_type_relations_coerce() {
 
 #[test]
 fn test_type_relations_sized() {
-    use aria::types::TypeRelations;
+    use forma::types::TypeRelations;
 
     // Primitives are sized
     assert!(TypeRelations::is_sized(&Ty::Int));
@@ -379,7 +379,7 @@ fn test_type_relations_sized() {
 
 #[test]
 fn test_type_relations_size_of() {
-    use aria::types::TypeRelations;
+    use forma::types::TypeRelations;
 
     assert_eq!(TypeRelations::size_of(&Ty::Unit), Some(0));
     assert_eq!(TypeRelations::size_of(&Ty::Bool), Some(1));
@@ -398,8 +398,8 @@ fn test_type_relations_size_of() {
 
 #[test]
 fn test_unification_basic() {
-    use aria::types::{Unifier, reset_type_var_counter, TypeVar};
-    use aria::lexer::Span;
+    use forma::types::{Unifier, reset_type_var_counter, TypeVar};
+    use forma::lexer::Span;
 
     reset_type_var_counter();
     let mut unifier = Unifier::new();
@@ -415,8 +415,8 @@ fn test_unification_basic() {
 
 #[test]
 fn test_unification_type_var() {
-    use aria::types::{Unifier, reset_type_var_counter, TypeVar};
-    use aria::lexer::Span;
+    use forma::types::{Unifier, reset_type_var_counter, TypeVar};
+    use forma::lexer::Span;
 
     reset_type_var_counter();
     let mut unifier = Unifier::new();
@@ -434,8 +434,8 @@ fn test_unification_type_var() {
 
 #[test]
 fn test_unification_compound() {
-    use aria::types::{Unifier, reset_type_var_counter, TypeVar};
-    use aria::lexer::Span;
+    use forma::types::{Unifier, reset_type_var_counter, TypeVar};
+    use forma::lexer::Span;
 
     reset_type_var_counter();
     let mut unifier = Unifier::new();
@@ -455,8 +455,8 @@ fn test_unification_compound() {
 
 #[test]
 fn test_occurs_check() {
-    use aria::types::{Unifier, reset_type_var_counter, TypeVar};
-    use aria::lexer::Span;
+    use forma::types::{Unifier, reset_type_var_counter, TypeVar};
+    use forma::lexer::Span;
 
     reset_type_var_counter();
     let mut unifier = Unifier::new();
@@ -471,7 +471,7 @@ fn test_occurs_check() {
 
 #[test]
 fn test_type_scheme_instantiation() {
-    use aria::types::{TypeScheme, reset_type_var_counter, TypeVar};
+    use forma::types::{TypeScheme, reset_type_var_counter, TypeVar};
 
     reset_type_var_counter();
     let var = TypeVar::fresh();

@@ -1,4 +1,4 @@
-//! Error reporting and diagnostics for the ARIA compiler.
+//! Error reporting and diagnostics for the FORMA compiler.
 //!
 //! This module provides structured error types and utilities for
 //! generating helpful error messages.

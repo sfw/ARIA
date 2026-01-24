@@ -1,7 +1,7 @@
-//! Integration tests for the ARIA borrow checker.
+//! Integration tests for the FORMA borrow checker.
 
-use aria::{Parser, Scanner};
-use aria::borrow::{BorrowChecker, BorrowError, BorrowErrorKind};
+use forma::{Parser, Scanner};
+use forma::borrow::{BorrowChecker, BorrowError, BorrowErrorKind};
 
 fn check_source(source: &str) -> Result<(), Vec<BorrowError>> {
     let scanner = Scanner::new(source);
@@ -481,7 +481,7 @@ s Bad
 
 #[test]
 fn test_error_display_implementations() {
-    use aria::lexer::Span;
+    use forma::lexer::Span;
 
     let span = Span::new(1, 0, 1, 10);
 

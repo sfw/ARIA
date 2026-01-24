@@ -1,6 +1,6 @@
-//! Lexer module for the ARIA compiler.
+//! Lexer module for the FORMA compiler.
 //!
-//! This module is responsible for tokenizing ARIA source code into
+//! This module is responsible for tokenizing FORMA source code into
 //! a stream of tokens that can be consumed by the parser.
 
 pub mod scanner;

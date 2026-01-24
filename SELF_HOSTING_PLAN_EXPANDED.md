@@ -1,4 +1,4 @@
-# ARIA Self-Hosting Implementation Plan (Expanded)
+# FORMA Self-Hosting Implementation Plan (Expanded)
 
 ## Code Review Assessment
 
@@ -84,7 +84,7 @@ fn lower_type(&self, ty: &crate::parser::Type) -> Ty {
 ```
 
 **Test Case:**
-```aria
+```forma
 f identity[T](x: T) -> T = x
 f main() -> Int = identity(42)
 ```
@@ -170,7 +170,7 @@ exit:
 }
 ```
 
-**Challenge:** ARIA's second-class references mean we can't store `&mut Vec` - we need to work around this.
+**Challenge:** FORMA's second-class references mean we can't store `&mut Vec` - we need to work around this.
 
 **Solution:** Interpret `vec_push(&mut v, x)` as a special form that mutates the local directly.
 
@@ -214,9 +214,9 @@ f main() -> Color = Red
 ```rust
 #[test]
 fn property_arithmetic_correct() {
-    // For any two integers, ARIA's + should match Rust's +
+    // For any two integers, FORMA's + should match Rust's +
     proptest!(|(a: i64, b: i64)| {
-        let result = run_aria(&format!("f main() -> Int = {} + {}", a, b));
+        let result = run_forma(&format!("f main() -> Int = {} + {}", a, b));
         prop_assert_eq!(result, Value::Int(a.wrapping_add(b)));
     });
 }
@@ -254,7 +254,7 @@ Value::Closure {
 3. At call site, pass captured values
 
 **Example:**
-```aria
+```forma
 f main() -> Int
     x = 10
     add_x = |y| y + x   # Captures x
@@ -273,12 +273,12 @@ fn main() -> Int
 
 ---
 
-## NEW: Phase 3.5 - Error Messages in ARIA
+## NEW: Phase 3.5 - Error Messages in FORMA
 
 For a usable bootstrap compiler, error messages need to be readable.
 
 ### Minimum Required
-```aria
+```forma
 s CompileError
     message: Str
     file: Str
@@ -318,7 +318,7 @@ f format_error(e: &CompileError) -> Str
 | 3.5 | 1 week | Error handling | Readable error messages |
 | 4.0 | 1 week | Option/Result | `?` operator works |
 | 5.0 | 2 weeks | File I/O | Can read source files |
-| 6.0 | 3 weeks | Stdlib | Core utilities in ARIA |
+| 6.0 | 3 weeks | Stdlib | Core utilities in FORMA |
 | 7.0 | 10 weeks | Bootstrap compiler | Self-compiles! |
 
 **Total: 28-32 weeks (7-8 months)**
@@ -331,9 +331,9 @@ f format_error(e: &CompileError) -> Str
 
 **Recommendation: Vector indices with arena allocation**
 
-Reason: ARIA's second-class references prevent storing `Box<T>` in structs naturally. Instead:
+Reason: FORMA's second-class references prevent storing `Box<T>` in structs naturally. Instead:
 
-```aria
+```forma
 s Ast
     nodes: [AstNode]  # All nodes stored here
     root: Int         # Index into nodes

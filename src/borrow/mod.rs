@@ -1,11 +1,11 @@
-//! Borrow checker for ARIA.
+//! Borrow checker for FORMA.
 //!
 //! This module implements second-class reference checking, which ensures
 //! memory safety without explicit lifetime annotations.
 //!
 //! # Second-Class References
 //!
-//! In ARIA, references are "second-class" - they cannot be stored in data
+//! In FORMA, references are "second-class" - they cannot be stored in data
 //! structures. This eliminates the need for lifetime annotations while
 //! maintaining memory safety.
 //!
@@ -31,7 +31,7 @@
 //! # Usage
 //!
 //! ```ignore
-//! use aria::borrow::BorrowChecker;
+//! use forma::borrow::BorrowChecker;
 //!
 //! let mut checker = BorrowChecker::new();
 //! let result = checker.check(&ast)?;

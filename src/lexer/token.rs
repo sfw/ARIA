@@ -1,6 +1,6 @@
-//! Token definitions for the ARIA lexer.
+//! Token definitions for the FORMA lexer.
 //!
-//! This module defines all tokens that can appear in ARIA source code,
+//! This module defines all tokens that can appear in FORMA source code,
 //! including keywords, operators, literals, and delimiters.
 
 use std::fmt;
@@ -64,7 +64,7 @@ impl Span {
     }
 }
 
-/// All token types in the ARIA language.
+/// All token types in the FORMA language.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     // Keywords (single character)

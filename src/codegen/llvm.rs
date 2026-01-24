@@ -1,6 +1,6 @@
-//! LLVM IR code generation for ARIA.
+//! LLVM IR code generation for FORMA.
 //!
-//! This module lowers ARIA MIR to LLVM IR using the inkwell crate.
+//! This module lowers FORMA MIR to LLVM IR using the inkwell crate.
 //!
 //! # Supported Features
 //! - Integer arithmetic
@@ -11,8 +11,8 @@
 //!
 //! # Usage
 //! ```ignore
-//! use aria::codegen::LLVMCodegen;
-//! use aria::mir::Program;
+//! use forma::codegen::LLVMCodegen;
+//! use forma::mir::Program;
 //!
 //! let codegen = LLVMCodegen::new("my_module");
 //! codegen.compile(&program)?;
@@ -53,7 +53,7 @@ impl std::fmt::Display for CodegenError {
 
 impl std::error::Error for CodegenError {}
 
-/// LLVM code generator for ARIA programs.
+/// LLVM code generator for FORMA programs.
 pub struct LLVMCodegen<'ctx> {
     context: &'ctx Context,
     module: Module<'ctx>,
@@ -526,7 +526,7 @@ impl<'ctx> LLVMCodegen<'ctx> {
         Ok(())
     }
 
-    /// Lower an ARIA type to an LLVM type.
+    /// Lower an FORMA type to an LLVM type.
     fn lower_type(&self, ty: &Ty) -> Result<BasicTypeEnum<'ctx>, CodegenError> {
         match ty {
             Ty::Int | Ty::I64 => Ok(self.context.i64_type().into()),

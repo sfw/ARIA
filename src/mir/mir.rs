@@ -1,4 +1,4 @@
-//! Mid-level Intermediate Representation (MIR) for ARIA.
+//! Mid-level Intermediate Representation (MIR) for FORMA.
 //!
 //! MIR is a simplified representation of the program that:
 //! - Uses a control-flow graph (CFG) structure

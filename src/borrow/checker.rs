@@ -1,4 +1,4 @@
-//! Borrow checker for ARIA.
+//! Borrow checker for FORMA.
 //!
 //! Implements second-class reference checking:
 //! - References cannot be stored in structs

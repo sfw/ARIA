@@ -1,4 +1,4 @@
-//! Internal type representations for the ARIA type system.
+//! Internal type representations for the FORMA type system.
 //!
 //! This module defines the types used by the compiler for type checking
 //! and inference. These are separate from the AST types and represent
@@ -21,7 +21,7 @@ pub fn reset_type_var_counter() {
     TYPE_VAR_COUNTER.store(0, Ordering::SeqCst);
 }
 
-/// A type in the ARIA type system.
+/// A type in the FORMA type system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Ty {
     /// Type variable (for inference)

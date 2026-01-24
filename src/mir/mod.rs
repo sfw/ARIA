@@ -1,6 +1,6 @@
-//! Mid-level Intermediate Representation (MIR) for ARIA.
+//! Mid-level Intermediate Representation (MIR) for FORMA.
 //!
-//! The MIR module provides a simplified representation of ARIA programs
+//! The MIR module provides a simplified representation of FORMA programs
 //! that is easier to interpret and compile than the AST.
 //!
 //! # Structure
@@ -21,7 +21,7 @@
 //! # Example
 //!
 //! ```ignore
-//! use aria::mir::{Program, Lowerer};
+//! use forma::mir::{Program, Lowerer};
 //!
 //! let mir = Lowerer::new().lower(&typed_ast)?;
 //! let result = Interpreter::new().run(&mir, "main", &[])?;

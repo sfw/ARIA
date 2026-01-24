@@ -1560,7 +1560,7 @@ impl Lowerer {
 
     /// Convert an AST type to a MIR type.
     ///
-    /// This function handles all ARIA type syntax including:
+    /// This function handles all FORMA type syntax including:
     /// - Primitive types: Int, Bool, Str, Float, Char
     /// - Sized integers: i8, i16, i32, i64, u8, u16, u32, u64
     /// - Compound types: tuples, arrays, lists, maps, sets

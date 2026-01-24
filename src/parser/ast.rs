@@ -1,6 +1,6 @@
-//! Abstract Syntax Tree definitions for ARIA.
+//! Abstract Syntax Tree definitions for FORMA.
 //!
-//! This module defines all AST nodes that represent parsed ARIA programs.
+//! This module defines all AST nodes that represent parsed FORMA programs.
 
 use crate::lexer::Span;
 
@@ -432,7 +432,7 @@ pub enum ExprKind {
     Assign(Box<Expr>, Box<Expr>, bool),
     /// Compound assignment: `x += 1`
     AssignOp(Box<Expr>, BinOp, Box<Expr>),
-    /// Cast: `x as T` (not in ARIA v2 grammar, placeholder)
+    /// Cast: `x as T` (not in FORMA v2 grammar, placeholder)
     Cast(Box<Expr>, Type),
     /// Unsafe block
     Unsafe(Block),

@@ -1,4 +1,4 @@
-//! Type checker for ARIA.
+//! Type checker for FORMA.
 //!
 //! This module provides the high-level type checking API that coordinates
 //! type inference, validation, and error reporting.

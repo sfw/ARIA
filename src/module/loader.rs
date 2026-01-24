@@ -1,9 +1,9 @@
-//! Module loader for ARIA.
+//! Module loader for FORMA.
 //!
 //! This module handles loading and resolving external modules from files.
 //! It supports the `us` (use) statement syntax:
-//! - `us stdlib.core` -> looks for `stdlib/core.aria`
-//! - `us my_module` -> looks for `my_module.aria`
+//! - `us stdlib.core` -> looks for `stdlib/core.forma`
+//! - `us my_module` -> looks for `my_module.forma`
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -68,13 +68,13 @@ impl ModuleLoader {
 
     /// Resolve a module path to a file path.
     ///
-    /// Module paths like `stdlib.core` are converted to `stdlib/core.aria`.
+    /// Module paths like `stdlib.core` are converted to `stdlib/core.forma`.
     fn resolve_module_path(&self, module_path: &[String]) -> PathBuf {
         let mut path = self.base_dir.clone();
         for segment in module_path {
             path.push(segment);
         }
-        path.set_extension("aria");
+        path.set_extension("forma");
         path
     }
 
@@ -205,7 +205,7 @@ impl ModuleLoader {
                         // Try relative to working directory
                         let cwd_path = PathBuf::from(".").join(
                             module_path.join("/")
-                        ).with_extension("aria");
+                        ).with_extension("forma");
 
                         if cwd_path.exists() {
                             let module = self.load_module_file(&cwd_path)?;

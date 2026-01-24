@@ -1,8 +1,8 @@
-# ARIA Self-Hosting Implementation Plan
+# FORMA Self-Hosting Implementation Plan
 
 ## Executive Summary
 
-This document outlines a comprehensive plan to make ARIA self-hosting — capable of compiling itself. The target is a **MIR + Rust Interpreter hybrid bootstrap**, where an ARIA-written compiler generates MIR that the existing Rust interpreter executes.
+This document outlines a comprehensive plan to make FORMA self-hosting — capable of compiling itself. The target is a **MIR + Rust Interpreter hybrid bootstrap**, where an FORMA-written compiler generates MIR that the existing Rust interpreter executes.
 
 **Estimated timeline: 6-9 months**
 
@@ -11,7 +11,7 @@ This document outlines a comprehensive plan to make ARIA self-hosting — capabl
 ## Rationale
 
 ### Why Self-Hosting Matters
-1. **Dogfooding** — Writing a compiler in ARIA will stress-test the language and expose design issues
+1. **Dogfooding** — Writing a compiler in FORMA will stress-test the language and expose design issues
 2. **Language maturity proof** — Self-hosting demonstrates the language is capable of real systems programming
 3. **Bootstrap independence** — Eventually reduces dependency on Rust toolchain
 
@@ -185,35 +185,35 @@ expr?  →  m expr { Ok(v) => v, Err(e) => ret Err(e) }
 
 ---
 
-### Phase 6: Standard Library in ARIA (3-4 weeks)
+### Phase 6: Standard Library in FORMA (3-4 weeks)
 
-Write ARIA code for:
-- `stdlib/core.aria` — panic, assert, debug utilities
-- `stdlib/vec.aria` — Vec wrapper with methods
-- `stdlib/string.aria` — StringBuilder, string utilities
-- `stdlib/map.aria` — HashMap wrapper with methods
+Write FORMA code for:
+- `stdlib/core.forma` — panic, assert, debug utilities
+- `stdlib/vec.forma` — Vec wrapper with methods
+- `stdlib/string.forma` — StringBuilder, string utilities
+- `stdlib/map.forma` — HashMap wrapper with methods
 
 ---
 
-### Phase 7: Bootstrap Compiler in ARIA (8-12 weeks)
+### Phase 7: Bootstrap Compiler in FORMA (8-12 weeks)
 
 #### 7.1 Lexer (~1,500 lines)
-Rewrite `src/lexer/scanner.rs` in ARIA
+Rewrite `src/lexer/scanner.rs` in FORMA
 
 #### 7.2 Parser (~3,500 lines)
-Rewrite `src/parser/parser.rs` in ARIA
+Rewrite `src/parser/parser.rs` in FORMA
 - **Challenge:** Recursive AST types need Box<T> or indices into vectors
 
 #### 7.3 Type Checker (~2,500 lines)
-Rewrite type inference in ARIA
+Rewrite type inference in FORMA
 
 #### 7.4 MIR Generator (~3,000 lines)
 Generate MIR data structures that the Rust interpreter can execute
 
 #### 7.5 CLI Driver (~500 lines)
-Command-line interface matching current `aria run`, `aria check` commands
+Command-line interface matching current `forma run`, `forma check` commands
 
-**Total estimated ARIA code: ~12,000-15,000 lines**
+**Total estimated FORMA code: ~12,000-15,000 lines**
 
 ---
 
@@ -231,7 +231,7 @@ Command-line interface matching current `aria run`, `aria check` commands
 ## Verification Milestones
 
 ### Phase 0 Complete When:
-```aria
+```forma
 # Generic identity works
 f id[T](x: T) -> T = x
 f main() -> Int = id(42)
@@ -248,7 +248,7 @@ f unwrap[T](opt: Option[T], default: T) -> T
 ```
 
 ### Phase 1 Complete When:
-```aria
+```forma
 # Vec operations work
 f main() -> Int
     v := vec_new()
@@ -261,7 +261,7 @@ f main() -> Int = str_len("hello")
 ```
 
 ### Final Bootstrap Test:
-ARIA compiler written in ARIA can compile `examples/factorial.aria` and produce correct output.
+FORMA compiler written in FORMA can compile `examples/factorial.forma` and produce correct output.
 
 ---
 
@@ -271,7 +271,7 @@ ARIA compiler written in ARIA can compile `examples/factorial.aria` and produce 
 |------|--------|------------|
 | Generic type erasure harder than expected | High | Phase 0 focuses entirely on this |
 | Second-class references limit data structures | Medium | Use index-based iteration, strategic copies |
-| Recursive AST types in ARIA | Medium | Implement Box<T> or use vector indices |
+| Recursive AST types in FORMA | Medium | Implement Box<T> or use vector indices |
 | Performance | Low | Acceptable for bootstrap; native compilation comes later |
 
 ---

@@ -1,9 +1,9 @@
-//! Integration tests for the ARIA parser.
+//! Integration tests for the FORMA parser.
 
-use aria::parser::*;
-use aria::{Parser, Scanner};
+use forma::parser::*;
+use forma::{Parser, Scanner};
 
-fn parse(source: &str) -> Result<SourceFile, aria::CompileError> {
+fn parse(source: &str) -> Result<SourceFile, forma::CompileError> {
     let scanner = Scanner::new(source);
     let (tokens, _) = scanner.scan_all();
     Parser::new(&tokens).parse()

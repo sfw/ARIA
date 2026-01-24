@@ -1,6 +1,6 @@
-//! ARIA v2 Compiler Library
+//! FORMA v2 Compiler Library
 //!
-//! ARIA is an AI-optimized systems programming language with Rust-like
+//! FORMA is an AI-optimized systems programming language with Rust-like
 //! memory safety but without explicit lifetime annotations.
 //!
 //! # Key Features

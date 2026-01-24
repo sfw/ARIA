@@ -1,13 +1,13 @@
-//! Recursive descent parser for ARIA.
+//! Recursive descent parser for FORMA.
 //!
 //! This module implements a hand-written recursive descent parser that
-//! handles ARIA's indentation-significant syntax.
+//! handles FORMA's indentation-significant syntax.
 
 use crate::errors::{ParseError, Result};
 use crate::lexer::{Span, Token, TokenKind};
 use crate::parser::ast::*;
 
-/// The parser for ARIA source code.
+/// The parser for FORMA source code.
 pub struct Parser<'a> {
     tokens: &'a [Token],
     pos: usize,

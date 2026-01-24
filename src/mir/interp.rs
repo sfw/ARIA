@@ -2056,7 +2056,7 @@ f main() -> Bool = is_even(10)
         assert_eq!(result, Value::Bool(true));
     }
 
-    // Note: ARIA uses | for pipeline, so bitwise operators are not directly
+    // Note: FORMA uses | for pipeline, so bitwise operators are not directly
     // available in expression syntax. Skipping bitwise tests for now.
 
     // ========================================================================

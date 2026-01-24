@@ -1,0 +1,263 @@
+# FORMA Bootstrap Compiler - Simplified Scanner
+# A simpler scanner implementation that works within FORMA's syntax limitations
+
+# Note: This file depends on token.forma being loaded first
+
+# ============================================================
+# Scanner state - simpler design using tuples instead of structs
+# ============================================================
+
+# Scanner state is represented as a tuple:
+# (source: Str, pos: Int, start: Int, line: Int, column: Int, start_column: Int)
+
+# Create new scanner state
+f scanner_new(source: Str) -> (Str, Int, Int, Int, Int, Int)
+    (source, 0, 0, 1, 1, 1)
+
+# Extract parts
+f scanner_source(s: (Str, Int, Int, Int, Int, Int)) -> Str
+    (src, _, _, _, _, _) := s
+    src
+
+f scanner_pos(s: (Str, Int, Int, Int, Int, Int)) -> Int
+    (_, pos, _, _, _, _) := s
+    pos
+
+f scanner_start(s: (Str, Int, Int, Int, Int, Int)) -> Int
+    (_, _, start, _, _, _) := s
+    start
+
+f scanner_line(s: (Str, Int, Int, Int, Int, Int)) -> Int
+    (_, _, _, line, _, _) := s
+    line
+
+f scanner_column(s: (Str, Int, Int, Int, Int, Int)) -> Int
+    (_, _, _, _, col, _) := s
+    col
+
+f scanner_start_col(s: (Str, Int, Int, Int, Int, Int)) -> Int
+    (_, _, _, _, _, start_col) := s
+    start_col
+
+# Check if at end
+f at_end(s: (Str, Int, Int, Int, Int, Int)) -> Bool
+    scanner_pos(s) >= str_len(scanner_source(s))
+
+# Peek current char
+f peek(s: (Str, Int, Int, Int, Int, Int)) -> Option[Char]
+    if at_end(s) then None else str_char_at(scanner_source(s), scanner_pos(s))
+
+# Peek next char
+f peek_next(s: (Str, Int, Int, Int, Int, Int)) -> Option[Char]
+    pos := scanner_pos(s) + 1
+    if pos >= str_len(scanner_source(s)) then None else str_char_at(scanner_source(s), pos)
+
+# Advance and return (new_state, char)
+f advance(s: (Str, Int, Int, Int, Int, Int)) -> ((Str, Int, Int, Int, Int, Int), Option[Char])
+    m peek(s)
+        Some(c) -> ((scanner_source(s), scanner_pos(s) + 1, scanner_start(s), scanner_line(s), scanner_column(s) + 1, scanner_start_col(s)), Some(c))
+        None -> (s, None)
+
+# Match specific char
+f match_char(s: (Str, Int, Int, Int, Int, Int), expected: Char) -> ((Str, Int, Int, Int, Int, Int), Bool)
+    m peek(s)
+        Some(c) -> if c == expected then match_char_advance(s) else (s, false)
+        None -> (s, false)
+
+f match_char_advance(s: (Str, Int, Int, Int, Int, Int)) -> ((Str, Int, Int, Int, Int, Int), Bool)
+    (result, _) := advance(s)
+    (result, true)
+
+# Get current lexeme
+f lexeme(s: (Str, Int, Int, Int, Int, Int)) -> Str
+    str_slice(scanner_source(s), scanner_start(s), scanner_pos(s))
+
+# Make span
+f make_span(s: (Str, Int, Int, Int, Int, Int)) -> Span
+    span_new(scanner_start(s), scanner_pos(s), scanner_line(s), scanner_start_col(s))
+
+# Mark token start
+f mark_start(s: (Str, Int, Int, Int, Int, Int)) -> (Str, Int, Int, Int, Int, Int)
+    (scanner_source(s), scanner_pos(s), scanner_pos(s), scanner_line(s), scanner_column(s), scanner_column(s))
+
+# Set at line start (for newline handling)
+f newline(s: (Str, Int, Int, Int, Int, Int)) -> (Str, Int, Int, Int, Int, Int)
+    (scanner_source(s), scanner_pos(s), scanner_start(s), scanner_line(s) + 1, 1, scanner_start_col(s))
+
+# ============================================================
+# Token creation
+# ============================================================
+
+f make_token(s: (Str, Int, Int, Int, Int, Int), kind: Int) -> Token
+    token_new(kind, make_span(s), lexeme(s))
+
+f make_token_int(s: (Str, Int, Int, Int, Int, Int), kind: Int, val: Int) -> Token
+    token_new_int(kind, make_span(s), lexeme(s), val)
+
+f make_token_str(s: (Str, Int, Int, Int, Int, Int), kind: Int, val: Str) -> Token
+    token_new_str(kind, make_span(s), lexeme(s), val)
+
+f make_token_char(s: (Str, Int, Int, Int, Int, Int), kind: Int, val: Char) -> Token
+    token_new_char(kind, make_span(s), lexeme(s), val)
+
+f error_token(s: (Str, Int, Int, Int, Int, Int), msg: Str) -> Token
+    token_new_str(TK_ERROR(), make_span(s), lexeme(s), msg)
+
+# ============================================================
+# Skip whitespace
+# ============================================================
+
+f skip_whitespace(s: (Str, Int, Int, Int, Int, Int)) -> (Str, Int, Int, Int, Int, Int)
+    done := false
+    s2 := s
+    wh !done
+        m peek(s2)
+            Some(c) -> if c == ' ' || c == '\t' || c == '\r' then (s3, _) := advance(s2); s2 = s3 else done = true
+            None -> done = true
+    s2
+
+f skip_line(s: (Str, Int, Int, Int, Int, Int)) -> (Str, Int, Int, Int, Int, Int)
+    done := false
+    s2 := s
+    wh !done
+        m peek(s2)
+            Some(c) -> if c == '\n' then done = true else (s3, _) := advance(s2); s2 = s3
+            None -> done = true
+    s2
+
+# ============================================================
+# Scan specific token types
+# ============================================================
+
+f scan_string(s: (Str, Int, Int, Int, Int, Int)) -> ((Str, Int, Int, Int, Int, Int), Token)
+    value := ""
+    s2 := s
+    done := false
+    err := ""
+    wh !done
+        m peek(s2)
+            Some(c) ->
+                if c == '"' then (s3, _) := advance(s2); s2 = s3; done = true
+                else if c == '\n' then err = "unterminated string"; done = true
+                else if c == '\\' then
+                    (s3, _) := advance(s2)
+                    m peek(s3)
+                        Some(ec) ->
+                            (s4, _) := advance(s3)
+                            if ec == 'n' then value = str_concat(value, "\n") else if ec == 't' then value = str_concat(value, "\t") else if ec == '\\' then value = str_concat(value, "\\") else if ec == '"' then value = str_concat(value, "\"") else value = str_concat(value, char_to_str(ec))
+                            s2 = s4
+                        None -> err = "unterminated string"; done = true
+                else value = str_concat(value, char_to_str(c)); (s3, _) := advance(s2); s2 = s3
+            None -> err = "unterminated string"; done = true
+    if str_len(err) > 0 then (s2, error_token(s2, err)) else (s2, make_token_str(s2, TK_STRING(), value))
+
+f scan_char_lit(s: (Str, Int, Int, Int, Int, Int)) -> ((Str, Int, Int, Int, Int, Int), Token)
+    m peek(s)
+        Some(c) ->
+            if c == '\'' || c == '\n' then (s, error_token(s, "empty char"))
+            else if c == '\\' then
+                (s2, _) := advance(s)
+                m peek(s2)
+                    Some(ec) ->
+                        (s3, _) := advance(s2)
+                        ch := if ec == 'n' then '\n' else if ec == 't' then '\t' else if ec == '\\' then '\\' else if ec == '\'' then '\'' else ec
+                        (s4, matched) := match_char(s3, '\'')
+                        if matched then (s4, make_token_char(s4, TK_CHAR(), ch)) else (s3, error_token(s3, "unterminated char"))
+                    None -> (s2, error_token(s2, "unterminated char"))
+            else
+                (s2, _) := advance(s)
+                (s3, matched) := match_char(s2, '\'')
+                if matched then (s3, make_token_char(s3, TK_CHAR(), c)) else (s2, error_token(s2, "unterminated char"))
+        None -> (s, error_token(s, "unexpected end"))
+
+f scan_number(s: (Str, Int, Int, Int, Int, Int)) -> ((Str, Int, Int, Int, Int, Int), Token)
+    s2 := s
+    scanning := true
+    wh scanning
+        m peek(s2)
+            Some(c) -> if char_is_digit(c) || c == '_' then (s3, _) := advance(s2); s2 = s3 else scanning = false
+            None -> scanning = false
+    lex := lexeme(s2)
+    clean := str_replace_all(lex, "_", "")
+    m str_to_int(clean)
+        Some(n) -> (s2, make_token_int(s2, TK_INT(), n))
+        None -> (s2, error_token(s2, "invalid number"))
+
+f scan_identifier(s: (Str, Int, Int, Int, Int, Int)) -> ((Str, Int, Int, Int, Int, Int), Token)
+    s2 := s
+    scanning := true
+    wh scanning
+        m peek(s2)
+            Some(c) -> if char_is_alphanumeric(c) || c == '_' then (s3, _) := advance(s2); s2 = s3 else scanning = false
+            None -> scanning = false
+    lex := lexeme(s2)
+    m keyword_lookup(lex)
+        Some(kind) -> (s2, make_token(s2, kind))
+        None -> (s2, make_token_str(s2, TK_IDENT(), lex))
+
+# ============================================================
+# Main token scan
+# ============================================================
+
+f scan_token(s: (Str, Int, Int, Int, Int, Int)) -> ((Str, Int, Int, Int, Int, Int), Token)
+    s2 := skip_whitespace(s)
+    s2 = mark_start(s2)
+    (s2, opt_c) := advance(s2)
+    m opt_c
+        Some(c) ->
+            # Single char tokens
+            if c == '(' then (s2, make_token(s2, TK_LPAREN()))
+            else if c == ')' then (s2, make_token(s2, TK_RPAREN()))
+            else if c == '[' then (s2, make_token(s2, TK_LBRACKET()))
+            else if c == ']' then (s2, make_token(s2, TK_RBRACKET()))
+            else if c == '{' then (s2, make_token(s2, TK_LBRACE()))
+            else if c == '}' then (s2, make_token(s2, TK_RBRACE()))
+            else if c == ',' then (s2, make_token(s2, TK_COMMA()))
+            else if c == ';' then (s2, make_token(s2, TK_SEMICOLON()))
+            else if c == '@' then (s2, make_token(s2, TK_AT()))
+            else if c == '%' then (s2, make_token(s2, TK_PERCENT()))
+            else if c == '^' then (s2, make_token(s2, TK_CARET()))
+            # Two char tokens
+            else if c == '+' then (s3, matched) := match_char(s2, '='); if matched then (s3, make_token(s3, TK_PLUSEQ())) else (s2, make_token(s2, TK_PLUS()))
+            else if c == '-' then (s3, m1) := match_char(s2, '='); if m1 then (s3, make_token(s3, TK_MINUSEQ())) else (s4, m2) := match_char(s2, '>'); if m2 then (s4, make_token(s4, TK_ARROW())) else (s2, make_token(s2, TK_MINUS()))
+            else if c == '*' then (s3, matched) := match_char(s2, '='); if matched then (s3, make_token(s3, TK_STAREQ())) else (s2, make_token(s2, TK_STAR()))
+            else if c == '/' then (s3, matched) := match_char(s2, '='); if matched then (s3, make_token(s3, TK_SLASHEQ())) else (s2, make_token(s2, TK_SLASH()))
+            else if c == '=' then (s3, m1) := match_char(s2, '='); if m1 then (s3, make_token(s3, TK_EQEQ())) else (s4, m2) := match_char(s2, '>'); if m2 then (s4, make_token(s4, TK_FATARROW())) else (s2, make_token(s2, TK_EQ()))
+            else if c == '!' then (s3, matched) := match_char(s2, '='); if matched then (s3, make_token(s3, TK_BANGEQ())) else (s2, make_token(s2, TK_BANG()))
+            else if c == '<' then (s3, m1) := match_char(s2, '='); if m1 then (s3, make_token(s3, TK_LTEQ())) else (s4, m2) := match_char(s2, '<'); if m2 then (s4, make_token(s4, TK_LTLT())) else (s2, make_token(s2, TK_LT()))
+            else if c == '>' then (s3, m1) := match_char(s2, '='); if m1 then (s3, make_token(s3, TK_GTEQ())) else (s4, m2) := match_char(s2, '>'); if m2 then (s4, make_token(s4, TK_GTGT())) else (s2, make_token(s2, TK_GT()))
+            else if c == '&' then (s3, matched) := match_char(s2, '&'); if matched then (s3, make_token(s3, TK_AMPAMP())) else (s2, make_token(s2, TK_AMP()))
+            else if c == '|' then (s3, matched) := match_char(s2, '|'); if matched then (s3, make_token(s3, TK_PIPEPIPE())) else (s2, make_token(s2, TK_PIPE()))
+            else if c == ':' then (s3, m1) := match_char(s2, '='); if m1 then (s3, make_token(s3, TK_COLONEQ())) else (s4, m2) := match_char(s2, ':'); if m2 then (s4, make_token(s4, TK_COLONCOLON())) else (s2, make_token(s2, TK_COLON()))
+            else if c == '?' then (s3, matched) := match_char(s2, '?'); if matched then (s3, make_token(s3, TK_QUESTIONQUESTION())) else (s2, make_token(s2, TK_QUESTION()))
+            else if c == '.' then (s3, m1) := match_char(s2, '.'); if m1 then (s4, m2) := match_char(s3, '='); if m2 then (s4, make_token(s4, TK_DOTDOTEQ())) else (s3, make_token(s3, TK_DOTDOT())) else (s2, make_token(s2, TK_DOT()))
+            # Newline
+            else if c == '\n' then (newline(s2), make_token(s2, TK_NEWLINE()))
+            # Comment
+            else if c == '#' then s3 := skip_line(s2); scan_token(s3)
+            # String
+            else if c == '"' then scan_string(s2)
+            # Char
+            else if c == '\'' then scan_char_lit(s2)
+            # Number
+            else if char_is_digit(c) then scan_number(s2)
+            # Identifier
+            else if char_is_alpha(c) || c == '_' then scan_identifier(s2)
+            # Unknown
+            else (s2, error_token(s2, str_concat("unexpected char: ", char_to_str(c))))
+        None -> (s2, make_token(s2, TK_EOF()))
+
+# ============================================================
+# Scan all tokens
+# ============================================================
+
+f scan_all_tokens(source: Str) -> [Token]
+    s := scanner_new(source)
+    tokens := []
+    done := false
+    wh !done
+        (s2, tok) := scan_token(s)
+        s = s2
+        tokens = vec_push(tokens, tok)
+        if tok.kind == TK_EOF() then done = true else done = false
+    tokens

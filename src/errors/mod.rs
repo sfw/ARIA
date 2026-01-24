@@ -1,4 +1,4 @@
-//! Error handling module for the ARIA compiler.
+//! Error handling module for the FORMA compiler.
 //!
 //! This module provides error types, diagnostics, and utilities
 //! for generating helpful compiler error messages.

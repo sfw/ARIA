@@ -1,12 +1,12 @@
-# ARIA Bootstrap Compiler
+# FORMA Bootstrap Compiler
 
-This directory contains the ARIA bootstrap compiler - a self-hosting compiler infrastructure written in ARIA that can compile and run ARIA programs.
+This directory contains the FORMA bootstrap compiler - a self-hosting compiler infrastructure written in FORMA that can compile and run FORMA programs.
 
 ## Overview
 
-The bootstrap compiler demonstrates ARIA's capability to implement its own toolchain. It provides:
+The bootstrap compiler demonstrates FORMA's capability to implement its own toolchain. It provides:
 
-- **Lexer/Scanner** - Tokenizes ARIA source code
+- **Lexer/Scanner** - Tokenizes FORMA source code
 - **Parser** - Builds an Abstract Syntax Tree (AST)
 - **Type Checker** - Validates types and infers type information
 - **MIR Lowering** - Converts AST to Mid-level Intermediate Representation
@@ -18,36 +18,36 @@ The bootstrap compiler demonstrates ARIA's capability to implement its own toolc
 
 | File | Description | Items |
 |------|-------------|-------|
-| `token.aria` | Token type definitions and constants | ~180 |
-| `scanner_v2.aria` | Lexer that tokenizes source strings | ~300 |
-| `ast.aria` | AST node type definitions | ~150 |
-| `parser.aria` | Recursive descent parser | ~900 |
-| `type_checker.aria` | Type inference and checking | ~650 |
-| `mir.aria` | MIR type definitions | 73 |
-| `lower.aria` | AST to MIR lowering | 168 |
-| `interp.aria` | MIR interpreter | 105 |
+| `token.forma` | Token type definitions and constants | ~180 |
+| `scanner_v2.forma` | Lexer that tokenizes source strings | ~300 |
+| `ast.forma` | AST node type definitions | ~150 |
+| `parser.forma` | Recursive descent parser | ~900 |
+| `type_checker.forma` | Type inference and checking | ~650 |
+| `mir.forma` | MIR type definitions | 73 |
+| `lower.forma` | AST to MIR lowering | 168 |
+| `interp.forma` | MIR interpreter | 105 |
 
 ### Combined Files
 
 | File | Description |
 |------|-------------|
-| `lexer_v2_combined.aria` | Token + Scanner (runnable) |
-| `parser_combined.aria` | Token + AST + Parser |
-| `typechecker_combined.aria` | Full frontend pipeline |
+| `lexer_v2_combined.forma` | Token + Scanner (runnable) |
+| `parser_combined.forma` | Token + AST + Parser |
+| `typechecker_combined.forma` | Full frontend pipeline |
 
 ### Integration & Tests
 
 | File | Description |
 |------|-------------|
-| `aria_bootstrap.aria` | Full MIR interpreter with test programs |
-| `test_bootstrap.aria` | Unit tests for MIR infrastructure |
-| `test_self_host.aria` | Self-compilation tests |
+| `forma_bootstrap.forma` | Full MIR interpreter with test programs |
+| `test_bootstrap.forma` | Unit tests for MIR infrastructure |
+| `test_self_host.forma` | Self-compilation tests |
 
 ## How Each Phase Works
 
 ### 1. Lexical Analysis (Scanner)
 
-```aria
+```forma
 # Create scanner from source
 s := scanner_new("f main() -> Int = 42")
 
@@ -62,7 +62,7 @@ The scanner produces a list of `Token` values, each containing:
 
 ### 2. Parsing
 
-```aria
+```forma
 # Parse tokens into AST
 ast := parse(tokens)
 ```
@@ -74,7 +74,7 @@ The parser produces an `AST` containing:
 
 ### 3. Type Checking
 
-```aria
+```forma
 # Type check the AST
 (ctx, ok) := type_check(ast)
 ```
@@ -83,7 +83,7 @@ Returns a `TypeContext` with inferred types and a success flag.
 
 ### 4. MIR Lowering
 
-```aria
+```forma
 # Lower AST to MIR
 program := lower_program(ast)
 ```
@@ -98,7 +98,7 @@ Each function has:
 
 ### 5. Interpretation
 
-```aria
+```forma
 # Execute MIR program
 result := interpret(program)
 ```
@@ -115,22 +115,22 @@ The interpreter:
 
 ```bash
 # Run MIR interpreter tests
-cargo run -- run bootstrap/aria_bootstrap.aria
+cargo run -- run bootstrap/forma_bootstrap.forma
 
 # Run unit tests
-cargo run -- run bootstrap/test_bootstrap.aria
+cargo run -- run bootstrap/test_bootstrap.forma
 
 # Run self-hosting tests
-cargo run -- run bootstrap/test_self_host.aria
+cargo run -- run bootstrap/test_self_host.forma
 
 # Run lexer tests
-cargo run -- run bootstrap/lexer_v2_combined.aria
+cargo run -- run bootstrap/lexer_v2_combined.forma
 ```
 
 ### Example Output
 
 ```
-=== ARIA Bootstrap Pipeline Tests ===
+=== FORMA Bootstrap Pipeline Tests ===
 
 Test 1: return 42
   PASS
@@ -165,9 +165,9 @@ All tests passed!
 
 ### Integer Discriminants for Variants
 
-Since ARIA enums require complex pattern matching, we use integer discriminants:
+Since FORMA enums require complex pattern matching, we use integer discriminants:
 
-```aria
+```forma
 f TK_IDENT() -> Int = 100
 f TK_INT() -> Int = 101
 
@@ -180,7 +180,7 @@ s Token
 
 Functions that modify state return tuples:
 
-```aria
+```forma
 f scan_token(s: Scanner) -> (Scanner, Token)
 f lower_expr(ast: AST, ctx: Ctx) -> (Ctx, Int)
 ```
@@ -189,7 +189,7 @@ f lower_expr(ast: AST, ctx: Ctx) -> (Ctx, Int)
 
 AST nodes reference other nodes by index into arrays:
 
-```aria
+```forma
 s ExprNode
     kind: Int
     left: Int   # Index into exprs array
@@ -200,8 +200,8 @@ s ExprNode
 
 The bootstrap compiler can:
 
-- [x] Tokenize ARIA source files
-- [x] Parse ARIA code samples
+- [x] Tokenize FORMA source files
+- [x] Parse FORMA code samples
 - [x] Build MIR from AST representations
 - [x] Interpret MIR programs
 - [x] Handle recursion and function calls
