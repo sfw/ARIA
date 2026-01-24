@@ -44,6 +44,18 @@ pub struct Attribute {
 pub struct AttrArg {
     pub name: Ident,
     pub value: Option<Literal>,
+    /// Expression argument (used by @pre/@post contracts)
+    pub expr: Option<Box<Expr>>,
+    pub span: Span,
+}
+
+/// A contract (precondition or postcondition) for a function.
+#[derive(Debug, Clone)]
+pub struct Contract {
+    /// The condition expression that must be true
+    pub condition: Box<Expr>,
+    /// Optional message for error reporting
+    pub message: Option<String>,
     pub span: Span,
 }
 
@@ -58,6 +70,10 @@ pub struct Function {
     pub is_async: bool,
     pub is_unsafe: bool,
     pub visibility: Visibility,
+    /// Preconditions (@pre) - checked at function entry
+    pub preconditions: Vec<Contract>,
+    /// Postconditions (@post) - checked at function exit
+    pub postconditions: Vec<Contract>,
     pub span: Span,
 }
 

@@ -93,6 +93,10 @@ enum Commands {
         /// Dump MIR before running (for debugging)
         #[arg(long)]
         dump_mir: bool,
+
+        /// Check @pre/@post contracts at runtime
+        #[arg(long)]
+        check_contracts: bool,
     },
 
     /// Lex a file and print tokens (for debugging)
@@ -165,7 +169,7 @@ fn main() {
 
     let result = match cli.command {
         Commands::Compile { file, output: _ } => compile(&file, error_format),
-        Commands::Run { file, args: _, dump_mir } => run(&file, dump_mir, error_format),
+        Commands::Run { file, args: _, dump_mir, check_contracts } => run(&file, dump_mir, check_contracts, error_format),
         Commands::Lex { file } => lex(&file, error_format),
         Commands::Parse { file } => parse(&file, error_format),
         Commands::Check { file, partial } => check(&file, partial, error_format),
@@ -227,7 +231,7 @@ fn compile(file: &PathBuf, error_format: ErrorFormat) -> Result<(), String> {
     Ok(())
 }
 
-fn run(file: &PathBuf, dump_mir: bool, error_format: ErrorFormat) -> Result<(), String> {
+fn run(file: &PathBuf, dump_mir: bool, check_contracts: bool, error_format: ErrorFormat) -> Result<(), String> {
     let source = read_file(file)?;
     let filename = file.to_string_lossy().to_string();
     let ctx = ErrorContext::new(&filename, &source);

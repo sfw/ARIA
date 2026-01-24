@@ -62,6 +62,15 @@ impl Default for Program {
     }
 }
 
+/// A contract condition (precondition or postcondition).
+#[derive(Debug, Clone)]
+pub struct MirContract {
+    /// The expression as a string (for error messages)
+    pub expr_string: String,
+    /// Optional error message
+    pub message: Option<String>,
+}
+
 /// A function in MIR.
 #[derive(Debug, Clone)]
 pub struct Function {
@@ -71,6 +80,10 @@ pub struct Function {
     pub locals: Vec<LocalDecl>,
     pub blocks: Vec<BasicBlock>,
     pub entry_block: BlockId,
+    /// Preconditions (@pre) - checked at function entry
+    pub preconditions: Vec<MirContract>,
+    /// Postconditions (@post) - checked at function exit
+    pub postconditions: Vec<MirContract>,
 }
 
 impl Function {
@@ -82,6 +95,8 @@ impl Function {
             locals: Vec::new(),
             blocks: Vec::new(),
             entry_block: BlockId(0),
+            preconditions: Vec::new(),
+            postconditions: Vec::new(),
         }
     }
 

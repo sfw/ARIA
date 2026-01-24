@@ -14,7 +14,7 @@ use crate::parser::{
 use crate::types::Ty;
 
 use super::mir::{
-    BinOp, BlockId, Constant, Function, Local, Mutability, Operand, Program,
+    BinOp, BlockId, Constant, Function, Local, MirContract, Mutability, Operand, Program,
     Rvalue, Statement, StatementKind, Terminator, UnOp,
 };
 
@@ -215,7 +215,21 @@ impl Lowerer {
             }
         }
 
-        self.current_fn.take()
+        // Copy contracts from AST to MIR
+        let mut mir_fn = self.current_fn.take()?;
+        for contract in &f.preconditions {
+            mir_fn.preconditions.push(MirContract {
+                expr_string: format!("{:?}", contract.condition), // TODO: pretty print
+                message: contract.message.clone(),
+            });
+        }
+        for contract in &f.postconditions {
+            mir_fn.postconditions.push(MirContract {
+                expr_string: format!("{:?}", contract.condition),
+                message: contract.message.clone(),
+            });
+        }
+        Some(mir_fn)
     }
 
     fn lower_block(&mut self, block: &AstBlock) -> Option<Operand> {

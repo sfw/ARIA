@@ -34,6 +34,6 @@ pub mod mir;
 pub use interp::{Interpreter, InterpError, Value};
 pub use lower::{Lowerer, LowerError};
 pub use mir::{
-    BasicBlock, BinOp, BlockId, Constant, Function, Local, LocalDecl, Mutability, Operand,
+    BasicBlock, BinOp, BlockId, Constant, Function, Local, LocalDecl, MirContract, Mutability, Operand,
     Program, Rvalue, Statement, StatementKind, Terminator, UnOp,
 };

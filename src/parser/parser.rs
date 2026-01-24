@@ -56,7 +56,7 @@ impl<'a> Parser<'a> {
         let is_async = self.match_token(TokenKind::As);
         let is_unsafe = self.match_token(TokenKind::Un);
 
-        let kind = if self.check(TokenKind::F) {
+        let mut kind = if self.check(TokenKind::F) {
             self.parse_function(is_async, is_unsafe, vis)?
         } else if self.check(TokenKind::S) {
             ItemKind::Struct(self.parse_struct(vis)?)
@@ -78,11 +78,57 @@ impl<'a> Parser<'a> {
             return Err(self.error("expected item (f, s, e, t, i, type, us, md)"));
         };
 
+        // Extract @pre/@post contracts and add them to the function
+        if let ItemKind::Function(ref mut func) = kind {
+            for attr in &attrs {
+                if attr.name.name == "pre" || attr.name.name == "post" {
+                    if let Some(contract) = Self::extract_contract(attr) {
+                        if attr.name.name == "pre" {
+                            func.preconditions.push(contract);
+                        } else {
+                            func.postconditions.push(contract);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Filter out @pre/@post from attrs (they're now in the function)
+        let remaining_attrs: Vec<_> = attrs
+            .into_iter()
+            .filter(|a| a.name.name != "pre" && a.name.name != "post")
+            .collect();
+
         let end = self.previous_span();
         Ok(Item {
             kind,
-            attrs,
+            attrs: remaining_attrs,
             span: start.merge(end),
+        })
+    }
+
+    /// Extract a Contract from a @pre or @post attribute
+    fn extract_contract(attr: &Attribute) -> Option<Contract> {
+        // Find the condition expression in the args
+        let condition_arg = attr.args.iter().find(|a| a.name.name == "condition")?;
+        let condition = condition_arg.expr.clone()?;
+
+        // Find optional message
+        let message = attr.args.iter()
+            .find(|a| a.name.name == "message")
+            .and_then(|a| {
+                if let Some(lit) = &a.value {
+                    if let LiteralKind::String(s) = &lit.kind {
+                        return Some(s.clone());
+                    }
+                }
+                None
+            });
+
+        Some(Contract {
+            condition,
+            message,
+            span: attr.span,
         })
     }
 
@@ -100,10 +146,17 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::At)?;
         let name = self.parse_ident()?;
 
+        // Check for contract attributes that take expression arguments
+        let is_contract = name.name == "pre" || name.name == "post";
+
         let args = if self.match_token(TokenKind::LParen) {
-            let args = self.parse_attr_args()?;
-            self.expect(TokenKind::RParen)?;
-            args
+            if is_contract {
+                self.parse_contract_attr_args()?
+            } else {
+                let args = self.parse_attr_args()?;
+                self.expect(TokenKind::RParen)?;
+                args
+            }
         } else {
             Vec::new()
         };
@@ -113,6 +166,39 @@ impl<'a> Parser<'a> {
             args,
             span: start.merge(self.previous_span()),
         })
+    }
+
+    /// Parse contract attribute arguments: @pre(condition) or @pre(condition, "message")
+    fn parse_contract_attr_args(&mut self) -> Result<Vec<AttrArg>> {
+        let start = self.current_span();
+        let expr = self.parse_expr()?;
+        let mut args = vec![AttrArg {
+            name: Ident::new("condition", start),
+            value: None,
+            expr: Some(Box::new(expr)),
+            span: start.merge(self.previous_span()),
+        }];
+
+        // Optional message
+        if self.match_token(TokenKind::Comma) {
+            let msg_start = self.current_span();
+            if let Some(TokenKind::String(s)) = self.current_kind() {
+                let msg = s.clone();
+                self.advance();
+                args.push(AttrArg {
+                    name: Ident::new("message", msg_start),
+                    value: Some(Literal {
+                        kind: LiteralKind::String(msg.clone()),
+                        span: msg_start.merge(self.previous_span()),
+                    }),
+                    expr: None,
+                    span: msg_start.merge(self.previous_span()),
+                });
+            }
+        }
+
+        self.expect(TokenKind::RParen)?;
+        Ok(args)
     }
 
     fn parse_attr_args(&mut self) -> Result<Vec<AttrArg>> {
@@ -129,6 +215,7 @@ impl<'a> Parser<'a> {
                 args.push(AttrArg {
                     name,
                     value,
+                    expr: None,
                     span: start.merge(self.previous_span()),
                 });
                 if !self.match_token(TokenKind::Comma) {
@@ -194,6 +281,8 @@ impl<'a> Parser<'a> {
             is_async,
             is_unsafe,
             visibility: vis,
+            preconditions: Vec::new(),
+            postconditions: Vec::new(),
             span: start.merge(self.previous_span()),
         }))
     }
