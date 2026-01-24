@@ -1,6 +1,6 @@
 # FORMA Language Quick Wins & Core Language Fixes
 
-**Status:** In Progress
+**Status:** ✅ COMPLETE
 **Last Updated:** January 24, 2026
 
 ---
@@ -10,7 +10,7 @@
 | Section | Feature | Status | Notes |
 |---------|---------|--------|-------|
 | 1 | Range Iteration | ✅ DONE | |
-| 2 | Integer Types | ⬜ TODO | |
+| 2 | Integer Types | ✅ DONE | i8-i64, u8-u64, f32/f64, T(x) cast syntax |
 | 3 | String Interpolation | ✅ DONE | |
 | 4 | Random Numbers | ✅ DONE | |
 | 5 | Float Math | ✅ DONE | |
@@ -18,7 +18,7 @@
 | 7 | REPL | ✅ DONE | |
 | 8 | Formatter | ✅ DONE | |
 | 9 | VS Code Syntax | ✅ DONE | |
-| 10 | Trait Fixes | 🔄 PARTIAL | Method resolution for unique names |
+| 10 | Trait Fixes | ✅ DONE | Type-aware method resolution |
 | 11 | Default Parameters | ✅ DONE | |
 
 Legend: ⬜ TODO | 🔄 IN PROGRESS | ✅ DONE | ❌ BLOCKED
