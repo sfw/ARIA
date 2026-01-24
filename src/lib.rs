@@ -19,9 +19,12 @@
 //! - [`borrow`]: Borrow checker for memory safety
 //! - [`mir`]: Mid-level intermediate representation
 //! - [`module`]: Module loading and resolution
+//! - [`codegen`]: Code generation backends (LLVM)
 //! - [`errors`]: Error types and diagnostics
 
 pub mod borrow;
+#[cfg(feature = "llvm")]
+pub mod codegen;
 pub mod errors;
 pub mod lexer;
 pub mod mir;

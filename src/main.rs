@@ -111,6 +111,44 @@ enum Commands {
     Check {
         /// Input file
         file: PathBuf,
+
+        /// Enable partial checking (validates incomplete code)
+        #[arg(long)]
+        partial: bool,
+    },
+
+    /// Get completion suggestions at a position
+    Complete {
+        /// Input file
+        file: PathBuf,
+
+        /// Position in format "line:column" (1-indexed)
+        #[arg(long)]
+        position: String,
+    },
+
+    /// Get the type at a position
+    Typeof {
+        /// Input file
+        file: PathBuf,
+
+        /// Position in format "line:column" (1-indexed)
+        #[arg(long)]
+        position: String,
+    },
+
+    /// Build native executable (LLVM)
+    Build {
+        /// Input file
+        file: PathBuf,
+
+        /// Output file (default: input without extension)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Optimization level (0-3)
+        #[arg(short = 'O', long, default_value = "0")]
+        opt_level: u8,
     },
 
     /// Export the ARIA grammar
@@ -130,7 +168,10 @@ fn main() {
         Commands::Run { file, args: _, dump_mir } => run(&file, dump_mir, error_format),
         Commands::Lex { file } => lex(&file, error_format),
         Commands::Parse { file } => parse(&file, error_format),
-        Commands::Check { file } => check(&file, error_format),
+        Commands::Check { file, partial } => check(&file, partial, error_format),
+        Commands::Complete { file, position } => complete(&file, &position, error_format),
+        Commands::Typeof { file, position } => typeof_at(&file, &position, error_format),
+        Commands::Build { file, output, opt_level } => build(&file, output.as_ref(), opt_level, error_format),
         Commands::Grammar { format } => grammar(format),
     };
 
@@ -553,7 +594,7 @@ fn print_item(item: &aria::parser::Item, indent: usize) {
     }
 }
 
-fn check(file: &PathBuf, error_format: ErrorFormat) -> Result<(), String> {
+fn check(file: &PathBuf, partial: bool, error_format: ErrorFormat) -> Result<(), String> {
     let source = read_file(file)?;
     let filename = file.to_string_lossy().to_string();
     let ctx = ErrorContext::new(&filename, &source);
@@ -648,16 +689,359 @@ fn check(file: &PathBuf, error_format: ErrorFormat) -> Result<(), String> {
 
     if error_count > 0 {
         if matches!(error_format, ErrorFormat::Json) {
-            output_json_errors(json_errors, Some(ast.items.len()));
+            if partial {
+                // Partial check returns structured result even with errors
+                let result = serde_json::json!({
+                    "valid": false,
+                    "errors": json_errors,
+                    "holes": [],  // TODO: identify incomplete expressions
+                    "items": ast.items.len()
+                });
+                println!("{}", serde_json::to_string_pretty(&result).unwrap());
+            } else {
+                output_json_errors(json_errors, Some(ast.items.len()));
+            }
         }
         Err(format!("{} error(s) found", error_count))
     } else {
         match error_format {
             ErrorFormat::Human => println!("No errors found ({} items)", ast.items.len()),
-            ErrorFormat::Json => output_json_errors(vec![], Some(ast.items.len())),
+            ErrorFormat::Json => {
+                if partial {
+                    let result = serde_json::json!({
+                        "valid": true,
+                        "errors": [],
+                        "holes": [],
+                        "items": ast.items.len()
+                    });
+                    println!("{}", serde_json::to_string_pretty(&result).unwrap());
+                } else {
+                    output_json_errors(vec![], Some(ast.items.len()));
+                }
+            }
         }
         Ok(())
     }
+}
+
+/// Parse a "line:column" position string
+fn parse_position(pos: &str) -> Result<(usize, usize), String> {
+    let parts: Vec<&str> = pos.split(':').collect();
+    if parts.len() != 2 {
+        return Err("Position must be in format 'line:column'".to_string());
+    }
+    let line = parts[0].parse::<usize>().map_err(|_| "Invalid line number")?;
+    let col = parts[1].parse::<usize>().map_err(|_| "Invalid column number")?;
+    Ok((line, col))
+}
+
+/// Get completion suggestions at a position
+fn complete(file: &PathBuf, position: &str, error_format: ErrorFormat) -> Result<(), String> {
+    let (line, col) = parse_position(position)?;
+    let source = read_file(file)?;
+    let filename = file.to_string_lossy().to_string();
+    let _ctx = ErrorContext::new(&filename, &source);
+
+    // Lex
+    let scanner = Scanner::new(&source);
+    let (tokens, _lex_errors) = scanner.scan_all();
+
+    // Parse (allow partial)
+    let parser = AriaParser::new(&tokens);
+    let ast = parser.parse().ok();
+
+    // Find the token at position
+    let mut found_token = None;
+    let mut prev_tokens: Vec<String> = vec![];
+    for token in &tokens {
+        if token.span.line == line && token.span.column <= col {
+            found_token = Some(token.clone());
+        }
+        if token.span.line < line || (token.span.line == line && token.span.column < col) {
+            prev_tokens.push(format!("{:?}", token.kind));
+        }
+    }
+
+    // Determine valid completions based on context
+    let completions = get_completions_for_context(&prev_tokens, &ast);
+    let expected_type = infer_expected_type(&prev_tokens, &ast);
+
+    match error_format {
+        ErrorFormat::Human => {
+            println!("Completions at {}:{}:", line, col);
+            for c in &completions {
+                println!("  {}", c);
+            }
+            if let Some(ty) = &expected_type {
+                println!("Expected type: {}", ty);
+            }
+        }
+        ErrorFormat::Json => {
+            let result = serde_json::json!({
+                "position": { "line": line, "column": col },
+                "tokens": completions,
+                "expected_type": expected_type,
+                "context_token": found_token.map(|t| format!("{:?}", t.kind))
+            });
+            println!("{}", serde_json::to_string_pretty(&result).unwrap());
+        }
+    }
+    Ok(())
+}
+
+/// Get valid completion tokens for a context
+fn get_completions_for_context(prev_tokens: &[String], _ast: &Option<aria::parser::SourceFile>) -> Vec<String> {
+    // Basic context-aware completions
+    let last = prev_tokens.last().map(|s| s.as_str()).unwrap_or("");
+
+    match last {
+        // After keywords that expect expressions
+        s if s.contains("Assign") || s.contains("Eq") => {
+            vec!["identifier".into(), "literal".into(), "if".into(), "m".into(), "(expr)".into()]
+        }
+        // After 'f' (function definition)
+        s if s.contains("Fn") => {
+            vec!["identifier".into()]
+        }
+        // After 's' (struct definition)
+        s if s.contains("Struct") => {
+            vec!["identifier".into()]
+        }
+        // After '->' (return type)
+        s if s.contains("Arrow") => {
+            vec!["Int".into(), "Str".into(), "Bool".into(), "Float".into(), "Char".into(),
+                 "[T]".into(), "T?".into(), "identifier".into()]
+        }
+        // After '(' (function params or tuple)
+        s if s.contains("LParen") => {
+            vec!["identifier".into(), ")".into()]
+        }
+        // After identifier (could be many things)
+        s if s.contains("Ident") => {
+            vec![":=".into(), "(".into(), ".".into(), "[".into(), "->".into(), ":".into()]
+        }
+        // Default - statement start
+        _ => {
+            vec!["f".into(), "s".into(), "e".into(), "t".into(), "i".into(),
+                 "if".into(), "m".into(), "wh".into(), "for".into(), "return".into(),
+                 "identifier".into()]
+        }
+    }
+}
+
+/// Infer the expected type at position
+fn infer_expected_type(prev_tokens: &[String], _ast: &Option<aria::parser::SourceFile>) -> Option<String> {
+    let last = prev_tokens.last().map(|s| s.as_str()).unwrap_or("");
+
+    // Simple heuristics - in a real implementation this would use the type checker
+    if last.contains("If") || last.contains("While") {
+        Some("Bool".into())
+    } else if last.contains("Arrow") {
+        Some("Type".into())
+    } else {
+        None
+    }
+}
+
+/// Get the type at a position
+fn typeof_at(file: &PathBuf, position: &str, error_format: ErrorFormat) -> Result<(), String> {
+    let (line, col) = parse_position(position)?;
+    let source = read_file(file)?;
+    let filename = file.to_string_lossy().to_string();
+    let ctx = ErrorContext::new(&filename, &source);
+
+    // Lex
+    let scanner = Scanner::new(&source);
+    let (tokens, lex_errors) = scanner.scan_all();
+
+    if !lex_errors.is_empty() {
+        return Err("Lexer errors".into());
+    }
+
+    // Parse
+    let parser = AriaParser::new(&tokens);
+    let ast = match parser.parse() {
+        Ok(ast) => ast,
+        Err(e) => {
+            ctx.error(e.span(), &format!("{}", e));
+            return Err("Parse error".into());
+        }
+    };
+
+    // Type check to get type information
+    let mut type_checker = TypeChecker::new();
+    let _ = type_checker.check(&ast); // We want partial info even if errors
+
+    // Find what's at the position
+    let mut result_type: Option<String> = None;
+    let mut context = "unknown";
+
+    // Search through tokens to find the one at position
+    for token in &tokens {
+        if token.span.line == line &&
+           token.span.column <= col &&
+           col < token.span.column + token.span.end.saturating_sub(token.span.start) {
+            // Found token at position - infer its type from context
+            match &token.kind {
+                aria::lexer::TokenKind::Ident(_) => {
+                    // Look up identifier in type environment
+                    result_type = Some("(identifier - run type checker for actual type)".into());
+                    context = "identifier";
+                }
+                aria::lexer::TokenKind::Int(_) => {
+                    result_type = Some("Int".into());
+                    context = "literal";
+                }
+                aria::lexer::TokenKind::Float(_) => {
+                    result_type = Some("Float".into());
+                    context = "literal";
+                }
+                aria::lexer::TokenKind::String(_) => {
+                    result_type = Some("Str".into());
+                    context = "literal";
+                }
+                aria::lexer::TokenKind::Char(_) => {
+                    result_type = Some("Char".into());
+                    context = "literal";
+                }
+                aria::lexer::TokenKind::True | aria::lexer::TokenKind::False => {
+                    result_type = Some("Bool".into());
+                    context = "literal";
+                }
+                _ => {
+                    context = "keyword/operator";
+                }
+            }
+            break;
+        }
+    }
+
+    match error_format {
+        ErrorFormat::Human => {
+            println!("Type at {}:{}:", line, col);
+            if let Some(ty) = &result_type {
+                println!("  type: {}", ty);
+            } else {
+                println!("  (no type information available)");
+            }
+            println!("  context: {}", context);
+        }
+        ErrorFormat::Json => {
+            let result = serde_json::json!({
+                "position": { "line": line, "column": col },
+                "type": result_type,
+                "context": context
+            });
+            println!("{}", serde_json::to_string_pretty(&result).unwrap());
+        }
+    }
+    Ok(())
+}
+
+/// Build native executable using LLVM
+fn build(file: &PathBuf, output: Option<&PathBuf>, opt_level: u8, error_format: ErrorFormat) -> Result<(), String> {
+    let source = read_file(file)?;
+    let filename = file.to_string_lossy().to_string();
+    let ctx = ErrorContext::new(&filename, &source);
+    let mut json_errors: Vec<JsonError> = vec![];
+
+    // Lex
+    let scanner = Scanner::new(&source);
+    let (tokens, lex_errors) = scanner.scan_all();
+
+    if !lex_errors.is_empty() {
+        for error in &lex_errors {
+            match error_format {
+                ErrorFormat::Human => ctx.error(error.span, &error.message),
+                ErrorFormat::Json => json_errors.push(span_to_json_error(
+                    &filename,
+                    error.span,
+                    "LEX",
+                    &error.message,
+                    None,
+                )),
+            }
+        }
+        return Err("Lexer errors".into());
+    }
+
+    // Parse
+    let parser = AriaParser::new(&tokens);
+    let parsed_ast = match parser.parse() {
+        Ok(ast) => ast,
+        Err(e) => {
+            match error_format {
+                ErrorFormat::Human => ctx.error(e.span(), &format!("{}", e)),
+                ErrorFormat::Json => json_errors.push(span_to_json_error(
+                    &filename,
+                    e.span(),
+                    "PARSE",
+                    &format!("{}", e),
+                    e.help(),
+                )),
+            }
+            return Err("Parse error".into());
+        }
+    };
+
+    // Load imports
+    let mut module_loader = ModuleLoader::from_source_file(file);
+    let ast = match module_loader.load_imports(&parsed_ast) {
+        Ok(imported_items) => {
+            let mut combined_items = imported_items;
+            combined_items.extend(parsed_ast.items);
+            aria::parser::SourceFile {
+                items: combined_items,
+                span: parsed_ast.span,
+            }
+        }
+        Err(e) => return Err(format!("Module error: {}", e)),
+    };
+
+    // Type check
+    let mut type_checker = TypeChecker::new();
+    if let Err(errors) = type_checker.check(&ast) {
+        for error in &errors {
+            match error_format {
+                ErrorFormat::Human => ctx.error(error.span, &format!("{}", error)),
+                ErrorFormat::Json => json_errors.push(span_to_json_error(
+                    &filename,
+                    error.span,
+                    "TYPE",
+                    &format!("{}", error),
+                    None,
+                )),
+            }
+        }
+        return Err("Type errors".into());
+    }
+
+    // Determine output path
+    let output_path = output.cloned().unwrap_or_else(|| {
+        file.with_extension("")
+    });
+
+    // For now, output a placeholder message
+    // TODO: Implement actual LLVM codegen
+    match error_format {
+        ErrorFormat::Human => {
+            println!("LLVM compilation not yet implemented.");
+            println!("Would compile {} -> {} (opt level {})",
+                     file.display(), output_path.display(), opt_level);
+            println!("Use 'aria run' to interpret the program instead.");
+        }
+        ErrorFormat::Json => {
+            let result = serde_json::json!({
+                "status": "not_implemented",
+                "input": file.to_string_lossy(),
+                "output": output_path.to_string_lossy(),
+                "opt_level": opt_level,
+                "message": "LLVM compilation not yet implemented"
+            });
+            println!("{}", serde_json::to_string_pretty(&result).unwrap());
+        }
+    }
+    Ok(())
 }
 
 fn grammar(format: GrammarFormat) -> Result<(), String> {

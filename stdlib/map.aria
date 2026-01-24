@@ -1,186 +1,204 @@
 # ARIA Standard Library - Map Module
-# Provides HashMap utilities with functional patterns
+# Generic key-value map using recursion (no closures needed)
 
 # ============================================================
-# Basic operations
+# Map[K, V] - Hash map wrapper
+# Keys are String-based (built-in limitation)
 # ============================================================
 
-# Check if map is empty
-f map_is_empty(mymap: Map[Int]) -> Bool
-    map_len(mymap) == 0
+s Map[K, V]
+    data: {Str: V}
 
-# Get value or default
-f map_get_or(mymap: Map[Int], key: Str, default: Int) -> Int
-    m map_get(mymap, key)
+# Create empty map
+f map_empty[V]() -> Map[Str, V]
+    Map { data: map_new() }
+
+# Get number of entries
+f map_length[V](m: Map[Str, V]) -> Int
+    map_len(m.data)
+
+# Check if empty
+f map_is_empty[V](m: Map[Str, V]) -> Bool
+    map_len(m.data) == 0
+
+# Get value by key
+f map_lookup[V](m: Map[Str, V], key: Str) -> V?
+    map_get(m.data, key)
+
+# Check if key exists
+f map_has_key[V](m: Map[Str, V], key: Str) -> Bool
+    map_contains(m.data, key)
+
+# Insert or update (returns new map)
+f map_put[V](m: Map[Str, V], key: Str, value: V) -> Map[Str, V]
+    Map { data: map_insert(m.data, key, value) }
+
+# Remove key (returns new map and removed value)
+f map_delete[V](m: Map[Str, V], key: Str) -> (Map[Str, V], V?)
+    (new_data, removed) := map_remove(m.data, key)
+    (Map { data: new_data }, removed)
+
+# Get all keys
+f map_all_keys[V](m: Map[Str, V]) -> [Str]
+    map_keys(m.data)
+
+# Get all values
+f map_all_values[V](m: Map[Str, V]) -> [V]
+    map_values(m.data)
+
+# Get underlying data
+f map_to_data[V](m: Map[Str, V]) -> {Str: V}
+    m.data
+
+# ============================================================
+# Int-specific operations
+# ============================================================
+
+# Get or default
+f int_map_get_or(m: Map[Str, Int], key: Str, default: Int) -> Int
+    m map_get(m.data, key)
         Some(v) -> v
         None -> default
 
-# Check if key exists (alias for map_contains)
-f map_has_key(mymap: Map[Int], key: Str) -> Bool
-    map_contains(mymap, key)
+# Increment value at key
+f int_map_increment(m: Map[Str, Int], key: Str) -> Map[Str, Int]
+    current := int_map_get_or(m, key, 0)
+    map_put(m, key, current + 1)
 
-# ============================================================
-# Functional operations
-# ============================================================
+# Decrement value at key
+f int_map_decrement(m: Map[Str, Int], key: Str) -> Map[Str, Int]
+    current := int_map_get_or(m, key, 0)
+    map_put(m, key, current - 1)
 
-# Update a value with a function (if key exists)
-f map_update(mymap: Map[Int], key: Str, updater: |Int| -> Int) -> Map[Int]
-    m map_get(mymap, key)
-        Some(v) -> map_insert(mymap, key, updater(v))
-        None -> mymap
-
-# Update a value or insert default
-f map_update_or_insert(mymap: Map[Int], key: Str, default: Int, updater: |Int| -> Int) -> Map[Int]
-    m map_get(mymap, key)
-        Some(v) -> map_insert(mymap, key, updater(v))
-        None -> map_insert(mymap, key, default)
-
-# Increment a counter (common pattern)
-f map_increment(mymap: Map[Int], key: Str) -> Map[Int]
-    map_update_or_insert(mymap, key, 1, |v| v + 1)
-
-# ============================================================
-# Iteration helpers
-# ============================================================
-
-# Fold over all key-value pairs
-# Note: Since map_keys returns [Str], we iterate over keys
-f map_fold(mymap: Map[Int], init: Int, folder: |Int, Str, Int| -> Int) -> Int
-    keys := map_keys(mymap)
-    acc := init
-    for key in keys
-        m map_get(mymap, key)
-            Some(v) -> acc = folder(acc, key, v)
-            None -> acc = acc
-    acc
+# Add to value at key
+f int_map_add(m: Map[Str, Int], key: Str, amount: Int) -> Map[Str, Int]
+    current := int_map_get_or(m, key, 0)
+    map_put(m, key, current + amount)
 
 # Sum all values
-f map_sum_values(mymap: Map[Int]) -> Int
-    map_fold(mymap, 0, |acc, _key, value| acc + value)
+f int_map_sum_values(m: Map[Str, Int]) -> Int
+    vals := map_values(m.data)
+    int_sum_array(vals, 0, 0)
 
-# Count entries matching predicate
-f map_count(mymap: Map[Int], pred: |Str, Int| -> Bool) -> Int
-    keys := map_keys(mymap)
-    count := 0
-    for key in keys
-        m map_get(mymap, key)
-            Some(v) -> if pred(key, v) then count = count + 1 else count = count
-            None -> count = count
-    count
-
-# ============================================================
-# Transformation
-# ============================================================
-
-# Map values with a function
-f map_map_values(mymap: Map[Int], mapper: |Int| -> Int) -> Map[Int]
-    keys := map_keys(mymap)
-    result := map_new()
-    for key in keys
-        m map_get(mymap, key)
-            Some(v) -> result = map_insert(result, key, mapper(v))
-            None -> result = result
-    result
-
-# Filter entries by predicate
-f map_filter(mymap: Map[Int], pred: |Str, Int| -> Bool) -> Map[Int]
-    keys := map_keys(mymap)
-    result := map_new()
-    for key in keys
-        m map_get(mymap, key)
-            Some(v) -> if pred(key, v) then result = map_insert(result, key, v) else result = result
-            None -> result = result
-    result
-
-# Remove entries matching predicate
-f map_remove_if(mymap: Map[Int], pred: |Str, Int| -> Bool) -> Map[Int]
-    map_filter(mymap, |k, v| !pred(k, v))
-
-# ============================================================
-# Merge operations
-# ============================================================
-
-# Merge two maps (second map's values override first)
-f map_merge(map1: Map[Int], map2: Map[Int]) -> Map[Int]
-    result := map1
-    keys2 := map_keys(map2)
-    for key in keys2
-        m map_get(map2, key)
-            Some(v) -> result = map_insert(result, key, v)
-            None -> result = result
-    result
-
-# Merge with custom conflict resolution
-f map_merge_with(map1: Map[Int], map2: Map[Int], resolver: |Int, Int| -> Int) -> Map[Int]
-    result := map1
-    keys2 := map_keys(map2)
-    for key in keys2
-        m map_get(map2, key)
-            Some(v2) ->
-                m map_get(result, key)
-                    Some(v1) -> result = map_insert(result, key, resolver(v1, v2))
-                    None -> result = map_insert(result, key, v2)
-            None -> result = result
-    result
-
-# ============================================================
-# Conversion
-# ============================================================
-
-# Get all values as array
-f map_values_array(mymap: Map[Int]) -> [Int]
-    keys := map_keys(mymap)
-    result := []
-    for key in keys
-        m map_get(mymap, key)
-            Some(v) -> result = vec_push(result, v)
-            None -> result = result
-    result
-
-# Create map from array of key-value pairs
-f map_from_pairs(pairs: [(Str, Int)]) -> Map[Int]
-    result := map_new()
-    for pair in pairs
-        # TODO: tuple destructuring
-        # For now, this won't work without tuple field access on pairs
-        result = result
-    result
-
-# ============================================================
-# Search
-# ============================================================
-
-# Find first key matching value
-f map_find_key(mymap: Map[Int], target_value: Int) -> Option[Str]
-    keys := map_keys(mymap)
-    result := None
-    for key in keys
-        m map_get(mymap, key)
-            Some(v) -> if v == target_value && option_is_none_str(result) then result = Some(key) else result = result
-            None -> result = result
-    result
-
-# Helper function for option check
-f option_is_none_str(opt: Option[Str]) -> Bool
-    m opt
-        Some(_) -> false
-        None -> true
-
-# Find max value and its key
-f map_max_entry(mymap: Map[Int]) -> Option[(Str, Int)]
-    keys := map_keys(mymap)
-    if vec_len(keys) == 0 then None
+f int_sum_array(arr: [Int], idx: Int, acc: Int) -> Int
+    if idx >= vec_len(arr) then acc
     else
-        max_key := keys[0]
-        max_val := m map_get(mymap, max_key)
-            Some(v) -> v
-            None -> 0
-        for key in keys
-            m map_get(mymap, key)
-                Some(v) -> if v > max_val then
-                    max_key = key
-                    max_val = v
-                else
-                    max_key = max_key
-                None -> max_key = max_key
-        Some((max_key, max_val))
+        m vec_get(arr, idx)
+            Some(x) -> int_sum_array(arr, idx + 1, acc + x)
+            None -> acc
+
+# Find max value
+f int_map_max_value(m: Map[Str, Int]) -> Int?
+    vals := map_values(m.data)
+    if vec_len(vals) == 0 then None
+    else
+        m vec_first(vals)
+            Some(first) -> Some(int_max_in_array(vals, 1, first))
+            None -> None
+
+f int_max_in_array(arr: [Int], idx: Int, current: Int) -> Int
+    if idx >= vec_len(arr) then current
+    else
+        m vec_get(arr, idx)
+            Some(x) ->
+                new_max := if x > current then x else current
+                int_max_in_array(arr, idx + 1, new_max)
+            None -> current
+
+# Find min value
+f int_map_min_value(m: Map[Str, Int]) -> Int?
+    vals := map_values(m.data)
+    if vec_len(vals) == 0 then None
+    else
+        m vec_first(vals)
+            Some(first) -> Some(int_min_in_array(vals, 1, first))
+            None -> None
+
+f int_min_in_array(arr: [Int], idx: Int, current: Int) -> Int
+    if idx >= vec_len(arr) then current
+    else
+        m vec_get(arr, idx)
+            Some(x) ->
+                new_min := if x < current then x else current
+                int_min_in_array(arr, idx + 1, new_min)
+            None -> current
+
+# ============================================================
+# Map merging (for Int values)
+# ============================================================
+
+# Merge two maps (second overrides first)
+f int_map_merge(m1: Map[Str, Int], m2: Map[Str, Int]) -> Map[Str, Int]
+    keys2 := map_keys(m2.data)
+    int_merge_loop(m1, m2, keys2, 0)
+
+f int_merge_loop(m1: Map[Str, Int], m2: Map[Str, Int], keys: [Str], idx: Int) -> Map[Str, Int]
+    if idx >= vec_len(keys) then m1
+    else
+        m vec_get(keys, idx)
+            Some(key) ->
+                m map_get(m2.data, key)
+                    Some(val) ->
+                        updated := map_put(m1, key, val)
+                        int_merge_loop(updated, m2, keys, idx + 1)
+                    None -> int_merge_loop(m1, m2, keys, idx + 1)
+            None -> m1
+
+# Merge with addition (combine values)
+f int_map_merge_add(m1: Map[Str, Int], m2: Map[Str, Int]) -> Map[Str, Int]
+    keys2 := map_keys(m2.data)
+    int_merge_add_loop(m1, m2, keys2, 0)
+
+f int_merge_add_loop(m1: Map[Str, Int], m2: Map[Str, Int], keys: [Str], idx: Int) -> Map[Str, Int]
+    if idx >= vec_len(keys) then m1
+    else
+        m vec_get(keys, idx)
+            Some(key) ->
+                m map_get(m2.data, key)
+                    Some(val2) ->
+                        val1 := int_map_get_or(m1, key, 0)
+                        updated := map_put(m1, key, val1 + val2)
+                        int_merge_add_loop(updated, m2, keys, idx + 1)
+                    None -> int_merge_add_loop(m1, m2, keys, idx + 1)
+            None -> m1
+
+# ============================================================
+# Builder pattern
+# ============================================================
+
+f map_builder[V]() -> Map[Str, V]
+    map_empty()
+
+f map_with[V](m: Map[Str, V], key: Str, value: V) -> Map[Str, V]
+    map_put(m, key, value)
+
+f map_done[V](m: Map[Str, V]) -> Map[Str, V]
+    m
+
+# ============================================================
+# Create from parallel arrays
+# ============================================================
+
+f int_map_from_pairs(keys: [Str], values: [Int]) -> Map[Str, Int]
+    int_from_pairs_loop(map_empty(), keys, values, 0)
+
+f int_from_pairs_loop(m: Map[Str, Int], keys: [Str], values: [Int], idx: Int) -> Map[Str, Int]
+    if idx >= vec_len(keys) || idx >= vec_len(values) then m
+    else
+        m vec_get(keys, idx)
+            Some(key) ->
+                m vec_get(values, idx)
+                    Some(val) ->
+                        updated := map_put(m, key, val)
+                        int_from_pairs_loop(updated, keys, values, idx + 1)
+                    None -> m
+            None -> m
+
+# ============================================================
+# Get or panic
+# ============================================================
+
+f map_get_unwrap[V](m: Map[Str, V], key: Str) -> V
+    m map_get(m.data, key)
+        Some(v) -> v
+        None -> panic("Key not found in map")
