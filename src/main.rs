@@ -187,6 +187,9 @@ enum Commands {
         #[arg(short, long)]
         check: bool,
     },
+
+    /// Start the LSP server for IDE support
+    Lsp,
 }
 
 fn main() {
@@ -207,6 +210,7 @@ fn main() {
         Commands::Init => init_project(),
         Commands::Repl => repl(),
         Commands::Fmt { file, write, check } => fmt(&file, write, check),
+        Commands::Lsp => lsp(),
     };
 
     if let Err(e) = result {
@@ -2040,6 +2044,19 @@ fn fmt(file: &PathBuf, write: bool, check: bool) -> Result<(), String> {
         print!("{}", formatted);
         Ok(())
     }
+}
+
+/// Start the LSP server
+fn lsp() -> Result<(), String> {
+    // Create a tokio runtime for the async LSP server
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| format!("Failed to create runtime: {}", e))?;
+
+    rt.block_on(async {
+        forma::lsp::run_server().await;
+    });
+
+    Ok(())
 }
 
 fn read_file(path: &PathBuf) -> Result<String, String> {

@@ -28,6 +28,7 @@ pub mod codegen;
 pub mod errors;
 pub mod fmt;
 pub mod lexer;
+pub mod lsp;
 pub mod mir;
 pub mod module;
 pub mod parser;

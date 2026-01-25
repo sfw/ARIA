@@ -1925,6 +1925,322 @@ impl TypeEnv {
             },
         );
 
+        // ===== TCP/UDP Socket functions =====
+
+        // tcp_connect: (Str, Int) -> Result[TcpStream, Str]
+        env.bindings.insert(
+            "tcp_connect".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str, Ty::Int], Box::new(Ty::Result(Box::new(Ty::TcpStream), Box::new(Ty::Str)))) },
+        );
+
+        // tcp_read: (TcpStream, Int) -> Result[Str, Str]
+        env.bindings.insert(
+            "tcp_read".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::TcpStream, Ty::Int], Box::new(Ty::Result(Box::new(Ty::Str), Box::new(Ty::Str)))) },
+        );
+
+        // tcp_read_exact: (TcpStream, Int) -> Result[Str, Str]
+        env.bindings.insert(
+            "tcp_read_exact".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::TcpStream, Ty::Int], Box::new(Ty::Result(Box::new(Ty::Str), Box::new(Ty::Str)))) },
+        );
+
+        // tcp_read_line: TcpStream -> Result[Str, Str]
+        env.bindings.insert(
+            "tcp_read_line".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::TcpStream], Box::new(Ty::Result(Box::new(Ty::Str), Box::new(Ty::Str)))) },
+        );
+
+        // tcp_write: (TcpStream, Str) -> Result[Int, Str]
+        env.bindings.insert(
+            "tcp_write".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::TcpStream, Ty::Str], Box::new(Ty::Result(Box::new(Ty::Int), Box::new(Ty::Str)))) },
+        );
+
+        // tcp_write_all: (TcpStream, Str) -> Result[(), Str]
+        env.bindings.insert(
+            "tcp_write_all".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::TcpStream, Ty::Str], Box::new(Ty::Result(Box::new(Ty::Unit), Box::new(Ty::Str)))) },
+        );
+
+        // tcp_close: TcpStream -> ()
+        env.bindings.insert(
+            "tcp_close".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::TcpStream], Box::new(Ty::Unit)) },
+        );
+
+        // tcp_set_timeout: (TcpStream, Int) -> ()
+        env.bindings.insert(
+            "tcp_set_timeout".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::TcpStream, Ty::Int], Box::new(Ty::Unit)) },
+        );
+
+        // tcp_peer_addr: TcpStream -> Str
+        env.bindings.insert(
+            "tcp_peer_addr".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::TcpStream], Box::new(Ty::Str)) },
+        );
+
+        // tcp_local_addr: TcpStream -> Str
+        env.bindings.insert(
+            "tcp_local_addr".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::TcpStream], Box::new(Ty::Str)) },
+        );
+
+        // tcp_listen: (Str, Int) -> Result[TcpListener, Str]
+        env.bindings.insert(
+            "tcp_listen".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str, Ty::Int], Box::new(Ty::Result(Box::new(Ty::TcpListener), Box::new(Ty::Str)))) },
+        );
+
+        // tcp_accept: TcpListener -> Result[TcpStream, Str]
+        env.bindings.insert(
+            "tcp_accept".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::TcpListener], Box::new(Ty::Result(Box::new(Ty::TcpStream), Box::new(Ty::Str)))) },
+        );
+
+        // tcp_listener_close: TcpListener -> ()
+        env.bindings.insert(
+            "tcp_listener_close".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::TcpListener], Box::new(Ty::Unit)) },
+        );
+
+        // UDP functions
+        // udp_bind: (Str, Int) -> Result[UdpSocket, Str]
+        env.bindings.insert(
+            "udp_bind".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str, Ty::Int], Box::new(Ty::Result(Box::new(Ty::UdpSocket), Box::new(Ty::Str)))) },
+        );
+
+        // udp_send_to: (UdpSocket, Str, Int, Str) -> Result[Int, Str]
+        env.bindings.insert(
+            "udp_send_to".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::UdpSocket, Ty::Str, Ty::Int, Ty::Str], Box::new(Ty::Result(Box::new(Ty::Int), Box::new(Ty::Str)))) },
+        );
+
+        // udp_recv_from: (UdpSocket, Int) -> Result[(Str, Str, Int), Str]
+        env.bindings.insert(
+            "udp_recv_from".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::UdpSocket, Ty::Int], Box::new(Ty::Result(Box::new(Ty::Tuple(vec![Ty::Str, Ty::Str, Ty::Int])), Box::new(Ty::Str)))) },
+        );
+
+        // udp_close: UdpSocket -> ()
+        env.bindings.insert(
+            "udp_close".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::UdpSocket], Box::new(Ty::Unit)) },
+        );
+
+        // udp_connect: (UdpSocket, Str, Int) -> Result[(), Str]
+        env.bindings.insert(
+            "udp_connect".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::UdpSocket, Ty::Str, Ty::Int], Box::new(Ty::Result(Box::new(Ty::Unit), Box::new(Ty::Str)))) },
+        );
+
+        // udp_send: (UdpSocket, Str) -> Result[Int, Str]
+        env.bindings.insert(
+            "udp_send".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::UdpSocket, Ty::Str], Box::new(Ty::Result(Box::new(Ty::Int), Box::new(Ty::Str)))) },
+        );
+
+        // udp_recv: (UdpSocket, Int) -> Result[Str, Str]
+        env.bindings.insert(
+            "udp_recv".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::UdpSocket, Ty::Int], Box::new(Ty::Result(Box::new(Ty::Str), Box::new(Ty::Str)))) },
+        );
+
+        // DNS functions
+        // dns_lookup: Str -> Result[[Str], Str]
+        env.bindings.insert(
+            "dns_lookup".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str], Box::new(Ty::Result(Box::new(Ty::List(Box::new(Ty::Str))), Box::new(Ty::Str)))) },
+        );
+
+        // dns_reverse_lookup: Str -> Result[Str, Str]
+        env.bindings.insert(
+            "dns_reverse_lookup".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str], Box::new(Ty::Result(Box::new(Ty::Str), Box::new(Ty::Str)))) },
+        );
+
+        // ===== C FFI functions =====
+
+        // Pointer operations
+        // ptr_null: () -> *Void
+        env.bindings.insert(
+            "ptr_null".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![], Box::new(Ty::CVoid)) },
+        );
+
+        // ptr_is_null: *Void -> Bool
+        env.bindings.insert(
+            "ptr_is_null".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::CVoid], Box::new(Ty::Bool)) },
+        );
+
+        // ptr_offset: (*Void, Int) -> *Void
+        env.bindings.insert(
+            "ptr_offset".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::CVoid, Ty::Int], Box::new(Ty::CVoid)) },
+        );
+
+        // ptr_addr: *Void -> Int
+        env.bindings.insert(
+            "ptr_addr".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::CVoid], Box::new(Ty::Int)) },
+        );
+
+        // ptr_from_addr: Int -> *Void
+        env.bindings.insert(
+            "ptr_from_addr".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Int], Box::new(Ty::CVoid)) },
+        );
+
+        // String conversion
+        // str_to_cstr: Str -> *Void
+        env.bindings.insert(
+            "str_to_cstr".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str], Box::new(Ty::CVoid)) },
+        );
+
+        // cstr_to_str: *Void -> Str
+        env.bindings.insert(
+            "cstr_to_str".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::CVoid], Box::new(Ty::Str)) },
+        );
+
+        // cstr_to_str_len: (*Void, Int) -> Str
+        env.bindings.insert(
+            "cstr_to_str_len".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::CVoid, Ty::Int], Box::new(Ty::Str)) },
+        );
+
+        // cstr_free: *Void -> ()
+        env.bindings.insert(
+            "cstr_free".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::CVoid], Box::new(Ty::Unit)) },
+        );
+
+        // Memory allocation
+        // alloc: Int -> *Void
+        env.bindings.insert(
+            "alloc".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Int], Box::new(Ty::CVoid)) },
+        );
+
+        // alloc_zeroed: Int -> *Void
+        env.bindings.insert(
+            "alloc_zeroed".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Int], Box::new(Ty::CVoid)) },
+        );
+
+        // dealloc: (*Void, Int) -> ()
+        env.bindings.insert(
+            "dealloc".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::CVoid, Ty::Int], Box::new(Ty::Unit)) },
+        );
+
+        // mem_copy: (*Void, *Void, Int) -> ()
+        env.bindings.insert(
+            "mem_copy".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::CVoid, Ty::CVoid, Ty::Int], Box::new(Ty::Unit)) },
+        );
+
+        // mem_set: (*Void, Int, Int) -> ()
+        env.bindings.insert(
+            "mem_set".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::CVoid, Ty::Int, Ty::Int], Box::new(Ty::Unit)) },
+        );
+
+        // C type conversions
+        // to_cint: Int -> CInt
+        env.bindings.insert(
+            "to_cint".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Int], Box::new(Ty::CInt)) },
+        );
+
+        // from_cint: CInt -> Int
+        env.bindings.insert(
+            "from_cint".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::CInt], Box::new(Ty::Int)) },
+        );
+
+        // to_cuint: Int -> CUInt
+        env.bindings.insert(
+            "to_cuint".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Int], Box::new(Ty::CUInt)) },
+        );
+
+        // from_cuint: CUInt -> Int
+        env.bindings.insert(
+            "from_cuint".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::CUInt], Box::new(Ty::Int)) },
+        );
+
+        // to_clong: Int -> CLong
+        env.bindings.insert(
+            "to_clong".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Int], Box::new(Ty::CLong)) },
+        );
+
+        // from_clong: CLong -> Int
+        env.bindings.insert(
+            "from_clong".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::CLong], Box::new(Ty::Int)) },
+        );
+
+        // to_culong: Int -> CULong
+        env.bindings.insert(
+            "to_culong".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Int], Box::new(Ty::CULong)) },
+        );
+
+        // from_culong: CULong -> Int
+        env.bindings.insert(
+            "from_culong".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::CULong], Box::new(Ty::Int)) },
+        );
+
+        // to_cfloat: Float -> CFloat
+        env.bindings.insert(
+            "to_cfloat".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Float], Box::new(Ty::CFloat)) },
+        );
+
+        // from_cfloat: CFloat -> Float
+        env.bindings.insert(
+            "from_cfloat".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::CFloat], Box::new(Ty::Float)) },
+        );
+
+        // to_cdouble: Float -> CDouble
+        env.bindings.insert(
+            "to_cdouble".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Float], Box::new(Ty::CDouble)) },
+        );
+
+        // from_cdouble: CDouble -> Float
+        env.bindings.insert(
+            "from_cdouble".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::CDouble], Box::new(Ty::Float)) },
+        );
+
+        // to_csize: Int -> CSize
+        env.bindings.insert(
+            "to_csize".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Int], Box::new(Ty::CSize)) },
+        );
+
+        // from_csize: CSize -> Int
+        env.bindings.insert(
+            "from_csize".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::CSize], Box::new(Ty::Int)) },
+        );
+
+        // sizeof: Str -> Int
+        env.bindings.insert(
+            "sizeof".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str], Box::new(Ty::Int)) },
+        );
+
         env
     }
 
@@ -2120,6 +2436,22 @@ impl Unifier {
 
             // MutexGuard unification
             (Ty::MutexGuard(t1), Ty::MutexGuard(t2)) => self.unify(t1, t2, span),
+
+            // Network type unification
+            (Ty::TcpStream, Ty::TcpStream) => Ok(()),
+            (Ty::TcpListener, Ty::TcpListener) => Ok(()),
+            (Ty::UdpSocket, Ty::UdpSocket) => Ok(()),
+
+            // C FFI type unification
+            (Ty::CInt, Ty::CInt) => Ok(()),
+            (Ty::CUInt, Ty::CUInt) => Ok(()),
+            (Ty::CLong, Ty::CLong) => Ok(()),
+            (Ty::CULong, Ty::CULong) => Ok(()),
+            (Ty::CFloat, Ty::CFloat) => Ok(()),
+            (Ty::CDouble, Ty::CDouble) => Ok(()),
+            (Ty::CSize, Ty::CSize) => Ok(()),
+            (Ty::CVoid, Ty::CVoid) => Ok(()),
+            (Ty::RawPtr(t1), Ty::RawPtr(t2)) => self.unify(t1, t2, span),
 
             // Option unification
             (Ty::Option(t1), Ty::Option(t2)) => self.unify(t1, t2, span),

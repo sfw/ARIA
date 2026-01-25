@@ -70,6 +70,35 @@ pub enum Ty {
     /// Mutex guard type (holds lock)
     MutexGuard(Box<Ty>),
 
+    /// TCP stream for network connections
+    TcpStream,
+
+    /// TCP listener for accepting connections
+    TcpListener,
+
+    /// UDP socket for datagram communication
+    UdpSocket,
+
+    // === C FFI Types ===
+    /// C int (platform-specific, typically 32-bit)
+    CInt,
+    /// C unsigned int
+    CUInt,
+    /// C long (platform-specific)
+    CLong,
+    /// C unsigned long
+    CULong,
+    /// C float (32-bit)
+    CFloat,
+    /// C double (64-bit)
+    CDouble,
+    /// C size_t
+    CSize,
+    /// Raw pointer to T
+    RawPtr(Box<Ty>),
+    /// Void pointer (*Void)
+    CVoid,
+
     /// Unit type ()
     Unit,
 
@@ -184,6 +213,7 @@ impl Ty {
             Ty::Receiver(ty) => ty.has_vars(),
             Ty::Mutex(ty) => ty.has_vars(),
             Ty::MutexGuard(ty) => ty.has_vars(),
+            Ty::RawPtr(ty) => ty.has_vars(),
             Ty::Option(ty) => ty.has_vars(),
             Ty::Result(ok, err) => ok.has_vars() || err.has_vars(),
             Ty::Fn(params, ret) => params.iter().any(|t| t.has_vars()) || ret.has_vars(),
@@ -228,6 +258,7 @@ impl Ty {
             Ty::Receiver(ty) => ty.collect_vars(vars),
             Ty::Mutex(ty) => ty.collect_vars(vars),
             Ty::MutexGuard(ty) => ty.collect_vars(vars),
+            Ty::RawPtr(ty) => ty.collect_vars(vars),
             Ty::Option(ty) => ty.collect_vars(vars),
             Ty::Result(ok, err) => {
                 ok.collect_vars(vars);
@@ -271,6 +302,7 @@ impl Ty {
             Ty::Receiver(ty) => Ty::Receiver(Box::new(ty.apply(subst))),
             Ty::Mutex(ty) => Ty::Mutex(Box::new(ty.apply(subst))),
             Ty::MutexGuard(ty) => Ty::MutexGuard(Box::new(ty.apply(subst))),
+            Ty::RawPtr(ty) => Ty::RawPtr(Box::new(ty.apply(subst))),
             Ty::Option(ty) => Ty::Option(Box::new(ty.apply(subst))),
             Ty::Result(ok, err) => {
                 Ty::Result(Box::new(ok.apply(subst)), Box::new(err.apply(subst)))
@@ -423,6 +455,18 @@ impl fmt::Display for Ty {
             Ty::Receiver(ty) => write!(f, "Receiver[{}]", ty),
             Ty::Mutex(ty) => write!(f, "Mutex[{}]", ty),
             Ty::MutexGuard(ty) => write!(f, "MutexGuard[{}]", ty),
+            Ty::TcpStream => write!(f, "TcpStream"),
+            Ty::TcpListener => write!(f, "TcpListener"),
+            Ty::UdpSocket => write!(f, "UdpSocket"),
+            Ty::CInt => write!(f, "CInt"),
+            Ty::CUInt => write!(f, "CUInt"),
+            Ty::CLong => write!(f, "CLong"),
+            Ty::CULong => write!(f, "CULong"),
+            Ty::CFloat => write!(f, "CFloat"),
+            Ty::CDouble => write!(f, "CDouble"),
+            Ty::CSize => write!(f, "CSize"),
+            Ty::RawPtr(ty) => write!(f, "*{}", ty),
+            Ty::CVoid => write!(f, "*Void"),
             Ty::Option(ty) => write!(f, "{}?", ty),
             Ty::Result(ok, err) => write!(f, "{}!{}", ok, err),
             Ty::Fn(params, ret) => {

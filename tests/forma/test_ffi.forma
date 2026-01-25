@@ -1,0 +1,110 @@
+# Test C FFI Builtins
+# Tests for C Foreign Function Interface primitives
+# Expected output: All tests pass
+
+# Test ptr_null and ptr_is_null
+f test_ptr_null() -> Bool
+    ptr := ptr_null()
+    ptr_is_null(ptr)
+
+# Test ptr_from_addr and ptr_addr
+f test_ptr_addr() -> Bool
+    ptr := ptr_from_addr(12345)
+    addr := ptr_addr(ptr)
+    addr == 12345
+
+# Test ptr_offset
+f test_ptr_offset() -> Bool
+    ptr := ptr_from_addr(1000)
+    ptr2 := ptr_offset(ptr, 100)
+    addr := ptr_addr(ptr2)
+    addr == 1100
+
+# Test str_to_cstr and cstr_to_str
+f test_cstr_conversion() -> Bool
+    original := "Hello, World!"
+    cstr := str_to_cstr(original)
+    result := cstr_to_str(cstr)
+    cstr_free(cstr)
+    result == original
+
+# Test cstr_to_str_len
+f test_cstr_to_str_len() -> Bool
+    cstr := str_to_cstr("Hello, World!")
+    result := cstr_to_str_len(cstr, 5)
+    cstr_free(cstr)
+    result == "Hello"
+
+# Test alloc and dealloc
+f test_alloc_dealloc() -> Bool
+    size := 1024
+    ptr := alloc(size)
+    is_valid := !ptr_is_null(ptr)
+    if is_valid
+        dealloc(ptr, size)
+    is_valid
+
+# Test alloc_zeroed
+f test_alloc_zeroed() -> Bool
+    size := 256
+    ptr := alloc_zeroed(size)
+    is_valid := !ptr_is_null(ptr)
+    if is_valid
+        dealloc(ptr, size)
+    is_valid
+
+# Test C type conversions
+f test_cint_conversion() -> Bool
+    n := 42
+    ci := to_cint(n)
+    back := from_cint(ci)
+    back == n
+
+f test_cfloat_conversion() -> Bool
+    n := 3.14
+    cf := to_cfloat(n)
+    back := from_cfloat(cf)
+    # Float conversion may lose precision
+    back > 3.13 && back < 3.15
+
+f test_cdouble_conversion() -> Bool
+    n := 3.14159265359
+    cd := to_cdouble(n)
+    back := from_cdouble(cd)
+    back == n
+
+f test_csize_conversion() -> Bool
+    n := 9999
+    cs := to_csize(n)
+    back := from_csize(cs)
+    back == n
+
+# Test sizeof
+f test_sizeof() -> Bool
+    ptr_size := sizeof("ptr")
+    int_size := sizeof("CInt")
+    # Pointer size should be either 4 (32-bit) or 8 (64-bit)
+    (ptr_size == 4 || ptr_size == 8) && int_size == 4
+
+f run_all_tests() -> Int
+    passed := 0
+    if test_ptr_null() then passed = passed + 1 else print("FAIL: test_ptr_null")
+    if test_ptr_addr() then passed = passed + 1 else print("FAIL: test_ptr_addr")
+    if test_ptr_offset() then passed = passed + 1 else print("FAIL: test_ptr_offset")
+    if test_cstr_conversion() then passed = passed + 1 else print("FAIL: test_cstr_conversion")
+    if test_cstr_to_str_len() then passed = passed + 1 else print("FAIL: test_cstr_to_str_len")
+    if test_alloc_dealloc() then passed = passed + 1 else print("FAIL: test_alloc_dealloc")
+    if test_alloc_zeroed() then passed = passed + 1 else print("FAIL: test_alloc_zeroed")
+    if test_cint_conversion() then passed = passed + 1 else print("FAIL: test_cint_conversion")
+    if test_cfloat_conversion() then passed = passed + 1 else print("FAIL: test_cfloat_conversion")
+    if test_cdouble_conversion() then passed = passed + 1 else print("FAIL: test_cdouble_conversion")
+    if test_csize_conversion() then passed = passed + 1 else print("FAIL: test_csize_conversion")
+    if test_sizeof() then passed = passed + 1 else print("FAIL: test_sizeof")
+
+    print("C FFI tests passed:")
+    print(passed)
+    print("of 12")
+
+    if passed == 12 then 1 else 0
+
+f main() -> Int = run_all_tests()

@@ -1,0 +1,78 @@
+# Test TCP/UDP Socket Builtins
+# Tests for network socket primitives
+# Expected output: All tests pass
+
+# Test TCP connect to a non-existent server (should fail gracefully)
+f test_tcp_connect_fail() -> Bool
+    result := tcp_connect("127.0.0.1", 59999)
+    m result
+        Ok(_) -> false  # Should not succeed
+        Err(_) -> true  # Expected to fail
+
+# Test TCP listener creation and immediate close
+f test_tcp_listen_close() -> Bool
+    result := tcp_listen("127.0.0.1", 0)  # Port 0 = random available port
+    m result
+        Ok(listener) ->
+            tcp_listener_close(listener)
+            true
+        Err(_) -> false
+
+# Test UDP socket bind and close
+f test_udp_bind_close() -> Bool
+    result := udp_bind("127.0.0.1", 0)  # Port 0 = random available port
+    m result
+        Ok(socket) ->
+            udp_close(socket)
+            true
+        Err(_) -> false
+
+# Test DNS lookup for localhost
+f test_dns_lookup_localhost() -> Bool
+    result := dns_lookup("localhost")
+    m result
+        Ok(ips) ->
+            vec_len(ips) > 0
+        Err(_) -> false
+
+# Test DNS lookup for invalid hostname (should fail gracefully)
+f test_dns_lookup_invalid() -> Bool
+    result := dns_lookup("this-hostname-should-not-exist-12345.invalid")
+    m result
+        Ok(_) -> false  # Might succeed on some DNS resolvers
+        Err(_) -> true  # Expected to fail
+
+# Test UDP send/recv with loopback (simplified test)
+f test_udp_loopback() -> Bool
+    # Create two UDP sockets - sender and receiver
+    recv_result := udp_bind("127.0.0.1", 0)
+    m recv_result
+        Ok(recv_socket) ->
+            send_result := udp_bind("127.0.0.1", 0)
+            m send_result
+                Ok(send_socket) ->
+                    # Just verify we can create sockets
+                    udp_close(send_socket)
+                    udp_close(recv_socket)
+                    true
+                Err(_) ->
+                    udp_close(recv_socket)
+                    false
+        Err(_) -> false
+
+f run_all_tests() -> Int
+    passed := 0
+    if test_tcp_connect_fail() then passed = passed + 1 else print("FAIL: test_tcp_connect_fail")
+    if test_tcp_listen_close() then passed = passed + 1 else print("FAIL: test_tcp_listen_close")
+    if test_udp_bind_close() then passed = passed + 1 else print("FAIL: test_udp_bind_close")
+    if test_dns_lookup_localhost() then passed = passed + 1 else print("FAIL: test_dns_lookup_localhost")
+    if test_dns_lookup_invalid() then passed = passed + 1 else print("FAIL: test_dns_lookup_invalid")
+    if test_udp_loopback() then passed = passed + 1 else print("FAIL: test_udp_loopback")
+
+    print("TCP/UDP tests passed:")
+    print(passed)
+    print("of 6")
+
+    if passed == 6 then 1 else 0
+
+f main() -> Int = run_all_tests()

@@ -80,6 +80,28 @@ pub enum Value {
     Mutex(u64),
     /// MutexGuard - holds a lock on a mutex
     MutexGuard(u64),
+    /// TCP stream for network connections
+    TcpStream(u64),
+    /// TCP listener for accepting connections
+    TcpListener(u64),
+    /// UDP socket for datagram communication
+    UdpSocket(u64),
+    /// Raw pointer (stores address as usize)
+    RawPtr(usize),
+    /// C int value
+    CInt(i32),
+    /// C unsigned int value
+    CUInt(u32),
+    /// C long value (platform-specific, using i64)
+    CLong(i64),
+    /// C unsigned long value (platform-specific, using u64)
+    CULong(u64),
+    /// C float value
+    CFloat(f32),
+    /// C double value
+    CDouble(f64),
+    /// C size_t value
+    CSize(usize),
 }
 
 impl Value {
@@ -187,6 +209,17 @@ impl std::fmt::Display for Value {
             Value::Receiver(id) => write!(f, "Receiver({})", id),
             Value::Mutex(id) => write!(f, "Mutex({})", id),
             Value::MutexGuard(id) => write!(f, "MutexGuard({})", id),
+            Value::TcpStream(id) => write!(f, "TcpStream({})", id),
+            Value::TcpListener(id) => write!(f, "TcpListener({})", id),
+            Value::UdpSocket(id) => write!(f, "UdpSocket({})", id),
+            Value::RawPtr(addr) => write!(f, "0x{:x}", addr),
+            Value::CInt(n) => write!(f, "{}c", n),
+            Value::CUInt(n) => write!(f, "{}uc", n),
+            Value::CLong(n) => write!(f, "{}L", n),
+            Value::CULong(n) => write!(f, "{}UL", n),
+            Value::CFloat(n) => write!(f, "{}f", n),
+            Value::CDouble(n) => write!(f, "{}d", n),
+            Value::CSize(n) => write!(f, "{}sz", n),
         }
     }
 }
@@ -238,6 +271,18 @@ pub struct Interpreter {
     mutexes: std::collections::HashMap<u64, (Value, bool)>,
     /// Next mutex ID
     next_mutex_id: u64,
+    /// TCP streams: maps stream ID to TcpStream
+    tcp_streams: std::collections::HashMap<u64, std::net::TcpStream>,
+    /// Next TCP stream ID
+    next_tcp_stream_id: u64,
+    /// TCP listeners: maps listener ID to TcpListener
+    tcp_listeners: std::collections::HashMap<u64, std::net::TcpListener>,
+    /// Next TCP listener ID
+    next_tcp_listener_id: u64,
+    /// UDP sockets: maps socket ID to UdpSocket
+    udp_sockets: std::collections::HashMap<u64, std::net::UdpSocket>,
+    /// Next UDP socket ID
+    next_udp_socket_id: u64,
 }
 
 impl Interpreter {
@@ -250,6 +295,12 @@ impl Interpreter {
             next_channel_id: 0,
             mutexes: std::collections::HashMap::new(),
             next_mutex_id: 0,
+            tcp_streams: std::collections::HashMap::new(),
+            next_tcp_stream_id: 0,
+            tcp_listeners: std::collections::HashMap::new(),
+            next_tcp_listener_id: 0,
+            udp_sockets: std::collections::HashMap::new(),
+            next_udp_socket_id: 0,
         }
     }
 
@@ -1368,6 +1419,17 @@ impl Interpreter {
                     Value::Receiver(_) => "Receiver",
                     Value::Mutex(_) => "Mutex",
                     Value::MutexGuard(_) => "MutexGuard",
+                    Value::TcpStream(_) => "TcpStream",
+                    Value::TcpListener(_) => "TcpListener",
+                    Value::UdpSocket(_) => "UdpSocket",
+                    Value::RawPtr(_) => "RawPtr",
+                    Value::CInt(_) => "CInt",
+                    Value::CUInt(_) => "CUInt",
+                    Value::CLong(_) => "CLong",
+                    Value::CULong(_) => "CULong",
+                    Value::CFloat(_) => "CFloat",
+                    Value::CDouble(_) => "CDouble",
+                    Value::CSize(_) => "CSize",
                 };
                 Ok(Some(Value::Str(type_name.to_string())))
             }
@@ -3274,6 +3336,722 @@ impl Interpreter {
                 fields.insert("headers".to_string(), Value::Map(HashMap::new()));
                 fields.insert("body".to_string(), Value::Str(body));
                 Ok(Some(Value::Struct("HttpRequest".to_string(), fields)))
+            }
+
+            // ===== TCP/UDP Socket builtins =====
+            "tcp_connect" => {
+                // tcp_connect(host: Str, port: Int) -> Result[TcpStream, Str]
+                let host = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "tcp_connect: host must be Str".to_string() }) };
+                let port = match &args[1] { Value::Int(n) => *n as u16, _ => return Err(InterpError { message: "tcp_connect: port must be Int".to_string() }) };
+                let addr = format!("{}:{}", host, port);
+                match std::net::TcpStream::connect(&addr) {
+                    Ok(stream) => {
+                        let id = self.next_tcp_stream_id;
+                        self.next_tcp_stream_id += 1;
+                        self.tcp_streams.insert(id, stream);
+                        Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Ok".to_string(),
+                            fields: vec![Value::TcpStream(id)],
+                        }))
+                    },
+                    Err(e) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    })),
+                }
+            }
+            "tcp_read" => {
+                // tcp_read(stream: TcpStream, max_bytes: Int) -> Result[Str, Str]
+                use std::io::Read;
+                let id = match &args[0] { Value::TcpStream(id) => *id, _ => return Err(InterpError { message: "tcp_read: expected TcpStream".to_string() }) };
+                let max_bytes = match &args[1] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "tcp_read: max_bytes must be Int".to_string() }) };
+                if let Some(stream) = self.tcp_streams.get_mut(&id) {
+                    let mut buf = vec![0u8; max_bytes];
+                    match stream.read(&mut buf) {
+                        Ok(n) => {
+                            buf.truncate(n);
+                            Ok(Some(Value::Enum {
+                                type_name: "Result".to_string(),
+                                variant: "Ok".to_string(),
+                                fields: vec![Value::Str(String::from_utf8_lossy(&buf).to_string())],
+                            }))
+                        },
+                        Err(e) => Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Err".to_string(),
+                            fields: vec![Value::Str(e.to_string())],
+                        })),
+                    }
+                } else {
+                    Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str("tcp_read: invalid stream".to_string())],
+                    }))
+                }
+            }
+            "tcp_read_exact" => {
+                // tcp_read_exact(stream: TcpStream, bytes: Int) -> Result[Str, Str]
+                use std::io::Read;
+                let id = match &args[0] { Value::TcpStream(id) => *id, _ => return Err(InterpError { message: "tcp_read_exact: expected TcpStream".to_string() }) };
+                let bytes = match &args[1] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "tcp_read_exact: bytes must be Int".to_string() }) };
+                if let Some(stream) = self.tcp_streams.get_mut(&id) {
+                    let mut buf = vec![0u8; bytes];
+                    match stream.read_exact(&mut buf) {
+                        Ok(()) => {
+                            Ok(Some(Value::Enum {
+                                type_name: "Result".to_string(),
+                                variant: "Ok".to_string(),
+                                fields: vec![Value::Str(String::from_utf8_lossy(&buf).to_string())],
+                            }))
+                        },
+                        Err(e) => Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Err".to_string(),
+                            fields: vec![Value::Str(e.to_string())],
+                        })),
+                    }
+                } else {
+                    Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str("tcp_read_exact: invalid stream".to_string())],
+                    }))
+                }
+            }
+            "tcp_read_line" => {
+                // tcp_read_line(stream: TcpStream) -> Result[Str, Str]
+                use std::io::{BufRead, BufReader};
+                let id = match &args[0] { Value::TcpStream(id) => *id, _ => return Err(InterpError { message: "tcp_read_line: expected TcpStream".to_string() }) };
+                if let Some(stream) = self.tcp_streams.get_mut(&id) {
+                    let stream_clone = match stream.try_clone() {
+                        Ok(s) => s,
+                        Err(e) => return Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Err".to_string(),
+                            fields: vec![Value::Str(e.to_string())],
+                        }))
+                    };
+                    let mut reader = BufReader::new(stream_clone);
+                    let mut line = String::new();
+                    match reader.read_line(&mut line) {
+                        Ok(_) => {
+                            Ok(Some(Value::Enum {
+                                type_name: "Result".to_string(),
+                                variant: "Ok".to_string(),
+                                fields: vec![Value::Str(line.trim_end_matches('\n').trim_end_matches('\r').to_string())],
+                            }))
+                        },
+                        Err(e) => Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Err".to_string(),
+                            fields: vec![Value::Str(e.to_string())],
+                        })),
+                    }
+                } else {
+                    Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str("tcp_read_line: invalid stream".to_string())],
+                    }))
+                }
+            }
+            "tcp_write" => {
+                // tcp_write(stream: TcpStream, data: Str) -> Result[Int, Str]
+                use std::io::Write;
+                let id = match &args[0] { Value::TcpStream(id) => *id, _ => return Err(InterpError { message: "tcp_write: expected TcpStream".to_string() }) };
+                let data = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "tcp_write: data must be Str".to_string() }) };
+                if let Some(stream) = self.tcp_streams.get_mut(&id) {
+                    match stream.write(data.as_bytes()) {
+                        Ok(n) => Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Ok".to_string(),
+                            fields: vec![Value::Int(n as i64)],
+                        })),
+                        Err(e) => Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Err".to_string(),
+                            fields: vec![Value::Str(e.to_string())],
+                        })),
+                    }
+                } else {
+                    Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str("tcp_write: invalid stream".to_string())],
+                    }))
+                }
+            }
+            "tcp_write_all" => {
+                // tcp_write_all(stream: TcpStream, data: Str) -> Result[(), Str]
+                use std::io::Write;
+                let id = match &args[0] { Value::TcpStream(id) => *id, _ => return Err(InterpError { message: "tcp_write_all: expected TcpStream".to_string() }) };
+                let data = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "tcp_write_all: data must be Str".to_string() }) };
+                if let Some(stream) = self.tcp_streams.get_mut(&id) {
+                    match stream.write_all(data.as_bytes()) {
+                        Ok(()) => Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Ok".to_string(),
+                            fields: vec![Value::Unit],
+                        })),
+                        Err(e) => Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Err".to_string(),
+                            fields: vec![Value::Str(e.to_string())],
+                        })),
+                    }
+                } else {
+                    Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str("tcp_write_all: invalid stream".to_string())],
+                    }))
+                }
+            }
+            "tcp_close" => {
+                // tcp_close(stream: TcpStream) -> ()
+                let id = match &args[0] { Value::TcpStream(id) => *id, _ => return Err(InterpError { message: "tcp_close: expected TcpStream".to_string() }) };
+                self.tcp_streams.remove(&id);
+                Ok(Some(Value::Unit))
+            }
+            "tcp_set_timeout" => {
+                // tcp_set_timeout(stream: TcpStream, ms: Int) -> ()
+                let id = match &args[0] { Value::TcpStream(id) => *id, _ => return Err(InterpError { message: "tcp_set_timeout: expected TcpStream".to_string() }) };
+                let ms = match &args[1] { Value::Int(n) => *n as u64, _ => return Err(InterpError { message: "tcp_set_timeout: ms must be Int".to_string() }) };
+                if let Some(stream) = self.tcp_streams.get_mut(&id) {
+                    let timeout = if ms == 0 { None } else { Some(Duration::from_millis(ms)) };
+                    let _ = stream.set_read_timeout(timeout);
+                    let _ = stream.set_write_timeout(timeout);
+                }
+                Ok(Some(Value::Unit))
+            }
+            "tcp_peer_addr" => {
+                // tcp_peer_addr(stream: TcpStream) -> Str
+                let id = match &args[0] { Value::TcpStream(id) => *id, _ => return Err(InterpError { message: "tcp_peer_addr: expected TcpStream".to_string() }) };
+                if let Some(stream) = self.tcp_streams.get(&id) {
+                    match stream.peer_addr() {
+                        Ok(addr) => Ok(Some(Value::Str(addr.to_string()))),
+                        Err(_) => Ok(Some(Value::Str("unknown".to_string()))),
+                    }
+                } else {
+                    Ok(Some(Value::Str("unknown".to_string())))
+                }
+            }
+            "tcp_local_addr" => {
+                // tcp_local_addr(stream: TcpStream) -> Str
+                let id = match &args[0] { Value::TcpStream(id) => *id, _ => return Err(InterpError { message: "tcp_local_addr: expected TcpStream".to_string() }) };
+                if let Some(stream) = self.tcp_streams.get(&id) {
+                    match stream.local_addr() {
+                        Ok(addr) => Ok(Some(Value::Str(addr.to_string()))),
+                        Err(_) => Ok(Some(Value::Str("unknown".to_string()))),
+                    }
+                } else {
+                    Ok(Some(Value::Str("unknown".to_string())))
+                }
+            }
+            "tcp_listen" => {
+                // tcp_listen(host: Str, port: Int) -> Result[TcpListener, Str]
+                let host = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "tcp_listen: host must be Str".to_string() }) };
+                let port = match &args[1] { Value::Int(n) => *n as u16, _ => return Err(InterpError { message: "tcp_listen: port must be Int".to_string() }) };
+                let addr = format!("{}:{}", host, port);
+                match std::net::TcpListener::bind(&addr) {
+                    Ok(listener) => {
+                        let id = self.next_tcp_listener_id;
+                        self.next_tcp_listener_id += 1;
+                        self.tcp_listeners.insert(id, listener);
+                        Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Ok".to_string(),
+                            fields: vec![Value::TcpListener(id)],
+                        }))
+                    },
+                    Err(e) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    })),
+                }
+            }
+            "tcp_accept" => {
+                // tcp_accept(listener: TcpListener) -> Result[TcpStream, Str]
+                let id = match &args[0] { Value::TcpListener(id) => *id, _ => return Err(InterpError { message: "tcp_accept: expected TcpListener".to_string() }) };
+                if let Some(listener) = self.tcp_listeners.get(&id) {
+                    match listener.accept() {
+                        Ok((stream, _addr)) => {
+                            let stream_id = self.next_tcp_stream_id;
+                            self.next_tcp_stream_id += 1;
+                            self.tcp_streams.insert(stream_id, stream);
+                            Ok(Some(Value::Enum {
+                                type_name: "Result".to_string(),
+                                variant: "Ok".to_string(),
+                                fields: vec![Value::TcpStream(stream_id)],
+                            }))
+                        },
+                        Err(e) => Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Err".to_string(),
+                            fields: vec![Value::Str(e.to_string())],
+                        })),
+                    }
+                } else {
+                    Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str("tcp_accept: invalid listener".to_string())],
+                    }))
+                }
+            }
+            "tcp_listener_close" => {
+                // tcp_listener_close(listener: TcpListener) -> ()
+                let id = match &args[0] { Value::TcpListener(id) => *id, _ => return Err(InterpError { message: "tcp_listener_close: expected TcpListener".to_string() }) };
+                self.tcp_listeners.remove(&id);
+                Ok(Some(Value::Unit))
+            }
+
+            // UDP builtins
+            "udp_bind" => {
+                // udp_bind(host: Str, port: Int) -> Result[UdpSocket, Str]
+                let host = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "udp_bind: host must be Str".to_string() }) };
+                let port = match &args[1] { Value::Int(n) => *n as u16, _ => return Err(InterpError { message: "udp_bind: port must be Int".to_string() }) };
+                let addr = format!("{}:{}", host, port);
+                match std::net::UdpSocket::bind(&addr) {
+                    Ok(socket) => {
+                        let id = self.next_udp_socket_id;
+                        self.next_udp_socket_id += 1;
+                        self.udp_sockets.insert(id, socket);
+                        Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Ok".to_string(),
+                            fields: vec![Value::UdpSocket(id)],
+                        }))
+                    },
+                    Err(e) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    })),
+                }
+            }
+            "udp_send_to" => {
+                // udp_send_to(socket: UdpSocket, addr: Str, port: Int, data: Str) -> Result[Int, Str]
+                let id = match &args[0] { Value::UdpSocket(id) => *id, _ => return Err(InterpError { message: "udp_send_to: expected UdpSocket".to_string() }) };
+                let addr = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "udp_send_to: addr must be Str".to_string() }) };
+                let port = match &args[2] { Value::Int(n) => *n as u16, _ => return Err(InterpError { message: "udp_send_to: port must be Int".to_string() }) };
+                let data = match &args[3] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "udp_send_to: data must be Str".to_string() }) };
+                let target = format!("{}:{}", addr, port);
+                if let Some(socket) = self.udp_sockets.get(&id) {
+                    match socket.send_to(data.as_bytes(), &target) {
+                        Ok(n) => Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Ok".to_string(),
+                            fields: vec![Value::Int(n as i64)],
+                        })),
+                        Err(e) => Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Err".to_string(),
+                            fields: vec![Value::Str(e.to_string())],
+                        })),
+                    }
+                } else {
+                    Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str("udp_send_to: invalid socket".to_string())],
+                    }))
+                }
+            }
+            "udp_recv_from" => {
+                // udp_recv_from(socket: UdpSocket, max_bytes: Int) -> Result[(Str, Str, Int), Str]
+                let id = match &args[0] { Value::UdpSocket(id) => *id, _ => return Err(InterpError { message: "udp_recv_from: expected UdpSocket".to_string() }) };
+                let max_bytes = match &args[1] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "udp_recv_from: max_bytes must be Int".to_string() }) };
+                if let Some(socket) = self.udp_sockets.get(&id) {
+                    let mut buf = vec![0u8; max_bytes];
+                    match socket.recv_from(&mut buf) {
+                        Ok((n, addr)) => {
+                            buf.truncate(n);
+                            let ip = addr.ip().to_string();
+                            let port = addr.port() as i64;
+                            Ok(Some(Value::Enum {
+                                type_name: "Result".to_string(),
+                                variant: "Ok".to_string(),
+                                fields: vec![Value::Tuple(vec![
+                                    Value::Str(String::from_utf8_lossy(&buf).to_string()),
+                                    Value::Str(ip),
+                                    Value::Int(port),
+                                ])],
+                            }))
+                        },
+                        Err(e) => Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Err".to_string(),
+                            fields: vec![Value::Str(e.to_string())],
+                        })),
+                    }
+                } else {
+                    Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str("udp_recv_from: invalid socket".to_string())],
+                    }))
+                }
+            }
+            "udp_close" => {
+                // udp_close(socket: UdpSocket) -> ()
+                let id = match &args[0] { Value::UdpSocket(id) => *id, _ => return Err(InterpError { message: "udp_close: expected UdpSocket".to_string() }) };
+                self.udp_sockets.remove(&id);
+                Ok(Some(Value::Unit))
+            }
+            "udp_connect" => {
+                // udp_connect(socket: UdpSocket, addr: Str, port: Int) -> Result[(), Str]
+                let id = match &args[0] { Value::UdpSocket(id) => *id, _ => return Err(InterpError { message: "udp_connect: expected UdpSocket".to_string() }) };
+                let addr = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "udp_connect: addr must be Str".to_string() }) };
+                let port = match &args[2] { Value::Int(n) => *n as u16, _ => return Err(InterpError { message: "udp_connect: port must be Int".to_string() }) };
+                let target = format!("{}:{}", addr, port);
+                if let Some(socket) = self.udp_sockets.get(&id) {
+                    match socket.connect(&target) {
+                        Ok(()) => Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Ok".to_string(),
+                            fields: vec![Value::Unit],
+                        })),
+                        Err(e) => Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Err".to_string(),
+                            fields: vec![Value::Str(e.to_string())],
+                        })),
+                    }
+                } else {
+                    Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str("udp_connect: invalid socket".to_string())],
+                    }))
+                }
+            }
+            "udp_send" => {
+                // udp_send(socket: UdpSocket, data: Str) -> Result[Int, Str]
+                let id = match &args[0] { Value::UdpSocket(id) => *id, _ => return Err(InterpError { message: "udp_send: expected UdpSocket".to_string() }) };
+                let data = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "udp_send: data must be Str".to_string() }) };
+                if let Some(socket) = self.udp_sockets.get(&id) {
+                    match socket.send(data.as_bytes()) {
+                        Ok(n) => Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Ok".to_string(),
+                            fields: vec![Value::Int(n as i64)],
+                        })),
+                        Err(e) => Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Err".to_string(),
+                            fields: vec![Value::Str(e.to_string())],
+                        })),
+                    }
+                } else {
+                    Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str("udp_send: invalid socket".to_string())],
+                    }))
+                }
+            }
+            "udp_recv" => {
+                // udp_recv(socket: UdpSocket, max_bytes: Int) -> Result[Str, Str]
+                let id = match &args[0] { Value::UdpSocket(id) => *id, _ => return Err(InterpError { message: "udp_recv: expected UdpSocket".to_string() }) };
+                let max_bytes = match &args[1] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "udp_recv: max_bytes must be Int".to_string() }) };
+                if let Some(socket) = self.udp_sockets.get(&id) {
+                    let mut buf = vec![0u8; max_bytes];
+                    match socket.recv(&mut buf) {
+                        Ok(n) => {
+                            buf.truncate(n);
+                            Ok(Some(Value::Enum {
+                                type_name: "Result".to_string(),
+                                variant: "Ok".to_string(),
+                                fields: vec![Value::Str(String::from_utf8_lossy(&buf).to_string())],
+                            }))
+                        },
+                        Err(e) => Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Err".to_string(),
+                            fields: vec![Value::Str(e.to_string())],
+                        })),
+                    }
+                } else {
+                    Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str("udp_recv: invalid socket".to_string())],
+                    }))
+                }
+            }
+
+            // DNS builtins
+            "dns_lookup" => {
+                // dns_lookup(hostname: Str) -> Result[[Str], Str]
+                use std::net::ToSocketAddrs;
+                let hostname = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "dns_lookup: hostname must be Str".to_string() }) };
+                // Add a port to make it a valid socket address
+                let addr_str = format!("{}:0", hostname);
+                match addr_str.to_socket_addrs() {
+                    Ok(addrs) => {
+                        let ips: Vec<Value> = addrs.map(|a| Value::Str(a.ip().to_string())).collect();
+                        Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Ok".to_string(),
+                            fields: vec![Value::Array(ips)],
+                        }))
+                    },
+                    Err(e) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    })),
+                }
+            }
+            "dns_reverse_lookup" => {
+                // dns_reverse_lookup(ip: Str) -> Result[Str, Str]
+                // Note: Reverse DNS is not directly supported by std::net, return the IP as-is
+                let ip = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "dns_reverse_lookup: ip must be Str".to_string() }) };
+                // Just validate it's a valid IP address
+                match ip.parse::<std::net::IpAddr>() {
+                    Ok(_) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Ok".to_string(),
+                        fields: vec![Value::Str(ip)], // Return IP as hostname (no PTR lookup in std)
+                    })),
+                    Err(e) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    })),
+                }
+            }
+
+            // ===== C FFI builtins =====
+            "ptr_null" => {
+                // ptr_null() -> *T
+                Ok(Some(Value::RawPtr(0)))
+            }
+            "ptr_is_null" => {
+                // ptr_is_null(p: *T) -> Bool
+                let addr = match &args[0] { Value::RawPtr(a) => *a, _ => return Err(InterpError { message: "ptr_is_null: expected RawPtr".to_string() }) };
+                Ok(Some(Value::Bool(addr == 0)))
+            }
+            "ptr_offset" => {
+                // ptr_offset(p: *T, offset: Int) -> *T
+                let addr = match &args[0] { Value::RawPtr(a) => *a, _ => return Err(InterpError { message: "ptr_offset: expected RawPtr".to_string() }) };
+                let offset = match &args[1] { Value::Int(n) => *n, _ => return Err(InterpError { message: "ptr_offset: offset must be Int".to_string() }) };
+                let new_addr = if offset >= 0 {
+                    addr.wrapping_add(offset as usize)
+                } else {
+                    addr.wrapping_sub((-offset) as usize)
+                };
+                Ok(Some(Value::RawPtr(new_addr)))
+            }
+            "ptr_addr" => {
+                // ptr_addr(p: *T) -> Int - get the numeric address of a pointer
+                let addr = match &args[0] { Value::RawPtr(a) => *a, _ => return Err(InterpError { message: "ptr_addr: expected RawPtr".to_string() }) };
+                Ok(Some(Value::Int(addr as i64)))
+            }
+            "ptr_from_addr" => {
+                // ptr_from_addr(addr: Int) -> *Void - create a pointer from an address
+                let addr = match &args[0] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "ptr_from_addr: addr must be Int".to_string() }) };
+                Ok(Some(Value::RawPtr(addr)))
+            }
+
+            // String conversion
+            "str_to_cstr" => {
+                // str_to_cstr(s: Str) -> *Char
+                // Allocate a null-terminated C string and return pointer to it
+                let s = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "str_to_cstr: expected Str".to_string() }) };
+                let cstring = std::ffi::CString::new(s).map_err(|e| InterpError { message: format!("str_to_cstr: {}", e) })?;
+                let ptr = cstring.into_raw();
+                Ok(Some(Value::RawPtr(ptr as usize)))
+            }
+            "cstr_to_str" => {
+                // cstr_to_str(p: *Char) -> Str
+                let addr = match &args[0] { Value::RawPtr(a) => *a, _ => return Err(InterpError { message: "cstr_to_str: expected RawPtr".to_string() }) };
+                if addr == 0 {
+                    return Ok(Some(Value::Str(String::new())));
+                }
+                unsafe {
+                    let cstr = std::ffi::CStr::from_ptr(addr as *const std::os::raw::c_char);
+                    Ok(Some(Value::Str(cstr.to_string_lossy().into_owned())))
+                }
+            }
+            "cstr_to_str_len" => {
+                // cstr_to_str_len(p: *Char, len: Int) -> Str
+                let addr = match &args[0] { Value::RawPtr(a) => *a, _ => return Err(InterpError { message: "cstr_to_str_len: expected RawPtr".to_string() }) };
+                let len = match &args[1] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "cstr_to_str_len: len must be Int".to_string() }) };
+                if addr == 0 || len == 0 {
+                    return Ok(Some(Value::Str(String::new())));
+                }
+                unsafe {
+                    let slice = std::slice::from_raw_parts(addr as *const u8, len);
+                    Ok(Some(Value::Str(String::from_utf8_lossy(slice).into_owned())))
+                }
+            }
+            "cstr_free" => {
+                // cstr_free(p: *Char) -> () - free a C string allocated by str_to_cstr
+                let addr = match &args[0] { Value::RawPtr(a) => *a, _ => return Err(InterpError { message: "cstr_free: expected RawPtr".to_string() }) };
+                if addr != 0 {
+                    unsafe {
+                        let _ = std::ffi::CString::from_raw(addr as *mut std::os::raw::c_char);
+                    }
+                }
+                Ok(Some(Value::Unit))
+            }
+
+            // Memory allocation
+            "alloc" => {
+                // alloc(size: Int) -> *Void
+                let size = match &args[0] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "alloc: size must be Int".to_string() }) };
+                if size == 0 {
+                    return Ok(Some(Value::RawPtr(0)));
+                }
+                let layout = std::alloc::Layout::from_size_align(size, 8).map_err(|e| InterpError { message: format!("alloc: {}", e) })?;
+                let ptr = unsafe { std::alloc::alloc(layout) };
+                if ptr.is_null() {
+                    Ok(Some(Value::RawPtr(0)))
+                } else {
+                    Ok(Some(Value::RawPtr(ptr as usize)))
+                }
+            }
+            "alloc_zeroed" => {
+                // alloc_zeroed(size: Int) -> *Void
+                let size = match &args[0] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "alloc_zeroed: size must be Int".to_string() }) };
+                if size == 0 {
+                    return Ok(Some(Value::RawPtr(0)));
+                }
+                let layout = std::alloc::Layout::from_size_align(size, 8).map_err(|e| InterpError { message: format!("alloc_zeroed: {}", e) })?;
+                let ptr = unsafe { std::alloc::alloc_zeroed(layout) };
+                if ptr.is_null() {
+                    Ok(Some(Value::RawPtr(0)))
+                } else {
+                    Ok(Some(Value::RawPtr(ptr as usize)))
+                }
+            }
+            "dealloc" => {
+                // dealloc(ptr: *Void, size: Int) -> ()
+                let addr = match &args[0] { Value::RawPtr(a) => *a, _ => return Err(InterpError { message: "dealloc: expected RawPtr".to_string() }) };
+                let size = match &args[1] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "dealloc: size must be Int".to_string() }) };
+                if addr != 0 && size > 0 {
+                    let layout = std::alloc::Layout::from_size_align(size, 8).map_err(|e| InterpError { message: format!("dealloc: {}", e) })?;
+                    unsafe { std::alloc::dealloc(addr as *mut u8, layout) };
+                }
+                Ok(Some(Value::Unit))
+            }
+            "mem_copy" => {
+                // mem_copy(dst: *Void, src: *Void, size: Int) -> ()
+                let dst = match &args[0] { Value::RawPtr(a) => *a, _ => return Err(InterpError { message: "mem_copy: dst must be RawPtr".to_string() }) };
+                let src = match &args[1] { Value::RawPtr(a) => *a, _ => return Err(InterpError { message: "mem_copy: src must be RawPtr".to_string() }) };
+                let size = match &args[2] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "mem_copy: size must be Int".to_string() }) };
+                if dst != 0 && src != 0 && size > 0 {
+                    unsafe { std::ptr::copy_nonoverlapping(src as *const u8, dst as *mut u8, size) };
+                }
+                Ok(Some(Value::Unit))
+            }
+            "mem_set" => {
+                // mem_set(ptr: *Void, value: Int, size: Int) -> ()
+                let ptr = match &args[0] { Value::RawPtr(a) => *a, _ => return Err(InterpError { message: "mem_set: ptr must be RawPtr".to_string() }) };
+                let value = match &args[1] { Value::Int(n) => *n as u8, _ => return Err(InterpError { message: "mem_set: value must be Int".to_string() }) };
+                let size = match &args[2] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "mem_set: size must be Int".to_string() }) };
+                if ptr != 0 && size > 0 {
+                    unsafe { std::ptr::write_bytes(ptr as *mut u8, value, size) };
+                }
+                Ok(Some(Value::Unit))
+            }
+
+            // C type conversions
+            "to_cint" => {
+                // to_cint(n: Int) -> CInt
+                let n = match &args[0] { Value::Int(n) => *n as i32, _ => return Err(InterpError { message: "to_cint: expected Int".to_string() }) };
+                Ok(Some(Value::CInt(n)))
+            }
+            "from_cint" => {
+                // from_cint(n: CInt) -> Int
+                let n = match &args[0] { Value::CInt(n) => *n as i64, _ => return Err(InterpError { message: "from_cint: expected CInt".to_string() }) };
+                Ok(Some(Value::Int(n)))
+            }
+            "to_cuint" => {
+                // to_cuint(n: Int) -> CUInt
+                let n = match &args[0] { Value::Int(n) => *n as u32, _ => return Err(InterpError { message: "to_cuint: expected Int".to_string() }) };
+                Ok(Some(Value::CUInt(n)))
+            }
+            "from_cuint" => {
+                // from_cuint(n: CUInt) -> Int
+                let n = match &args[0] { Value::CUInt(n) => *n as i64, _ => return Err(InterpError { message: "from_cuint: expected CUInt".to_string() }) };
+                Ok(Some(Value::Int(n)))
+            }
+            "to_clong" => {
+                // to_clong(n: Int) -> CLong
+                let n = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "to_clong: expected Int".to_string() }) };
+                Ok(Some(Value::CLong(n)))
+            }
+            "from_clong" => {
+                // from_clong(n: CLong) -> Int
+                let n = match &args[0] { Value::CLong(n) => *n, _ => return Err(InterpError { message: "from_clong: expected CLong".to_string() }) };
+                Ok(Some(Value::Int(n)))
+            }
+            "to_culong" => {
+                // to_culong(n: Int) -> CULong
+                let n = match &args[0] { Value::Int(n) => *n as u64, _ => return Err(InterpError { message: "to_culong: expected Int".to_string() }) };
+                Ok(Some(Value::CULong(n)))
+            }
+            "from_culong" => {
+                // from_culong(n: CULong) -> Int
+                let n = match &args[0] { Value::CULong(n) => *n as i64, _ => return Err(InterpError { message: "from_culong: expected CULong".to_string() }) };
+                Ok(Some(Value::Int(n)))
+            }
+            "to_cfloat" => {
+                // to_cfloat(n: Float) -> CFloat
+                let n = match &args[0] { Value::Float(n) => *n as f32, _ => return Err(InterpError { message: "to_cfloat: expected Float".to_string() }) };
+                Ok(Some(Value::CFloat(n)))
+            }
+            "from_cfloat" => {
+                // from_cfloat(n: CFloat) -> Float
+                let n = match &args[0] { Value::CFloat(n) => *n as f64, _ => return Err(InterpError { message: "from_cfloat: expected CFloat".to_string() }) };
+                Ok(Some(Value::Float(n)))
+            }
+            "to_cdouble" => {
+                // to_cdouble(n: Float) -> CDouble
+                let n = match &args[0] { Value::Float(n) => *n, _ => return Err(InterpError { message: "to_cdouble: expected Float".to_string() }) };
+                Ok(Some(Value::CDouble(n)))
+            }
+            "from_cdouble" => {
+                // from_cdouble(n: CDouble) -> Float
+                let n = match &args[0] { Value::CDouble(n) => *n, _ => return Err(InterpError { message: "from_cdouble: expected CDouble".to_string() }) };
+                Ok(Some(Value::Float(n)))
+            }
+            "to_csize" => {
+                // to_csize(n: Int) -> CSize
+                let n = match &args[0] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "to_csize: expected Int".to_string() }) };
+                Ok(Some(Value::CSize(n)))
+            }
+            "from_csize" => {
+                // from_csize(n: CSize) -> Int
+                let n = match &args[0] { Value::CSize(n) => *n as i64, _ => return Err(InterpError { message: "from_csize: expected CSize".to_string() }) };
+                Ok(Some(Value::Int(n)))
+            }
+            "sizeof" => {
+                // sizeof(type_name: Str) -> Int - returns size of C type in bytes
+                let type_name = match &args[0] { Value::Str(s) => s.as_str(), _ => return Err(InterpError { message: "sizeof: expected Str".to_string() }) };
+                let size = match type_name {
+                    "CInt" | "cint" | "int" => std::mem::size_of::<i32>(),
+                    "CUInt" | "cuint" | "uint" => std::mem::size_of::<u32>(),
+                    "CLong" | "clong" | "long" => std::mem::size_of::<i64>(),
+                    "CULong" | "culong" | "ulong" => std::mem::size_of::<u64>(),
+                    "CFloat" | "cfloat" | "float" => std::mem::size_of::<f32>(),
+                    "CDouble" | "cdouble" | "double" => std::mem::size_of::<f64>(),
+                    "CSize" | "csize" | "size_t" => std::mem::size_of::<usize>(),
+                    "ptr" | "pointer" | "*" => std::mem::size_of::<usize>(),
+                    "char" | "i8" => 1,
+                    "i16" | "short" => 2,
+                    "i32" => 4,
+                    "i64" => 8,
+                    _ => return Err(InterpError { message: format!("sizeof: unknown type '{}'", type_name) })
+                };
+                Ok(Some(Value::Int(size as i64)))
             }
 
             // ===== JSON operations =====
