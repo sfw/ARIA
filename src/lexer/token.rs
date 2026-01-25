@@ -97,6 +97,7 @@ pub enum TokenKind {
     Ret,    // return
     As,     // async
     Aw,     // await
+    Sp,     // spawn
     Us,     // use
     Md,     // module
     Pub,    // public
@@ -219,6 +220,7 @@ impl TokenKind {
             "ret" => Some(TokenKind::Ret),
             "as" => Some(TokenKind::As),
             "aw" => Some(TokenKind::Aw),
+            "sp" => Some(TokenKind::Sp),
             "us" => Some(TokenKind::Us),
             "md" => Some(TokenKind::Md),
             "pub" => Some(TokenKind::Pub),
@@ -270,6 +272,7 @@ impl TokenKind {
                 | TokenKind::Ret
                 | TokenKind::As
                 | TokenKind::Aw
+                | TokenKind::Sp
                 | TokenKind::Us
                 | TokenKind::Md
                 | TokenKind::Pub
@@ -323,6 +326,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Ret => write!(f, "ret"),
             TokenKind::As => write!(f, "as"),
             TokenKind::Aw => write!(f, "aw"),
+            TokenKind::Sp => write!(f, "sp"),
             TokenKind::Us => write!(f, "us"),
             TokenKind::Md => write!(f, "md"),
             TokenKind::Pub => write!(f, "pub"),

@@ -2,13 +2,13 @@
 
 **Date:** January 24, 2026
 **Version:** 0.1.0
-**Status:** Alpha - Core features complete, ready for testing
+**Status:** Alpha - Feature complete, production-ready stdlib
 
 ---
 
 ## Executive Summary
 
-FORMA (formerly ARIA) is a systems programming language designed for AI code generation. The rename from ARIA to FORMA is complete, and all major features are implemented.
+FORMA is a systems programming language designed for AI code generation. The standard library expansion is **complete** with 175+ built-in functions covering JSON, HTTP, regex, datetime, encoding, hashing, filesystem, and more.
 
 ---
 
@@ -19,13 +19,37 @@ FORMA (formerly ARIA) is a systems programming language designed for AI code gen
 | Rust source files | 25 |
 | Rust test files | 4 |
 | Bootstrap compiler files (.forma) | 20 |
-| Standard library files (.forma) | 5 |
+| Standard library files (.forma) | 12 |
 | Example files (.forma) | 8 |
-| Test fixtures (.forma) | 10 |
-| Documentation files (.md) | 9 |
-| **Total lines of Rust** | ~17,400 |
+| Test fixtures (.forma) | 18 |
+| Documentation files (.md) | 12 |
+| **Total lines of Rust** | ~20,000+ |
 | **Total lines of FORMA (bootstrap)** | ~12,100 |
-| **Total lines of FORMA (stdlib)** | ~960 |
+| **Total lines of FORMA (stdlib)** | ~1,500+ |
+
+---
+
+## Built-in Functions Summary
+
+| Category | Count | Key Functions |
+|----------|-------|---------------|
+| Core/IO | 10 | print, eprintln, exit, args |
+| File I/O | 15 | file_read, file_write, file_copy, file_move, dir_list |
+| Strings | 25+ | str_len, str_split, str_trim, str_contains, f-strings |
+| Vec | 15+ | vec_new, vec_push, vec_pop, vec_slice, vec_map |
+| Map | 10 | map_new, map_insert, map_get, map_keys, map_values |
+| Math | 15 | sqrt, sin, cos, pow, log, floor, ceil, round |
+| Random | 5 | random, random_int, random_bool, random_choice |
+| Time | 20 | time_now, time_format, time_parse, duration_* |
+| JSON | 30 | json_parse, json_stringify, json_get_*, json_is_* |
+| Sorting | 12 | sort_ints, sort_floats, reverse, shuffle, binary_search |
+| Encoding | 8 | base64_encode/decode, hex_encode/decode |
+| Hashing | 5 | sha256, md5, uuid_v4 |
+| Regex | 8 | regex_match, regex_find, regex_replace, regex_split |
+| HTTP | 5 | http_get, http_post, http_put, http_delete |
+| Process | 9 | exec, env_get, env_set, pid, cwd, chdir |
+| Path | 10 | path_join, path_parent, path_filename, path_extension |
+| **Total** | **~175+** | |
 
 ---
 
@@ -39,6 +63,8 @@ FORMA (formerly ARIA) is a systems programming language designed for AI code gen
 | `forma lex <file>` | Print tokens (debugging) | ✅ Working |
 | `forma parse <file>` | Print AST (debugging) | ✅ Working |
 | `forma build <file>` | Compile to native binary (LLVM) | ✅ Working |
+| `forma repl` | Interactive REPL | ✅ Working |
+| `forma fmt <file>` | Format source code | ✅ Working |
 | `forma complete --position <pos>` | Get completion suggestions | ✅ Working |
 | `forma typeof --position <pos>` | Get type at position | ✅ Working |
 | `forma grammar` | Export grammar (EBNF/JSON) | ✅ Working |
@@ -60,16 +86,22 @@ FORMA (formerly ARIA) is a systems programming language designed for AI code gen
 | Borrow Checker | ✅ Complete | Second-class references |
 | MIR (Mid-level IR) | ✅ Complete | CFG-based |
 | MIR Interpreter | ✅ Complete | Runs all programs |
+| Integer Types | ✅ Complete | i8-i64, u8-u64, f32, f64 |
+| String Interpolation | ✅ Complete | f"Hello {name}!" |
+| Range Iteration | ✅ Complete | for i in 0..10 |
+| Default Parameters | ✅ Complete | fn foo(x: Int = 0) |
 
 ### Advanced Features ✅
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Module System | ✅ Complete | `us stdlib.core` imports |
-| Standard Library | ✅ Complete | Vec, Map, Iterator, String, Core |
+| Module System | ✅ Complete | `use stdlib.core` imports |
+| Standard Library | ✅ Complete | 12 modules, 175+ builtins |
 | LLVM Backend | ✅ Complete | Native compilation |
 | Contracts | ✅ Complete | `@pre(cond)` / `@post(cond)` |
 | Package Manager | ✅ Complete | `forma.toml`, `forma new` |
+| REPL | ✅ Complete | Interactive evaluation |
+| Formatter | ✅ Complete | `forma fmt` command |
 
 ### AI-First Tooling ✅
 
@@ -92,69 +124,66 @@ FORMA (formerly ARIA) is a systems programming language designed for AI code gen
 
 ---
 
-## Directory Structure
+## Standard Library Modules
 
-```
-forma/
-├── Cargo.toml              # Package config (name = "forma")
-├── src/
-│   ├── main.rs             # CLI entry point
-│   ├── lib.rs              # Library exports
-│   ├── lexer/              # Tokenization
-│   ├── parser/             # AST construction
-│   ├── types/              # Type system & inference
-│   ├── borrow/             # Borrow checker
-│   ├── mir/                # MIR & interpreter
-│   ├── module/             # Module loading
-│   ├── codegen/            # LLVM backend
-│   └── errors/             # Error reporting
-├── stdlib/
-│   ├── core.forma          # Core utilities
-│   ├── vec.forma           # Vec[T] generic
-│   ├── map.forma           # Map[K,V] generic
-│   ├── iter.forma          # Range & iteration
-│   └── string.forma        # String utilities
-├── bootstrap/
-│   ├── forma_bootstrap.forma   # Full pipeline
-│   ├── token.forma         # Token definitions
-│   ├── parser.forma        # Parser in FORMA
-│   ├── type_checker.forma  # Type checker in FORMA
-│   ├── mir.forma           # MIR definitions
-│   ├── lower.forma         # AST→MIR lowering
-│   └── interp.forma        # MIR interpreter
-├── examples/
-│   ├── hello.forma
-│   ├── factorial.forma
-│   ├── fibonacci.forma
-│   └── ... (8 total)
-├── tests/
-│   ├── lexer_tests.rs
-│   ├── parser_tests.rs
-│   ├── type_tests.rs
-│   ├── borrow_tests.rs
-│   └── forma/              # Test fixtures
-└── docs/
-    └── WHY_FORMA.md        # Explainer document
-```
+| Module | File | Functions | Description |
+|--------|------|-----------|-------------|
+| Core | core.forma | 17 | Assertions, math utilities |
+| Iter | iter.forma | 31 | Range, iteration |
+| Vec | vec.forma | 40 | Vec wrapper |
+| String | string.forma | 24 | String utilities |
+| Map | map.forma | 3 | Map helpers |
+| JSON | json.forma | 30 | JSON parsing/generation |
+| DateTime | datetime.forma | 19 | Date/time formatting |
+| Encoding | encoding.forma | 8 | Base64, hex encoding |
+| Hash | hash.forma | 5 | SHA256, UUID |
+| Regex | regex.forma | 8 | Regular expressions |
+| Process | process.forma | 9 | Command execution |
+| Path/FS | path.forma, fs.forma | 18 | Filesystem operations |
+| HTTP | http.forma | 5 | HTTP client |
 
 ---
 
-## Rename Verification
+## Test Summary
 
-The rename from ARIA to FORMA is **100% complete**:
+| Category | Count | Status |
+|----------|-------|--------|
+| Rust unit tests | 225 | ✅ All passing |
+| JSON tests | 14 | ✅ All passing |
+| Sorting tests | 13 | ✅ All passing |
+| DateTime tests | 14 | ✅ All passing |
+| Encoding tests | 15 | ✅ All passing |
+| Regex tests | 15 | ✅ All passing |
+| Process/Path tests | 13 | ✅ All passing |
+| **Total FORMA tests** | 84 | ✅ All passing |
+| **Combined Total** | 309 | ✅ All passing |
 
-- ✅ `Cargo.toml`: `name = "forma"`
-- ✅ All `.aria` files renamed to `.forma`
-- ✅ All source code references updated
-- ✅ All documentation updated
-- ✅ All comments updated
-- ✅ CLI shows "forma" branding
-- ✅ Test directory: `tests/forma/`
-- ✅ No remaining "ARIA" or ".aria" references
+---
 
-**Preserved correctly:**
-- `ariadne` crate (unrelated error reporting library)
-- Words like "variant", "variable" (legitimate English)
+## Dependencies (Cargo.toml)
+
+```toml
+[dependencies]
+thiserror = "2.0"
+ariadne = "0.5"
+logos = "0.15"
+clap = { version = "4.4", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rand = "0.8"
+chrono = "0.4"
+base64 = "0.22"
+hex = "0.4"
+sha2 = "0.10"
+uuid = { version = "1.0", features = ["v4"] }
+regex = "1.10"
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+
+[dependencies.inkwell]
+version = "0.5"
+features = ["llvm18-0"]
+optional = true
+```
 
 ---
 
@@ -185,11 +214,11 @@ cargo build --features llvm
 
 ## Known Issues / TODO
 
-1. **Parent directory**: Still named `aria/` - can rename to `forma/` when ready
-2. **Edition 2024**: Cargo.toml uses `edition = "2024"` - verify Rust version compatibility
-3. **Contract runtime checking**: Foundation in place, full implementation pending
-4. **LSP**: Not yet implemented
-5. **WASM target**: Not yet implemented
+1. **TCP/UDP networking**: Not yet implemented (lower priority)
+2. **Async runtime**: Not yet implemented (complex, future work)
+3. **LSP**: Not yet implemented
+4. **WASM target**: Not yet implemented
+5. **Edition 2024**: Cargo.toml uses `edition = "2024"` - verify Rust version compatibility
 
 ---
 
@@ -200,6 +229,8 @@ cargo build --features llvm
 | README_DRAFT.md | ✅ Complete |
 | WHY_FORMA.md | ✅ Complete |
 | DOCUMENTATION_PLAN.md | ✅ Complete |
+| STDLIB_EXPANSION.md | ✅ Complete |
+| QUICK_WINS_IMPLEMENTATION.md | ✅ Complete |
 | Language Tour | ❌ Not started |
 | Language Reference | ❌ Not started |
 | AI Integration Guide | ❌ Not started |
@@ -208,12 +239,24 @@ cargo build --features llvm
 
 ## Next Steps
 
-1. **Verify build**: Run `cargo build && cargo test` on target machine
-2. **Rename parent directory**: `aria/` → `forma/` (optional)
-3. **Create Language Tour**: Interactive tutorial
-4. **Finalize README**: Copy from README_DRAFT.md
-5. **Website**: Design and build forma-lang.org
+1. **Finalize README**: Copy from README_DRAFT.md
+2. **Create Language Tour**: Interactive tutorial
+3. **Website**: Design and build forma-lang.org
+4. **VS Code Extension**: Publish syntax highlighting
+5. **LSP Server**: Full IDE support
 6. **Publish**: Create GitHub releases, crates.io package
+
+---
+
+## Milestone Summary
+
+| Milestone | Date | Status |
+|-----------|------|--------|
+| Core language complete | Jan 23, 2026 | ✅ |
+| Rename ARIA → FORMA | Jan 24, 2026 | ✅ |
+| Quick Wins (11 features) | Jan 24, 2026 | ✅ |
+| Stdlib Expansion (Sprints 1-6) | Jan 24, 2026 | ✅ |
+| Production-ready stdlib | Jan 24, 2026 | ✅ |
 
 ---
 

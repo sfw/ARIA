@@ -52,6 +52,12 @@ pub enum Ty {
     /// JSON value type (dynamic)
     Json,
 
+    /// Task type for spawned async computations
+    Task(Box<Ty>),
+
+    /// Future type for async function returns
+    Future(Box<Ty>),
+
     /// Unit type ()
     Unit,
 
@@ -160,6 +166,8 @@ impl Ty {
             Ty::List(ty) => ty.has_vars(),
             Ty::Map(k, v) => k.has_vars() || v.has_vars(),
             Ty::Set(ty) => ty.has_vars(),
+            Ty::Task(ty) => ty.has_vars(),
+            Ty::Future(ty) => ty.has_vars(),
             Ty::Option(ty) => ty.has_vars(),
             Ty::Result(ok, err) => ok.has_vars() || err.has_vars(),
             Ty::Fn(params, ret) => params.iter().any(|t| t.has_vars()) || ret.has_vars(),
@@ -198,6 +206,8 @@ impl Ty {
                 v.collect_vars(vars);
             }
             Ty::Set(ty) => ty.collect_vars(vars),
+            Ty::Task(ty) => ty.collect_vars(vars),
+            Ty::Future(ty) => ty.collect_vars(vars),
             Ty::Option(ty) => ty.collect_vars(vars),
             Ty::Result(ok, err) => {
                 ok.collect_vars(vars);
@@ -235,6 +245,8 @@ impl Ty {
             Ty::List(ty) => Ty::List(Box::new(ty.apply(subst))),
             Ty::Map(k, v) => Ty::Map(Box::new(k.apply(subst)), Box::new(v.apply(subst))),
             Ty::Set(ty) => Ty::Set(Box::new(ty.apply(subst))),
+            Ty::Task(ty) => Ty::Task(Box::new(ty.apply(subst))),
+            Ty::Future(ty) => Ty::Future(Box::new(ty.apply(subst))),
             Ty::Option(ty) => Ty::Option(Box::new(ty.apply(subst))),
             Ty::Result(ok, err) => {
                 Ty::Result(Box::new(ok.apply(subst)), Box::new(err.apply(subst)))
@@ -381,6 +393,8 @@ impl fmt::Display for Ty {
             Ty::List(ty) => write!(f, "[{}]", ty),
             Ty::Map(k, v) => write!(f, "{{{}:{}}}", k, v),
             Ty::Set(ty) => write!(f, "{{{}}}", ty),
+            Ty::Task(ty) => write!(f, "Task[{}]", ty),
+            Ty::Future(ty) => write!(f, "Future[{}]", ty),
             Ty::Option(ty) => write!(f, "{}?", ty),
             Ty::Result(ok, err) => write!(f, "{}!{}", ok, err),
             Ty::Fn(params, ret) => {

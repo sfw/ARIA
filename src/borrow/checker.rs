@@ -623,6 +623,10 @@ impl BorrowChecker {
                 self.check_expr(inner);
             }
 
+            ExprKind::Spawn(inner) => {
+                self.check_expr(inner);
+            }
+
             ExprKind::Coalesce(left, right) => {
                 self.check_expr(left);
                 self.check_expr(right);

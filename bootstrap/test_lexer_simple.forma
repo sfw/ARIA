@@ -1,0 +1,36 @@
+# Simple lexer test
+# Expected output: 1
+
+f test_operators() -> Bool
+    tokens := scan_all("+ - * /")
+    vec_len(tokens) >= 5 && tokens[0].kind == TK_PLUS() && tokens[1].kind == TK_MINUS()
+
+f test_keywords() -> Bool
+    tokens := scan_all("f if then else")
+    vec_len(tokens) >= 4 && tokens[0].kind == TK_F() && tokens[1].kind == TK_IF()
+
+f test_number() -> Bool
+    tokens := scan_all("42")
+    vec_len(tokens) >= 1 && tokens[0].kind == TK_INT() && tokens[0].int_val == 42
+
+f test_string() -> Bool
+    tokens := scan_all("\"hello\"")
+    vec_len(tokens) >= 1 && tokens[0].kind == TK_STRING() && tokens[0].str_val == "hello"
+
+f test_identifier() -> Bool
+    tokens := scan_all("foo")
+    vec_len(tokens) >= 1 && tokens[0].kind == TK_IDENT() && tokens[0].str_val == "foo"
+
+f run_all() -> Int
+    passed := 0
+    if test_operators() then passed = passed + 1 else print("FAIL: operators")
+    if test_keywords() then passed = passed + 1 else print("FAIL: keywords")
+    if test_number() then passed = passed + 1 else print("FAIL: number")
+    if test_string() then passed = passed + 1 else print("FAIL: string")
+    if test_identifier() then passed = passed + 1 else print("FAIL: identifier")
+    print("Lexer tests passed:")
+    print(passed)
+    print("of 5")
+    if passed == 5 then 1 else 0
+
+f main() -> Int = run_all()

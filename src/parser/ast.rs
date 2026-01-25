@@ -425,6 +425,8 @@ pub enum ExprKind {
     Async(Block),
     /// Await: `aw expr`
     Await(Box<Expr>),
+    /// Spawn: `sp expr` - spawns an async task, returns Task[T]
+    Spawn(Box<Expr>),
     /// Error propagation: `expr?`
     Try(Box<Expr>),
     /// Null coalesce: `expr ?? default`

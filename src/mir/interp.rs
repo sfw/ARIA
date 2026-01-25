@@ -63,6 +63,11 @@ pub enum Value {
     },
     /// JSON value for dynamic JSON operations
     Json(serde_json::Value),
+    /// Task - a handle to a spawned async computation
+    /// Contains the result once the task completes (simplified sync implementation)
+    Task(Box<Value>),
+    /// Future - result of an async block (simplified sync implementation)
+    Future(Box<Value>),
 }
 
 impl Value {
@@ -163,6 +168,8 @@ impl std::fmt::Display for Value {
                 write!(f, "]>")
             }
             Value::Json(json) => write!(f, "{}", json),
+            Value::Task(inner) => write!(f, "Task({})", inner),
+            Value::Future(inner) => write!(f, "Future({})", inner),
         }
     }
 }
@@ -430,6 +437,46 @@ impl Interpreter {
                     };
 
                     // Store result and continue
+                    let frame = self.call_stack.last_mut().unwrap();
+                    if let Some(d) = dest {
+                        frame.locals.insert(d, result);
+                    }
+                    frame.current_block = next;
+                }
+
+                Terminator::Spawn {
+                    expr,
+                    dest,
+                    next,
+                } => {
+                    // Spawn: evaluate the expression and wrap it in a Task
+                    // In this simplified synchronous implementation, we execute immediately
+                    let value = self.eval_operand(&expr)?;
+                    let task_value = match value {
+                        Value::Future(inner) => Value::Task(inner),
+                        other => Value::Task(Box::new(other)),
+                    };
+
+                    let frame = self.call_stack.last_mut().unwrap();
+                    if let Some(d) = dest {
+                        frame.locals.insert(d, task_value);
+                    }
+                    frame.current_block = next;
+                }
+
+                Terminator::Await {
+                    task,
+                    dest,
+                    next,
+                } => {
+                    // Await: extract the value from a Task or Future
+                    let value = self.eval_operand(&task)?;
+                    let result = match value {
+                        Value::Task(inner) => *inner,
+                        Value::Future(inner) => *inner,
+                        other => other, // For backwards compatibility
+                    };
+
                     let frame = self.call_stack.last_mut().unwrap();
                     if let Some(d) = dest {
                         frame.locals.insert(d, result);
@@ -1285,6 +1332,8 @@ impl Interpreter {
                     Value::Map(_) => "Map",
                     Value::Closure { .. } => "Closure",
                     Value::Json(_) => "Json",
+                    Value::Task(_) => "Task",
+                    Value::Future(_) => "Future",
                 };
                 Ok(Some(Value::Str(type_name.to_string())))
             }
@@ -1719,6 +1768,75 @@ impl Interpreter {
                 };
                 thread::sleep(Duration::from_millis(ms));
                 Ok(Some(Value::Unit))
+            }
+
+            // ===== Async operations =====
+            "sleep_async" => {
+                // sleep_async(ms: Int) -> Future[()]
+                // In this simplified implementation, we sleep synchronously but wrap in Future
+                let ms = match &args[0] {
+                    Value::Int(n) => *n as u64,
+                    _ => return Err(InterpError { message: "sleep_async: expected Int".to_string() })
+                };
+                thread::sleep(Duration::from_millis(ms));
+                Ok(Some(Value::Future(Box::new(Value::Unit))))
+            }
+
+            "timeout" => {
+                // timeout(ms: Int, task: Task[T]) -> Result[T, Str]
+                // In this simplified implementation, we don't actually timeout
+                // since we execute synchronously. Just return the task result.
+                let _ms = match &args[0] {
+                    Value::Int(n) => *n as u64,
+                    _ => return Err(InterpError { message: "timeout: expected Int".to_string() })
+                };
+                let result = match &args[1] {
+                    Value::Task(inner) => (**inner).clone(),
+                    Value::Future(inner) => (**inner).clone(),
+                    other => other.clone(),
+                };
+                // Return Ok(result) since we completed without timeout
+                Ok(Some(Value::Enum {
+                    type_name: "Result".to_string(),
+                    variant: "Ok".to_string(),
+                    fields: vec![result],
+                }))
+            }
+
+            "await_all" => {
+                // await_all(tasks: [Task[T]]) -> [T]
+                // Awaits all tasks and returns their results
+                let tasks = match &args[0] {
+                    Value::Array(arr) => arr.clone(),
+                    _ => return Err(InterpError { message: "await_all: expected array of tasks".to_string() })
+                };
+                let results: Vec<Value> = tasks.into_iter().map(|task| {
+                    match task {
+                        Value::Task(inner) => *inner,
+                        Value::Future(inner) => *inner,
+                        other => other,
+                    }
+                }).collect();
+                Ok(Some(Value::Array(results)))
+            }
+
+            "await_any" => {
+                // await_any(tasks: [Task[T]]) -> T
+                // Returns the first completed task's result
+                // In synchronous mode, we just return the first task's result
+                let tasks = match &args[0] {
+                    Value::Array(arr) => arr.clone(),
+                    _ => return Err(InterpError { message: "await_any: expected array of tasks".to_string() })
+                };
+                if tasks.is_empty() {
+                    return Err(InterpError { message: "await_any: empty task array".to_string() });
+                }
+                let result = match &tasks[0] {
+                    Value::Task(inner) => (**inner).clone(),
+                    Value::Future(inner) => (**inner).clone(),
+                    other => other.clone(),
+                };
+                Ok(Some(result))
             }
 
             // ===== DateTime operations (chrono-based) =====

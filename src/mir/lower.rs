@@ -999,6 +999,40 @@ impl Lowerer {
                 None
             }
 
+            ExprKind::Async(block) => {
+                // Lower async block - for now, just lower the block and wrap in Future
+                let block_result = self.lower_block(block);
+                block_result
+            }
+
+            ExprKind::Await(inner) => {
+                // Lower await expression
+                let task_operand = self.lower_expr(inner)?;
+                let result = self.new_temp(Ty::fresh_var());
+                let next_block = self.new_block();
+                self.terminate(Terminator::Await {
+                    task: task_operand,
+                    dest: Some(result),
+                    next: next_block,
+                });
+                self.current_block = Some(next_block);
+                Some(Operand::Local(result))
+            }
+
+            ExprKind::Spawn(inner) => {
+                // Lower spawn expression
+                let expr_operand = self.lower_expr(inner)?;
+                let result = self.new_temp(Ty::Task(Box::new(Ty::fresh_var())));
+                let next_block = self.new_block();
+                self.terminate(Terminator::Spawn {
+                    expr: expr_operand,
+                    dest: Some(result),
+                    next: next_block,
+                });
+                self.current_block = Some(next_block);
+                Some(Operand::Local(result))
+            }
+
             // Not yet implemented
             _ => {
                 self.error(format!("unsupported expression: {:?}", expr.kind), expr.span);

@@ -1,0 +1,28 @@
+# Test Async Module
+# Tests for async/await/spawn functionality
+# Expected output: All tests pass
+
+# Test sleep_async builtin
+f test_sleep_async() -> Bool
+    # sleep_async should return a Future
+    result := sleep_async(1)
+    type_of(result) == "Future"
+
+# Test type_of for Future
+f test_async_types() -> Bool
+    future := sleep_async(1)
+    is_future := type_of(future) == "Future"
+    is_future
+
+f run_all_tests() -> Int
+    passed := 0
+    if test_sleep_async() then passed = passed + 1 else print("FAIL: test_sleep_async")
+    if test_async_types() then passed = passed + 1 else print("FAIL: test_async_types")
+
+    print("Async tests passed:")
+    print(passed)
+    print("of 2")
+
+    if passed == 2 then 1 else 0
+
+f main() -> Int = run_all_tests()

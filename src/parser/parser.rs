@@ -1782,6 +1782,15 @@ impl<'a> Parser<'a> {
             });
         }
 
+        if self.match_token(TokenKind::Sp) {
+            // Spawn expression - spawns an async task
+            let expr = self.parse_unary()?;
+            return Ok(Expr {
+                kind: ExprKind::Spawn(Box::new(expr)),
+                span: start.merge(self.previous_span()),
+            });
+        }
+
         if self.match_token(TokenKind::Un) {
             // Unsafe block
             let block = self.parse_block()?;

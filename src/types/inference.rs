@@ -836,6 +836,52 @@ impl TypeEnv {
             TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Int], Box::new(Ty::Unit)) },
         );
 
+        // ===== Async functions =====
+        // sleep_async(Int) -> Future[()]
+        env.bindings.insert(
+            "sleep_async".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Int], Box::new(Ty::Future(Box::new(Ty::Unit)))) },
+        );
+
+        // timeout(Int, Future[T]) -> Result[T, Str]
+        let t = TypeVar::fresh();
+        env.bindings.insert(
+            "timeout".to_string(),
+            TypeScheme {
+                vars: vec![t],
+                ty: Ty::Fn(
+                    vec![Ty::Int, Ty::Future(Box::new(Ty::Var(t)))],
+                    Box::new(Ty::Result(Box::new(Ty::Var(t)), Box::new(Ty::Str)))
+                )
+            },
+        );
+
+        // await_all([Future[T]]) -> [T]
+        let t = TypeVar::fresh();
+        env.bindings.insert(
+            "await_all".to_string(),
+            TypeScheme {
+                vars: vec![t],
+                ty: Ty::Fn(
+                    vec![Ty::List(Box::new(Ty::Future(Box::new(Ty::Var(t)))))],
+                    Box::new(Ty::List(Box::new(Ty::Var(t))))
+                )
+            },
+        );
+
+        // await_any([Future[T]]) -> T
+        let t = TypeVar::fresh();
+        env.bindings.insert(
+            "await_any".to_string(),
+            TypeScheme {
+                vars: vec![t],
+                ty: Ty::Fn(
+                    vec![Ty::List(Box::new(Ty::Future(Box::new(Ty::Var(t)))))],
+                    Box::new(Ty::Var(t))
+                )
+            },
+        );
+
         // ===== JSON functions =====
         // json_parse: Str -> Result[Json, Str]
         env.bindings.insert(
@@ -2765,8 +2811,37 @@ impl InferenceEngine {
             }
 
             ExprKind::Await(e) => {
-                self.infer_expr(e)?;
-                Ok(Ty::fresh_var())
+                // Await extracts the value from a Task[T] or Future[T]
+                let inner_ty = self.infer_expr(e)?;
+                let result_ty = Ty::fresh_var();
+                // Try to unify with Task[T] or Future[T]
+                // For now, just return a fresh type variable
+                let task_ty = Ty::Task(Box::new(result_ty.clone()));
+                let future_ty = Ty::Future(Box::new(result_ty.clone()));
+                // Accept either Task or Future
+                if self.unifier.unify(&inner_ty, &task_ty, expr.span).is_ok() {
+                    Ok(result_ty)
+                } else if self.unifier.unify(&inner_ty, &future_ty, expr.span).is_ok() {
+                    Ok(result_ty)
+                } else {
+                    // Fall back to fresh var for backwards compatibility
+                    Ok(Ty::fresh_var())
+                }
+            }
+
+            ExprKind::Spawn(e) => {
+                // Spawn takes an async expression and returns Task[T]
+                let inner_ty = self.infer_expr(e)?;
+                // The result type is Task[T] where T is the return type of the async expression
+                let result_ty = Ty::fresh_var();
+                // Try to unify with Future[T]
+                let future_ty = Ty::Future(Box::new(result_ty.clone()));
+                if self.unifier.unify(&inner_ty, &future_ty, expr.span).is_ok() {
+                    Ok(Ty::Task(Box::new(result_ty)))
+                } else {
+                    // Fall back to Task with the inferred type
+                    Ok(Ty::Task(Box::new(inner_ty)))
+                }
             }
 
             ExprKind::Coalesce(left, right) => {
@@ -2781,8 +2856,8 @@ impl InferenceEngine {
             }
 
             ExprKind::Async(block) => {
-                self.infer_block(block)?;
-                Ok(Ty::fresh_var()) // Would be Future[T]
+                let block_ty = self.infer_block(block)?;
+                Ok(Ty::Future(Box::new(block_ty)))
             }
 
             ExprKind::Unsafe(block) => {

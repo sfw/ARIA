@@ -353,6 +353,23 @@ pub enum Terminator {
         dest: Option<Local>,
         next: BlockId,
     },
+    /// Spawn an async task
+    ///
+    /// Takes an async expression and spawns it as a concurrent task.
+    /// Returns a Task[T] handle.
+    Spawn {
+        expr: Operand,
+        dest: Option<Local>,
+        next: BlockId,
+    },
+    /// Await a task or future
+    ///
+    /// Waits for a Task[T] or Future[T] to complete and extracts the value.
+    Await {
+        task: Operand,
+        dest: Option<Local>,
+        next: BlockId,
+    },
     /// Unreachable (for diverging code paths)
     Unreachable,
 }
@@ -570,6 +587,18 @@ impl fmt::Display for Terminator {
                     write!(f, "{}", arg)?;
                 }
                 write!(f, ") -> {}", next)
+            }
+            Terminator::Spawn { expr, dest, next } => {
+                if let Some(d) = dest {
+                    write!(f, "{} = ", d)?;
+                }
+                write!(f, "spawn {} -> {}", expr, next)
+            }
+            Terminator::Await { task, dest, next } => {
+                if let Some(d) = dest {
+                    write!(f, "{} = ", d)?;
+                }
+                write!(f, "await {} -> {}", task, next)
             }
             Terminator::Unreachable => write!(f, "unreachable"),
         }
