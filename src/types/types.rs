@@ -79,6 +79,18 @@ pub enum Ty {
     /// UDP socket for datagram communication
     UdpSocket,
 
+    /// TLS stream for encrypted connections
+    TlsStream,
+
+    /// SQLite database connection
+    Database,
+
+    /// SQLite prepared statement
+    Statement,
+
+    /// Database row (columns as a tuple)
+    DbRow,
+
     // === C FFI Types ===
     /// C int (platform-specific, typically 32-bit)
     CInt,
@@ -458,6 +470,10 @@ impl fmt::Display for Ty {
             Ty::TcpStream => write!(f, "TcpStream"),
             Ty::TcpListener => write!(f, "TcpListener"),
             Ty::UdpSocket => write!(f, "UdpSocket"),
+            Ty::TlsStream => write!(f, "TlsStream"),
+            Ty::Database => write!(f, "Database"),
+            Ty::Statement => write!(f, "Statement"),
+            Ty::DbRow => write!(f, "Row"),
             Ty::CInt => write!(f, "CInt"),
             Ty::CUInt => write!(f, "CUInt"),
             Ty::CLong => write!(f, "CLong"),

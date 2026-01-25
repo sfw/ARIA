@@ -1,0 +1,144 @@
+# Test SQLite Database Builtins
+# Tests for database operations
+# Expected output: All tests pass
+
+# Test open in-memory database
+f test_open_memory() -> Bool
+    m db_open_memory()
+        Ok(db) ->
+            db_close(db)
+            true
+        Err(_) -> false
+
+# Test create table and insert
+f test_create_insert() -> Bool
+    m db_open_memory()
+        Ok(db) ->
+            # Create table
+            create_sql := "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)"
+            m db_execute(db, create_sql)
+                Ok(_) ->
+                    # Insert data
+                    insert_sql := "INSERT INTO users (name, age) VALUES ('Alice', 30)"
+                    m db_execute(db, insert_sql)
+                        Ok(n) ->
+                            db_close(db)
+                            n == 1  # One row affected
+                        Err(_) ->
+                            db_close(db)
+                            false
+                Err(_) ->
+                    db_close(db)
+                    false
+        Err(_) -> false
+
+# Test query multiple rows
+f test_query() -> Bool
+    m db_open_memory()
+        Ok(db) ->
+            # Create and populate table
+            db_execute(db, "CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)")
+            db_execute(db, "INSERT INTO items (name) VALUES ('Apple')")
+            db_execute(db, "INSERT INTO items (name) VALUES ('Banana')")
+            db_execute(db, "INSERT INTO items (name) VALUES ('Cherry')")
+
+            # Query all rows
+            m db_query(db, "SELECT id, name FROM items ORDER BY id")
+                Ok(rows) ->
+                    result := vec_len(rows) == 3
+                    db_close(db)
+                    result
+                Err(_) ->
+                    db_close(db)
+                    false
+        Err(_) -> false
+
+# Test query one row
+f test_query_one() -> Bool
+    m db_open_memory()
+        Ok(db) ->
+            db_execute(db, "CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT)")
+            db_execute(db, "INSERT INTO config (key, value) VALUES ('version', '1.0')")
+
+            m db_query_one(db, "SELECT value FROM config WHERE key = 'version'")
+                Ok(maybe_row) ->
+                    m maybe_row
+                        Some(row) ->
+                            m row_get(row, 0)
+                                Some(val) ->
+                                    db_close(db)
+                                    true  # Found the row
+                                None ->
+                                    db_close(db)
+                                    false
+                        None ->
+                            db_close(db)
+                            false
+                Err(_) ->
+                    db_close(db)
+                    false
+        Err(_) -> false
+
+# Test row accessors
+f test_row_accessors() -> Bool
+    m db_open_memory()
+        Ok(db) ->
+            db_execute(db, "CREATE TABLE test (i INTEGER, f REAL, s TEXT)")
+            db_execute(db, "INSERT INTO test VALUES (42, 3.14, 'hello')")
+
+            m db_query_one(db, "SELECT i, f, s FROM test")
+                Ok(maybe_row) ->
+                    m maybe_row
+                        Some(row) ->
+                            i := row_get_int(row, 0)
+                            f := row_get_float(row, 1)
+                            s := row_get_str(row, 2)
+                            len := row_len(row)
+                            db_close(db)
+                            i == 42 && f > 3.13 && f < 3.15 && s == "hello" && len == 3
+                        None ->
+                            db_close(db)
+                            false
+                Err(_) ->
+                    db_close(db)
+                    false
+        Err(_) -> false
+
+# Test null handling
+f test_null_values() -> Bool
+    m db_open_memory()
+        Ok(db) ->
+            db_execute(db, "CREATE TABLE nullable (val INTEGER)")
+            db_execute(db, "INSERT INTO nullable VALUES (NULL)")
+
+            m db_query_one(db, "SELECT val FROM nullable")
+                Ok(maybe_row) ->
+                    m maybe_row
+                        Some(row) ->
+                            is_null := row_is_null(row, 0)
+                            db_close(db)
+                            is_null
+                        None ->
+                            db_close(db)
+                            false
+                Err(_) ->
+                    db_close(db)
+                    false
+        Err(_) -> false
+
+f run_all_tests() -> Int
+    passed := 0
+    if test_open_memory() then passed = passed + 1 else print("FAIL: test_open_memory")
+    if test_create_insert() then passed = passed + 1 else print("FAIL: test_create_insert")
+    if test_query() then passed = passed + 1 else print("FAIL: test_query")
+    if test_query_one() then passed = passed + 1 else print("FAIL: test_query_one")
+    if test_row_accessors() then passed = passed + 1 else print("FAIL: test_row_accessors")
+    if test_null_values() then passed = passed + 1 else print("FAIL: test_null_values")
+
+    print("Database tests passed:")
+    print(passed)
+    print("of 6")
+
+    if passed == 6 then 1 else 0
+
+f main() -> Int = run_all_tests()

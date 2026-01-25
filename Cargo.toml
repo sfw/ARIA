@@ -29,6 +29,12 @@ hyper = { version = "1", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = "0.1"
 bytes = "1"
+# TLS support
+native-tls = "0.2"
+# Compression
+flate2 = "1.0"
+# SQLite database
+rusqlite = { version = "0.32", features = ["bundled"] }
 
 # LLVM backend (optional, requires LLVM installed)
 inkwell = { version = "0.5", features = ["llvm18-0"], optional = true }

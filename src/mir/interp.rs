@@ -102,6 +102,14 @@ pub enum Value {
     CDouble(f64),
     /// C size_t value
     CSize(usize),
+    /// TLS stream for encrypted connections
+    TlsStream(u64),
+    /// SQLite database connection
+    Database(u64),
+    /// SQLite prepared statement
+    Statement(u64),
+    /// Database row
+    DbRow(Vec<Value>),
 }
 
 impl Value {
@@ -220,6 +228,19 @@ impl std::fmt::Display for Value {
             Value::CFloat(n) => write!(f, "{}f", n),
             Value::CDouble(n) => write!(f, "{}d", n),
             Value::CSize(n) => write!(f, "{}sz", n),
+            Value::TlsStream(id) => write!(f, "TlsStream({})", id),
+            Value::Database(id) => write!(f, "Database({})", id),
+            Value::Statement(id) => write!(f, "Statement({})", id),
+            Value::DbRow(cols) => {
+                write!(f, "Row[")?;
+                for (i, v) in cols.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", v)?;
+                }
+                write!(f, "]")
+            }
         }
     }
 }
@@ -283,6 +304,25 @@ pub struct Interpreter {
     udp_sockets: std::collections::HashMap<u64, std::net::UdpSocket>,
     /// Next UDP socket ID
     next_udp_socket_id: u64,
+    /// TLS streams: maps stream ID to TlsStream
+    tls_streams: std::collections::HashMap<u64, native_tls::TlsStream<std::net::TcpStream>>,
+    /// Next TLS stream ID
+    next_tls_stream_id: u64,
+    /// SQLite databases: maps db ID to Connection
+    databases: std::collections::HashMap<u64, rusqlite::Connection>,
+    /// Next database ID
+    next_db_id: u64,
+    /// SQLite prepared statements: maps stmt ID to (db_id, SQL)
+    /// Reserved for future use with prepared statement API
+    #[allow(dead_code)]
+    statements: std::collections::HashMap<u64, (u64, String)>,
+    /// Next statement ID
+    #[allow(dead_code)]
+    next_stmt_id: u64,
+    /// Logging level: 0=debug, 1=info, 2=warn, 3=error
+    log_level: u8,
+    /// Logging format: "text" or "json"
+    log_format: String,
 }
 
 impl Interpreter {
@@ -301,6 +341,14 @@ impl Interpreter {
             next_tcp_listener_id: 0,
             udp_sockets: std::collections::HashMap::new(),
             next_udp_socket_id: 0,
+            tls_streams: std::collections::HashMap::new(),
+            next_tls_stream_id: 0,
+            databases: std::collections::HashMap::new(),
+            next_db_id: 0,
+            statements: std::collections::HashMap::new(),
+            next_stmt_id: 0,
+            log_level: 1, // Default to info level
+            log_format: "text".to_string(),
         }
     }
 
@@ -1430,6 +1478,10 @@ impl Interpreter {
                     Value::CFloat(_) => "CFloat",
                     Value::CDouble(_) => "CDouble",
                     Value::CSize(_) => "CSize",
+                    Value::TlsStream(_) => "TlsStream",
+                    Value::Database(_) => "Database",
+                    Value::Statement(_) => "Statement",
+                    Value::DbRow(_) => "Row",
                 };
                 Ok(Some(Value::Str(type_name.to_string())))
             }
@@ -4613,6 +4665,529 @@ impl Interpreter {
                         fields: vec![],
                     })),
                 }
+            }
+
+            // ===== Logging operations =====
+            "log_debug" => {
+                // log_debug(msg: Str) -> ()
+                let msg = match &args[0] { Value::Str(s) => s.clone(), _ => format!("{}", args[0]) };
+                if self.log_level <= 0 {
+                    if self.log_format == "json" {
+                        eprintln!(r#"{{"level":"debug","message":"{}"}}"#, msg.replace('"', "\\\""));
+                    } else {
+                        eprintln!("[DEBUG] {}", msg);
+                    }
+                }
+                Ok(Some(Value::Unit))
+            }
+            "log_info" => {
+                // log_info(msg: Str) -> ()
+                let msg = match &args[0] { Value::Str(s) => s.clone(), _ => format!("{}", args[0]) };
+                if self.log_level <= 1 {
+                    if self.log_format == "json" {
+                        eprintln!(r#"{{"level":"info","message":"{}"}}"#, msg.replace('"', "\\\""));
+                    } else {
+                        eprintln!("[INFO] {}", msg);
+                    }
+                }
+                Ok(Some(Value::Unit))
+            }
+            "log_warn" => {
+                // log_warn(msg: Str) -> ()
+                let msg = match &args[0] { Value::Str(s) => s.clone(), _ => format!("{}", args[0]) };
+                if self.log_level <= 2 {
+                    if self.log_format == "json" {
+                        eprintln!(r#"{{"level":"warn","message":"{}"}}"#, msg.replace('"', "\\\""));
+                    } else {
+                        eprintln!("[WARN] {}", msg);
+                    }
+                }
+                Ok(Some(Value::Unit))
+            }
+            "log_error" => {
+                // log_error(msg: Str) -> ()
+                let msg = match &args[0] { Value::Str(s) => s.clone(), _ => format!("{}", args[0]) };
+                if self.log_level <= 3 {
+                    if self.log_format == "json" {
+                        eprintln!(r#"{{"level":"error","message":"{}"}}"#, msg.replace('"', "\\\""));
+                    } else {
+                        eprintln!("[ERROR] {}", msg);
+                    }
+                }
+                Ok(Some(Value::Unit))
+            }
+            "log_set_level" => {
+                // log_set_level(level: Str) -> ()
+                let level = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "log_set_level: expected Str".to_string() }) };
+                self.log_level = match level.to_lowercase().as_str() {
+                    "debug" => 0,
+                    "info" => 1,
+                    "warn" | "warning" => 2,
+                    "error" => 3,
+                    _ => return Err(InterpError { message: format!("log_set_level: unknown level '{}', use debug/info/warn/error", level) })
+                };
+                Ok(Some(Value::Unit))
+            }
+            "log_set_format" => {
+                // log_set_format(format: Str) -> ()
+                let format = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "log_set_format: expected Str".to_string() }) };
+                if format != "text" && format != "json" {
+                    return Err(InterpError { message: format!("log_set_format: unknown format '{}', use text/json", format) });
+                }
+                self.log_format = format;
+                Ok(Some(Value::Unit))
+            }
+
+            // ===== TLS operations =====
+            "tls_connect" => {
+                // tls_connect(host: Str, port: Int) -> Result[TlsStream, Str]
+                let host = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "tls_connect: host must be Str".to_string() }) };
+                let port = match &args[1] { Value::Int(n) => *n as u16, _ => return Err(InterpError { message: "tls_connect: port must be Int".to_string() }) };
+                let addr = format!("{}:{}", host, port);
+
+                match std::net::TcpStream::connect(&addr) {
+                    Ok(tcp_stream) => {
+                        let connector = match native_tls::TlsConnector::new() {
+                            Ok(c) => c,
+                            Err(e) => return Ok(Some(Value::Enum {
+                                type_name: "Result".to_string(),
+                                variant: "Err".to_string(),
+                                fields: vec![Value::Str(format!("TLS error: {}", e))],
+                            }))
+                        };
+                        match connector.connect(&host, tcp_stream) {
+                            Ok(tls_stream) => {
+                                let id = self.next_tls_stream_id;
+                                self.next_tls_stream_id += 1;
+                                self.tls_streams.insert(id, tls_stream);
+                                Ok(Some(Value::Enum {
+                                    type_name: "Result".to_string(),
+                                    variant: "Ok".to_string(),
+                                    fields: vec![Value::TlsStream(id)],
+                                }))
+                            }
+                            Err(e) => Ok(Some(Value::Enum {
+                                type_name: "Result".to_string(),
+                                variant: "Err".to_string(),
+                                fields: vec![Value::Str(format!("TLS handshake failed: {}", e))],
+                            }))
+                        }
+                    }
+                    Err(e) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    }))
+                }
+            }
+            "tls_read" => {
+                // tls_read(stream: TlsStream, max_bytes: Int) -> Result[Str, Str]
+                use std::io::Read;
+                let id = match &args[0] { Value::TlsStream(id) => *id, _ => return Err(InterpError { message: "tls_read: expected TlsStream".to_string() }) };
+                let max_bytes = match &args[1] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "tls_read: max_bytes must be Int".to_string() }) };
+
+                let stream = match self.tls_streams.get_mut(&id) {
+                    Some(s) => s,
+                    None => return Err(InterpError { message: "tls_read: invalid TlsStream".to_string() })
+                };
+
+                let mut buf = vec![0u8; max_bytes];
+                match stream.read(&mut buf) {
+                    Ok(n) => {
+                        buf.truncate(n);
+                        let s = String::from_utf8_lossy(&buf).to_string();
+                        Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Ok".to_string(),
+                            fields: vec![Value::Str(s)],
+                        }))
+                    }
+                    Err(e) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    }))
+                }
+            }
+            "tls_write" => {
+                // tls_write(stream: TlsStream, data: Str) -> Result[Int, Str]
+                use std::io::Write;
+                let id = match &args[0] { Value::TlsStream(id) => *id, _ => return Err(InterpError { message: "tls_write: expected TlsStream".to_string() }) };
+                let data = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "tls_write: data must be Str".to_string() }) };
+
+                let stream = match self.tls_streams.get_mut(&id) {
+                    Some(s) => s,
+                    None => return Err(InterpError { message: "tls_write: invalid TlsStream".to_string() })
+                };
+
+                match stream.write_all(data.as_bytes()) {
+                    Ok(()) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Ok".to_string(),
+                        fields: vec![Value::Int(data.len() as i64)],
+                    })),
+                    Err(e) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    }))
+                }
+            }
+            "tls_close" => {
+                // tls_close(stream: TlsStream) -> ()
+                let id = match &args[0] { Value::TlsStream(id) => *id, _ => return Err(InterpError { message: "tls_close: expected TlsStream".to_string() }) };
+                self.tls_streams.remove(&id);
+                Ok(Some(Value::Unit))
+            }
+
+            // ===== Compression operations =====
+            "gzip_compress" => {
+                // gzip_compress(data: Str) -> [Int]
+                use flate2::write::GzEncoder;
+                use flate2::Compression;
+                use std::io::Write;
+
+                let data = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "gzip_compress: expected Str".to_string() }) };
+
+                let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+                encoder.write_all(data.as_bytes()).unwrap();
+                let compressed = encoder.finish().unwrap();
+
+                let result: Vec<Value> = compressed.into_iter().map(|b| Value::Int(b as i64)).collect();
+                Ok(Some(Value::Array(result)))
+            }
+            "gzip_decompress" => {
+                // gzip_decompress(data: [Int]) -> Result[Str, Str]
+                use flate2::read::GzDecoder;
+                use std::io::Read;
+
+                let arr = match &args[0] { Value::Array(arr) => arr, _ => return Err(InterpError { message: "gzip_decompress: expected array".to_string() }) };
+                let bytes: Vec<u8> = arr.iter().filter_map(|v| v.as_int().map(|n| n as u8)).collect();
+
+                let mut decoder = GzDecoder::new(&bytes[..]);
+                let mut result = String::new();
+                match decoder.read_to_string(&mut result) {
+                    Ok(_) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Ok".to_string(),
+                        fields: vec![Value::Str(result)],
+                    })),
+                    Err(e) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    }))
+                }
+            }
+            "zlib_compress" => {
+                // zlib_compress(data: Str) -> [Int]
+                use flate2::write::ZlibEncoder;
+                use flate2::Compression;
+                use std::io::Write;
+
+                let data = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "zlib_compress: expected Str".to_string() }) };
+
+                let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+                encoder.write_all(data.as_bytes()).unwrap();
+                let compressed = encoder.finish().unwrap();
+
+                let result: Vec<Value> = compressed.into_iter().map(|b| Value::Int(b as i64)).collect();
+                Ok(Some(Value::Array(result)))
+            }
+            "zlib_decompress" => {
+                // zlib_decompress(data: [Int]) -> Result[Str, Str]
+                use flate2::read::ZlibDecoder;
+                use std::io::Read;
+
+                let arr = match &args[0] { Value::Array(arr) => arr, _ => return Err(InterpError { message: "zlib_decompress: expected array".to_string() }) };
+                let bytes: Vec<u8> = arr.iter().filter_map(|v| v.as_int().map(|n| n as u8)).collect();
+
+                let mut decoder = ZlibDecoder::new(&bytes[..]);
+                let mut result = String::new();
+                match decoder.read_to_string(&mut result) {
+                    Ok(_) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Ok".to_string(),
+                        fields: vec![Value::Str(result)],
+                    })),
+                    Err(e) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    }))
+                }
+            }
+
+            // ===== SQLite database operations =====
+            "db_open" => {
+                // db_open(path: Str) -> Result[Database, Str]
+                let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "db_open: expected Str path".to_string() }) };
+
+                match rusqlite::Connection::open(&path) {
+                    Ok(conn) => {
+                        let id = self.next_db_id;
+                        self.next_db_id += 1;
+                        self.databases.insert(id, conn);
+                        Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Ok".to_string(),
+                            fields: vec![Value::Database(id)],
+                        }))
+                    }
+                    Err(e) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    }))
+                }
+            }
+            "db_open_memory" => {
+                // db_open_memory() -> Result[Database, Str]
+                match rusqlite::Connection::open_in_memory() {
+                    Ok(conn) => {
+                        let id = self.next_db_id;
+                        self.next_db_id += 1;
+                        self.databases.insert(id, conn);
+                        Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Ok".to_string(),
+                            fields: vec![Value::Database(id)],
+                        }))
+                    }
+                    Err(e) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    }))
+                }
+            }
+            "db_execute" => {
+                // db_execute(db: Database, sql: Str) -> Result[Int, Str]
+                let id = match &args[0] { Value::Database(id) => *id, _ => return Err(InterpError { message: "db_execute: expected Database".to_string() }) };
+                let sql = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "db_execute: expected Str sql".to_string() }) };
+
+                let conn = match self.databases.get(&id) {
+                    Some(c) => c,
+                    None => return Err(InterpError { message: "db_execute: invalid Database".to_string() })
+                };
+
+                match conn.execute(&sql, []) {
+                    Ok(n) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Ok".to_string(),
+                        fields: vec![Value::Int(n as i64)],
+                    })),
+                    Err(e) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    }))
+                }
+            }
+            "db_query" => {
+                // db_query(db: Database, sql: Str) -> Result[[Row], Str]
+                let id = match &args[0] { Value::Database(id) => *id, _ => return Err(InterpError { message: "db_query: expected Database".to_string() }) };
+                let sql = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "db_query: expected Str sql".to_string() }) };
+
+                let conn = match self.databases.get(&id) {
+                    Some(c) => c,
+                    None => return Err(InterpError { message: "db_query: invalid Database".to_string() })
+                };
+
+                let mut stmt = match conn.prepare(&sql) {
+                    Ok(s) => s,
+                    Err(e) => return Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    }))
+                };
+
+                let col_count = stmt.column_count();
+                let rows_iter = match stmt.query_map([], |row| {
+                    let mut cols = Vec::with_capacity(col_count);
+                    for i in 0..col_count {
+                        let val: rusqlite::types::Value = row.get(i)?;
+                        let forma_val = match val {
+                            rusqlite::types::Value::Null => Value::Unit,
+                            rusqlite::types::Value::Integer(n) => Value::Int(n),
+                            rusqlite::types::Value::Real(n) => Value::Float(n),
+                            rusqlite::types::Value::Text(s) => Value::Str(s),
+                            rusqlite::types::Value::Blob(b) => Value::Array(b.into_iter().map(|byte| Value::Int(byte as i64)).collect()),
+                        };
+                        cols.push(forma_val);
+                    }
+                    Ok(Value::DbRow(cols))
+                }) {
+                    Ok(iter) => iter,
+                    Err(e) => return Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    }))
+                };
+
+                let rows_result: Result<Vec<Value>, rusqlite::Error> = rows_iter.collect();
+
+                match rows_result {
+                    Ok(rows) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Ok".to_string(),
+                        fields: vec![Value::Array(rows)],
+                    })),
+                    Err(e) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    }))
+                }
+            }
+            "db_query_one" => {
+                // db_query_one(db: Database, sql: Str) -> Result[Row?, Str]
+                let id = match &args[0] { Value::Database(id) => *id, _ => return Err(InterpError { message: "db_query_one: expected Database".to_string() }) };
+                let sql = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "db_query_one: expected Str sql".to_string() }) };
+
+                let conn = match self.databases.get(&id) {
+                    Some(c) => c,
+                    None => return Err(InterpError { message: "db_query_one: invalid Database".to_string() })
+                };
+
+                let mut stmt = match conn.prepare(&sql) {
+                    Ok(s) => s,
+                    Err(e) => return Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    }))
+                };
+
+                let col_count = stmt.column_count();
+                let row_result = stmt.query_row([], |row| {
+                    let mut cols = Vec::with_capacity(col_count);
+                    for i in 0..col_count {
+                        let val: rusqlite::types::Value = row.get(i)?;
+                        let forma_val = match val {
+                            rusqlite::types::Value::Null => Value::Unit,
+                            rusqlite::types::Value::Integer(n) => Value::Int(n),
+                            rusqlite::types::Value::Real(n) => Value::Float(n),
+                            rusqlite::types::Value::Text(s) => Value::Str(s),
+                            rusqlite::types::Value::Blob(b) => Value::Array(b.into_iter().map(|byte| Value::Int(byte as i64)).collect()),
+                        };
+                        cols.push(forma_val);
+                    }
+                    Ok(Value::DbRow(cols))
+                });
+
+                match row_result {
+                    Ok(row) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Ok".to_string(),
+                        fields: vec![Value::Enum {
+                            type_name: "Option".to_string(),
+                            variant: "Some".to_string(),
+                            fields: vec![row],
+                        }],
+                    })),
+                    Err(rusqlite::Error::QueryReturnedNoRows) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Ok".to_string(),
+                        fields: vec![Value::Enum {
+                            type_name: "Option".to_string(),
+                            variant: "None".to_string(),
+                            fields: vec![],
+                        }],
+                    })),
+                    Err(e) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    }))
+                }
+            }
+            "db_close" => {
+                // db_close(db: Database) -> ()
+                let id = match &args[0] { Value::Database(id) => *id, _ => return Err(InterpError { message: "db_close: expected Database".to_string() }) };
+                self.databases.remove(&id);
+                Ok(Some(Value::Unit))
+            }
+            "row_get" => {
+                // row_get(row: Row, index: Int) -> Value?
+                let row = match &args[0] { Value::DbRow(cols) => cols, _ => return Err(InterpError { message: "row_get: expected Row".to_string() }) };
+                let idx = match &args[1] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "row_get: index must be Int".to_string() }) };
+
+                match row.get(idx) {
+                    Some(val) => Ok(Some(Value::Enum {
+                        type_name: "Option".to_string(),
+                        variant: "Some".to_string(),
+                        fields: vec![val.clone()],
+                    })),
+                    None => Ok(Some(Value::Enum {
+                        type_name: "Option".to_string(),
+                        variant: "None".to_string(),
+                        fields: vec![],
+                    }))
+                }
+            }
+            "row_get_int" => {
+                // row_get_int(row: Row, index: Int) -> Int
+                let row = match &args[0] { Value::DbRow(cols) => cols, _ => return Err(InterpError { message: "row_get_int: expected Row".to_string() }) };
+                let idx = match &args[1] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "row_get_int: index must be Int".to_string() }) };
+
+                match row.get(idx) {
+                    Some(Value::Int(n)) => Ok(Some(Value::Int(*n))),
+                    Some(_) => Err(InterpError { message: "row_get_int: column is not Int".to_string() }),
+                    None => Err(InterpError { message: "row_get_int: index out of bounds".to_string() }),
+                }
+            }
+            "row_get_str" => {
+                // row_get_str(row: Row, index: Int) -> Str
+                let row = match &args[0] { Value::DbRow(cols) => cols, _ => return Err(InterpError { message: "row_get_str: expected Row".to_string() }) };
+                let idx = match &args[1] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "row_get_str: index must be Int".to_string() }) };
+
+                match row.get(idx) {
+                    Some(Value::Str(s)) => Ok(Some(Value::Str(s.clone()))),
+                    Some(_) => Err(InterpError { message: "row_get_str: column is not Str".to_string() }),
+                    None => Err(InterpError { message: "row_get_str: index out of bounds".to_string() }),
+                }
+            }
+            "row_get_float" => {
+                // row_get_float(row: Row, index: Int) -> Float
+                let row = match &args[0] { Value::DbRow(cols) => cols, _ => return Err(InterpError { message: "row_get_float: expected Row".to_string() }) };
+                let idx = match &args[1] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "row_get_float: index must be Int".to_string() }) };
+
+                match row.get(idx) {
+                    Some(Value::Float(n)) => Ok(Some(Value::Float(*n))),
+                    Some(_) => Err(InterpError { message: "row_get_float: column is not Float".to_string() }),
+                    None => Err(InterpError { message: "row_get_float: index out of bounds".to_string() }),
+                }
+            }
+            "row_get_bool" => {
+                // row_get_bool(row: Row, index: Int) -> Bool
+                let row = match &args[0] { Value::DbRow(cols) => cols, _ => return Err(InterpError { message: "row_get_bool: expected Row".to_string() }) };
+                let idx = match &args[1] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "row_get_bool: index must be Int".to_string() }) };
+
+                match row.get(idx) {
+                    Some(Value::Int(n)) => Ok(Some(Value::Bool(*n != 0))),
+                    Some(Value::Bool(b)) => Ok(Some(Value::Bool(*b))),
+                    Some(_) => Err(InterpError { message: "row_get_bool: column is not Bool".to_string() }),
+                    None => Err(InterpError { message: "row_get_bool: index out of bounds".to_string() }),
+                }
+            }
+            "row_is_null" => {
+                // row_is_null(row: Row, index: Int) -> Bool
+                let row = match &args[0] { Value::DbRow(cols) => cols, _ => return Err(InterpError { message: "row_is_null: expected Row".to_string() }) };
+                let idx = match &args[1] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "row_is_null: index must be Int".to_string() }) };
+
+                match row.get(idx) {
+                    Some(Value::Unit) => Ok(Some(Value::Bool(true))),
+                    Some(_) => Ok(Some(Value::Bool(false))),
+                    None => Err(InterpError { message: "row_is_null: index out of bounds".to_string() }),
+                }
+            }
+            "row_len" => {
+                // row_len(row: Row) -> Int
+                let row = match &args[0] { Value::DbRow(cols) => cols, _ => return Err(InterpError { message: "row_len: expected Row".to_string() }) };
+                Ok(Some(Value::Int(row.len() as i64)))
             }
 
             // Not a built-in function

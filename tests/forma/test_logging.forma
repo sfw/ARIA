@@ -1,0 +1,44 @@
+# Test Logging Builtins
+# Tests for logging framework
+# Expected output: All tests pass (log output goes to stderr)
+
+# Test log level setting
+f test_log_level() -> Bool
+    log_set_level("error")  # Only show errors
+    log_debug("This should not appear")
+    log_info("This should not appear")
+    log_warn("This should not appear")
+    log_set_level("debug")  # Show all levels
+    true
+
+# Test log format setting
+f test_log_format() -> Bool
+    log_set_format("text")
+    log_info("Text format log")
+    log_set_format("json")
+    log_info("JSON format log")
+    log_set_format("text")  # Reset to text
+    true
+
+# Test all log levels
+f test_log_levels() -> Bool
+    log_set_level("debug")
+    log_debug("Debug message")
+    log_info("Info message")
+    log_warn("Warning message")
+    log_error("Error message")
+    true
+
+f run_all_tests() -> Int
+    passed := 0
+    if test_log_level() then passed = passed + 1 else print("FAIL: test_log_level")
+    if test_log_format() then passed = passed + 1 else print("FAIL: test_log_format")
+    if test_log_levels() then passed = passed + 1 else print("FAIL: test_log_levels")
+
+    print("Logging tests passed:")
+    print(passed)
+    print("of 3")
+
+    if passed == 3 then 1 else 0
+
+f main() -> Int = run_all_tests()

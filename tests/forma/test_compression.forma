@@ -1,0 +1,78 @@
+# Test Compression Builtins
+# Tests for gzip and zlib compression
+# Expected output: All tests pass
+
+# Test gzip compress and decompress
+f test_gzip_roundtrip() -> Bool
+    original := "Hello, World! This is a test string for compression."
+    compressed := gzip_compress(original)
+
+    # Compressed should be non-empty
+    if vec_len(compressed) == 0
+        ret false
+
+    # Decompress and verify
+    result := gzip_decompress(compressed)
+    m result
+        Ok(decompressed) -> decompressed == original
+        Err(_) -> false
+
+# Test zlib compress and decompress
+f test_zlib_roundtrip() -> Bool
+    original := "Hello, World! This is a test string for zlib compression."
+    compressed := zlib_compress(original)
+
+    # Compressed should be non-empty
+    if vec_len(compressed) == 0
+        ret false
+
+    # Decompress and verify
+    result := zlib_decompress(compressed)
+    m result
+        Ok(decompressed) -> decompressed == original
+        Err(_) -> false
+
+# Test compression actually compresses (for repetitive data)
+f test_compression_ratio() -> Bool
+    # Repetitive data should compress well
+    original := "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    compressed := gzip_compress(original)
+
+    # Compressed size should be smaller than original
+    # (64 chars of 'A' should compress to less than 64 bytes)
+    vec_len(compressed) < 64
+
+# Test empty string compression
+f test_empty_compression() -> Bool
+    original := ""
+    compressed := gzip_compress(original)
+
+    result := gzip_decompress(compressed)
+    m result
+        Ok(decompressed) -> decompressed == original
+        Err(_) -> false
+
+# Test invalid decompress data
+f test_invalid_decompress() -> Bool
+    invalid := [1, 2, 3, 4, 5]  # Not valid gzip data
+
+    result := gzip_decompress(invalid)
+    m result
+        Ok(_) -> false  # Should fail
+        Err(_) -> true  # Expected error
+
+f run_all_tests() -> Int
+    passed := 0
+    if test_gzip_roundtrip() then passed = passed + 1 else print("FAIL: test_gzip_roundtrip")
+    if test_zlib_roundtrip() then passed = passed + 1 else print("FAIL: test_zlib_roundtrip")
+    if test_compression_ratio() then passed = passed + 1 else print("FAIL: test_compression_ratio")
+    if test_empty_compression() then passed = passed + 1 else print("FAIL: test_empty_compression")
+    if test_invalid_decompress() then passed = passed + 1 else print("FAIL: test_invalid_decompress")
+
+    print("Compression tests passed:")
+    print(passed)
+    print("of 5")
+
+    if passed == 5 then 1 else 0
+
+f main() -> Int = run_all_tests()

@@ -2241,6 +2241,150 @@ impl TypeEnv {
             TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str], Box::new(Ty::Int)) },
         );
 
+        // ===== Logging builtins =====
+        // log_debug: Str -> ()
+        env.bindings.insert(
+            "log_debug".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str], Box::new(Ty::Unit)) },
+        );
+        // log_info: Str -> ()
+        env.bindings.insert(
+            "log_info".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str], Box::new(Ty::Unit)) },
+        );
+        // log_warn: Str -> ()
+        env.bindings.insert(
+            "log_warn".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str], Box::new(Ty::Unit)) },
+        );
+        // log_error: Str -> ()
+        env.bindings.insert(
+            "log_error".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str], Box::new(Ty::Unit)) },
+        );
+        // log_set_level: Str -> ()
+        env.bindings.insert(
+            "log_set_level".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str], Box::new(Ty::Unit)) },
+        );
+        // log_set_format: Str -> ()
+        env.bindings.insert(
+            "log_set_format".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str], Box::new(Ty::Unit)) },
+        );
+
+        // ===== TLS builtins =====
+        // tls_connect: (Str, Int) -> Result[TlsStream, Str]
+        env.bindings.insert(
+            "tls_connect".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str, Ty::Int], Box::new(Ty::Result(Box::new(Ty::TlsStream), Box::new(Ty::Str)))) },
+        );
+        // tls_read: (TlsStream, Int) -> Result[Str, Str]
+        env.bindings.insert(
+            "tls_read".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::TlsStream, Ty::Int], Box::new(Ty::Result(Box::new(Ty::Str), Box::new(Ty::Str)))) },
+        );
+        // tls_write: (TlsStream, Str) -> Result[Int, Str]
+        env.bindings.insert(
+            "tls_write".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::TlsStream, Ty::Str], Box::new(Ty::Result(Box::new(Ty::Int), Box::new(Ty::Str)))) },
+        );
+        // tls_close: TlsStream -> ()
+        env.bindings.insert(
+            "tls_close".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::TlsStream], Box::new(Ty::Unit)) },
+        );
+
+        // ===== Compression builtins =====
+        // gzip_compress: Str -> [Int]
+        env.bindings.insert(
+            "gzip_compress".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str], Box::new(Ty::List(Box::new(Ty::Int)))) },
+        );
+        // gzip_decompress: [Int] -> Result[Str, Str]
+        env.bindings.insert(
+            "gzip_decompress".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::List(Box::new(Ty::Int))], Box::new(Ty::Result(Box::new(Ty::Str), Box::new(Ty::Str)))) },
+        );
+        // zlib_compress: Str -> [Int]
+        env.bindings.insert(
+            "zlib_compress".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str], Box::new(Ty::List(Box::new(Ty::Int)))) },
+        );
+        // zlib_decompress: [Int] -> Result[Str, Str]
+        env.bindings.insert(
+            "zlib_decompress".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::List(Box::new(Ty::Int))], Box::new(Ty::Result(Box::new(Ty::Str), Box::new(Ty::Str)))) },
+        );
+
+        // ===== SQLite database builtins =====
+        // db_open: Str -> Result[Database, Str]
+        env.bindings.insert(
+            "db_open".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str], Box::new(Ty::Result(Box::new(Ty::Database), Box::new(Ty::Str)))) },
+        );
+        // db_open_memory: () -> Result[Database, Str]
+        env.bindings.insert(
+            "db_open_memory".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![], Box::new(Ty::Result(Box::new(Ty::Database), Box::new(Ty::Str)))) },
+        );
+        // db_execute: (Database, Str) -> Result[Int, Str]
+        env.bindings.insert(
+            "db_execute".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Database, Ty::Str], Box::new(Ty::Result(Box::new(Ty::Int), Box::new(Ty::Str)))) },
+        );
+        // db_query: (Database, Str) -> Result[[Row], Str]
+        env.bindings.insert(
+            "db_query".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Database, Ty::Str], Box::new(Ty::Result(Box::new(Ty::List(Box::new(Ty::DbRow))), Box::new(Ty::Str)))) },
+        );
+        // db_query_one: (Database, Str) -> Result[Row?, Str]
+        env.bindings.insert(
+            "db_query_one".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Database, Ty::Str], Box::new(Ty::Result(Box::new(Ty::Option(Box::new(Ty::DbRow))), Box::new(Ty::Str)))) },
+        );
+        // db_close: Database -> ()
+        env.bindings.insert(
+            "db_close".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Database], Box::new(Ty::Unit)) },
+        );
+        // row_get: (Row, Int) -> T? (generic)
+        let row_get_t = TypeVar::fresh();
+        env.bindings.insert(
+            "row_get".to_string(),
+            TypeScheme { vars: vec![row_get_t], ty: Ty::Fn(vec![Ty::DbRow, Ty::Int], Box::new(Ty::Option(Box::new(Ty::Var(row_get_t))))) },
+        );
+        // row_get_int: (Row, Int) -> Int
+        env.bindings.insert(
+            "row_get_int".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::DbRow, Ty::Int], Box::new(Ty::Int)) },
+        );
+        // row_get_str: (Row, Int) -> Str
+        env.bindings.insert(
+            "row_get_str".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::DbRow, Ty::Int], Box::new(Ty::Str)) },
+        );
+        // row_get_float: (Row, Int) -> Float
+        env.bindings.insert(
+            "row_get_float".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::DbRow, Ty::Int], Box::new(Ty::Float)) },
+        );
+        // row_get_bool: (Row, Int) -> Bool
+        env.bindings.insert(
+            "row_get_bool".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::DbRow, Ty::Int], Box::new(Ty::Bool)) },
+        );
+        // row_is_null: (Row, Int) -> Bool
+        env.bindings.insert(
+            "row_is_null".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::DbRow, Ty::Int], Box::new(Ty::Bool)) },
+        );
+        // row_len: Row -> Int
+        env.bindings.insert(
+            "row_len".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::DbRow], Box::new(Ty::Int)) },
+        );
+
         env
     }
 
@@ -2441,6 +2585,12 @@ impl Unifier {
             (Ty::TcpStream, Ty::TcpStream) => Ok(()),
             (Ty::TcpListener, Ty::TcpListener) => Ok(()),
             (Ty::UdpSocket, Ty::UdpSocket) => Ok(()),
+            (Ty::TlsStream, Ty::TlsStream) => Ok(()),
+
+            // Database type unification
+            (Ty::Database, Ty::Database) => Ok(()),
+            (Ty::Statement, Ty::Statement) => Ok(()),
+            (Ty::DbRow, Ty::DbRow) => Ok(()),
 
             // C FFI type unification
             (Ty::CInt, Ty::CInt) => Ok(()),
