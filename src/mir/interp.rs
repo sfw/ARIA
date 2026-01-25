@@ -386,6 +386,25 @@ impl Interpreter {
         Ok(result)
     }
 
+    /// Call a function with the given arguments (internal helper for builtins)
+    fn call_function_internal(&mut self, func: &Function, args: Vec<Value>) -> Result<Value, InterpError> {
+        // Create frame for the function
+        let mut frame = Frame::new(func.name.clone(), func.entry_block);
+
+        // Initialize parameters
+        for ((local, _ty), value) in func.params.iter().zip(args.iter()) {
+            frame.locals.insert(*local, value.clone());
+        }
+
+        self.call_stack.push(frame);
+
+        let result = self.execute(&func)?;
+
+        self.call_stack.pop();
+
+        Ok(result)
+    }
+
     fn execute(&mut self, func: &Function) -> Result<Value, InterpError> {
         let mut steps = 0;
 
@@ -3174,6 +3193,17 @@ impl Interpreter {
                 fields.insert("body".to_string(), Value::Str(body));
                 Ok(Some(Value::Struct("HttpResponse".to_string(), fields)))
             }
+            "http_response_with_headers" => {
+                // http_response_with_headers(status: Int, body: Str, headers: Map) -> HttpResponse
+                let status = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "http_response_with_headers: status must be Int".to_string() }) };
+                let body = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "http_response_with_headers: body must be Str".to_string() }) };
+                let headers = match &args[2] { Value::Map(m) => m.clone(), _ => return Err(InterpError { message: "http_response_with_headers: headers must be Map".to_string() }) };
+                let mut fields = HashMap::new();
+                fields.insert("status".to_string(), Value::Int(status));
+                fields.insert("headers".to_string(), Value::Map(headers));
+                fields.insert("body".to_string(), Value::Str(body));
+                Ok(Some(Value::Struct("HttpResponse".to_string(), fields)))
+            }
             "http_json_response" => {
                 // http_json_response(status: Int, data: Json) -> HttpResponse
                 let status = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "http_json_response: status must be Int".to_string() }) };
@@ -3342,22 +3372,220 @@ impl Interpreter {
             }
             "http_serve" => {
                 // http_serve(port: Int, handler: Fn) -> Result[(), Str]
-                // Simplified blocking implementation - runs one request then stops (for testing)
+                // Blocking HTTP server implementation
+                use std::io::{Read, Write, BufRead, BufReader};
+
                 let port = match &args[0] { Value::Int(n) => *n as u16, _ => return Err(InterpError { message: "http_serve: port must be Int".to_string() }) };
-                let handler = match &args[1] {
+                let handler_closure = match &args[1] {
                     Value::Closure { func_name, captures } => (func_name.clone(), captures.clone()),
                     _ => return Err(InterpError { message: "http_serve: handler must be a function".to_string() })
                 };
 
-                // For now, just return success since actually running a server requires
-                // more complex async runtime integration
-                // In a real implementation, this would start a hyper server
-                println!("http_serve: Would start server on port {} with handler {}", port, handler.0);
-                Ok(Some(Value::Enum {
-                    type_name: "Result".to_string(),
-                    variant: "Ok".to_string(),
-                    fields: vec![Value::Unit],
-                }))
+                let addr = format!("127.0.0.1:{}", port);
+                let listener = match std::net::TcpListener::bind(&addr) {
+                    Ok(l) => l,
+                    Err(e) => return Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(format!("Failed to bind: {}", e))],
+                    }))
+                };
+
+                // Set non-blocking for graceful termination check
+                listener.set_nonblocking(true).ok();
+
+                println!("FORMA HTTP server listening on http://{}", addr);
+
+                // Server loop - runs until error or Ctrl+C
+                loop {
+                    // Accept connection (non-blocking)
+                    let (mut stream, _addr) = match listener.accept() {
+                        Ok(conn) => conn,
+                        Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                            // No connection waiting, sleep briefly and retry
+                            std::thread::sleep(std::time::Duration::from_millis(10));
+                            continue;
+                        }
+                        Err(e) => {
+                            eprintln!("Accept error: {}", e);
+                            continue;
+                        }
+                    };
+
+                    // Set stream to blocking for reading
+                    stream.set_nonblocking(false).ok();
+                    stream.set_read_timeout(Some(std::time::Duration::from_secs(5))).ok();
+
+                    // Read HTTP request
+                    let mut reader = BufReader::new(&stream);
+                    let mut request_line = String::new();
+                    if reader.read_line(&mut request_line).is_err() {
+                        continue;
+                    }
+
+                    // Parse request line: "GET /path HTTP/1.1"
+                    let parts: Vec<&str> = request_line.trim().split_whitespace().collect();
+                    if parts.len() < 2 {
+                        continue;
+                    }
+                    let method = parts[0].to_string();
+                    let full_path = parts[1].to_string();
+
+                    // Read headers
+                    let mut headers_map: HashMap<String, Value> = HashMap::new();
+                    let mut content_length: usize = 0;
+                    loop {
+                        let mut line = String::new();
+                        if reader.read_line(&mut line).is_err() || line.trim().is_empty() {
+                            break;
+                        }
+                        if let Some(idx) = line.find(':') {
+                            let key = line[..idx].trim().to_lowercase();
+                            let value = line[idx+1..].trim().to_string();
+                            if key == "content-length" {
+                                content_length = value.parse().unwrap_or(0);
+                            }
+                            headers_map.insert(key, Value::Str(value));
+                        }
+                    }
+
+                    // Read body if present
+                    let mut body = String::new();
+                    if content_length > 0 {
+                        let mut body_buf = vec![0u8; content_length];
+                        if reader.read_exact(&mut body_buf).is_ok() {
+                            body = String::from_utf8_lossy(&body_buf).to_string();
+                        }
+                    }
+
+                    // Parse path and query string
+                    let (path, query_map) = if let Some(idx) = full_path.find('?') {
+                        let query_str = &full_path[idx + 1..];
+                        let mut qm = HashMap::new();
+                        for pair in query_str.split('&') {
+                            let kv: Vec<&str> = pair.splitn(2, '=').collect();
+                            if kv.len() == 2 {
+                                qm.insert(kv[0].to_string(), Value::Str(kv[1].to_string()));
+                            }
+                        }
+                        (full_path[..idx].to_string(), qm)
+                    } else {
+                        (full_path.clone(), HashMap::new())
+                    };
+
+                    // Build HttpRequest struct
+                    let mut req_fields = HashMap::new();
+                    req_fields.insert("method".to_string(), Value::Str(method.clone()));
+                    req_fields.insert("path".to_string(), Value::Str(path.clone()));
+                    req_fields.insert("query".to_string(), Value::Map(query_map));
+                    req_fields.insert("headers".to_string(), Value::Map(headers_map));
+                    req_fields.insert("body".to_string(), Value::Str(body));
+                    let http_request = Value::Struct("HttpRequest".to_string(), req_fields);
+
+                    // Call the handler closure
+                    let (func_name, captures) = &handler_closure;
+
+                    // Find the closure function
+                    let func = match self.program.functions.get(func_name) {
+                        Some(f) => f.clone(),
+                        None => {
+                            eprintln!("Handler function '{}' not found", func_name);
+                            continue;
+                        }
+                    };
+
+                    // Build arguments: captures + request
+                    let mut call_args = captures.clone();
+                    call_args.push(http_request);
+
+                    // Call the function
+                    let response = match self.call_function_internal(&func, call_args) {
+                        Ok(r) => r,
+                        Err(e) => {
+                            eprintln!("Handler error: {}", e);
+                            // Return 500 error
+                            let error_response = format!(
+                                "HTTP/1.1 500 Internal Server Error\r\n\
+                                Content-Type: text/plain\r\n\
+                                Content-Length: {}\r\n\
+                                Connection: close\r\n\r\n{}",
+                                e.message.len(), e.message
+                            );
+                            let _ = stream.write_all(error_response.as_bytes());
+                            continue;
+                        }
+                    };
+
+                    // Extract response fields
+                    let (status, resp_headers, resp_body) = match &response {
+                        Value::Struct(name, fields) if name == "HttpResponse" => {
+                            let status = match fields.get("status") {
+                                Some(Value::Int(n)) => *n as u16,
+                                _ => 200
+                            };
+                            let headers = match fields.get("headers") {
+                                Some(Value::Map(m)) => m.clone(),
+                                _ => HashMap::new()
+                            };
+                            let body = match fields.get("body") {
+                                Some(Value::Str(s)) => s.clone(),
+                                _ => String::new()
+                            };
+                            (status, headers, body)
+                        }
+                        _ => {
+                            eprintln!("Handler returned non-HttpResponse: {:?}", response);
+                            (200, HashMap::new(), format!("{}", response))
+                        }
+                    };
+
+                    // Build HTTP response
+                    let status_text = match status {
+                        200 => "OK",
+                        201 => "Created",
+                        204 => "No Content",
+                        301 => "Moved Permanently",
+                        302 => "Found",
+                        400 => "Bad Request",
+                        401 => "Unauthorized",
+                        403 => "Forbidden",
+                        404 => "Not Found",
+                        405 => "Method Not Allowed",
+                        500 => "Internal Server Error",
+                        _ => "OK"
+                    };
+
+                    let mut response_str = format!("HTTP/1.1 {} {}\r\n", status, status_text);
+
+                    // Add headers
+                    let mut has_content_type = false;
+                    let mut has_content_length = false;
+                    for (key, val) in &resp_headers {
+                        if let Value::Str(v) = val {
+                            response_str.push_str(&format!("{}: {}\r\n", key, v));
+                            if key.to_lowercase() == "content-type" { has_content_type = true; }
+                            if key.to_lowercase() == "content-length" { has_content_length = true; }
+                        }
+                    }
+
+                    // Add default headers if not present
+                    if !has_content_type {
+                        response_str.push_str("Content-Type: text/plain; charset=utf-8\r\n");
+                    }
+                    if !has_content_length {
+                        response_str.push_str(&format!("Content-Length: {}\r\n", resp_body.len()));
+                    }
+                    response_str.push_str("Connection: close\r\n");
+                    response_str.push_str("\r\n");
+                    response_str.push_str(&resp_body);
+
+                    // Send response
+                    let _ = stream.write_all(response_str.as_bytes());
+                    let _ = stream.flush();
+
+                    // Log request
+                    println!("{} {} -> {}", method, path, status);
+                }
             }
             "http_request_new" => {
                 // http_request_new(method: Str, path: Str, body: Str) -> HttpRequest

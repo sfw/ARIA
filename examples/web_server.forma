@@ -1,0 +1,45 @@
+# Simple HTTP server example
+# Run with: cargo run -- run examples/web_server.forma
+# Test with: curl http://localhost:8080/
+
+f handle_request(req: HttpRequest) -> HttpResponse
+    path := req.path
+    method := req.method
+
+    m path
+        "/" -> http_response(200, "Welcome to FORMA HTTP Server!")
+        "/hello" ->
+            name := http_req_param(req, "name")
+            m name
+                Some(n) -> http_response(200, "Hello, " + n + "!")
+                None -> http_response(200, "Hello, World!")
+        "/json" ->
+            # Return JSON response
+            json_result := json_parse("{\"message\": \"Hello from FORMA!\"}")
+            m json_result
+                Ok(j) -> http_json_response(200, j)
+                Err(_) -> http_response(500, "JSON error")
+        "/echo" ->
+            m method
+                "POST" -> http_response(200, req.body)
+                _ -> http_response(405, "Method Not Allowed")
+        "/status" ->
+            http_response(200, "Server is running!")
+        _ -> http_response(404, "Not Found")
+
+f main() -> Int
+    print("Starting FORMA web server...")
+    print("Endpoints:")
+    print("  GET  /        - Welcome message")
+    print("  GET  /hello   - Hello with optional ?name= param")
+    print("  GET  /json    - JSON response")
+    print("  POST /echo    - Echo request body")
+    print("  GET  /status  - Server status")
+    print("")
+
+    result := http_serve(8080, handle_request)
+    m result
+        Ok(_) -> 0
+        Err(e) ->
+            print("Server error: " + e)
+            1

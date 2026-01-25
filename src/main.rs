@@ -1382,9 +1382,15 @@ Type = TypePath
      | TupleType
      | FunctionType
      | ReferenceType
+     | PointerType
      | ErrorType
+     | OptionType
      | NeverType
      ;
+
+PointerType = "*" Type ;                      (* Raw pointer to T *)
+
+OptionType = Type "?" ;                       (* Option[T] sugar *)
 
 TypePath = [ "::" ] Identifier {{ "::" Identifier }} [ GenericArgs ] ;
 
@@ -1478,6 +1484,7 @@ PrimaryExpr = Literal
             | ClosureExpr
             | StructExpr
             | AwaitExpr
+            | SpawnExpr
             ;
 
 Block = INDENT {{ Statement }} [ Expression ] DEDENT
@@ -1508,7 +1515,9 @@ BreakExpr = "break" [ Expression ] ;
 
 ContinueExpr = "continue" ;
 
-AwaitExpr = Expression ".await" ;
+AwaitExpr = "await" Expression ;
+
+SpawnExpr = "spawn" Expression ;
 
 ClosureExpr = "|" [ ParamList ] "|" [ "->" Type ] Expression ;
 
@@ -1622,11 +1631,25 @@ DEDENT = ? decrease in indentation level ? ;
 (* ============================================ *)
 
 (* Primitive types: Int, Float, Bool, Char, Str, () *)
-(* Generic types: Option[T], Result[T, E], Vec[T], HashMap[K, V] *)
+(* Integer types: i8, i16, i32, i64, u8, u16, u32, u64 *)
+(* Generic types: Option[T], Result[T, E], Vec[T], Map[K, V] *)
 (* Array types: [T], [T; N] *)
 (* Tuple types: (T1, T2, ...) *)
 (* Function types: fn(Args) -> Ret *)
 (* Reference types: &T, &mut T *)
+
+(* Async types: Task[T], Future[T] *)
+(* Channel types: Sender[T], Receiver[T] *)
+(* Sync types: Mutex[T], MutexGuard[T] *)
+
+(* Network types: TcpStream, TcpListener, UdpSocket, TlsStream *)
+(* Database types: Database, Statement, Row *)
+(* HTTP types: HttpRequest, HttpResponse *)
+
+(* C FFI types: CInt, CUInt, CLong, CULong, CFloat, CDouble, CSize *)
+(* Pointer types: *T (raw pointer), *Void (void pointer) *)
+
+(* JSON type: Json *)
 
 (* End of FORMA Grammar *)
 "#

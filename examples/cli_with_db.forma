@@ -1,0 +1,92 @@
+# CLI Todo List with SQLite
+# Run with: cargo run -- run examples/cli_with_db.forma
+# Commands:
+#   list              - List all todos
+#   add <title>       - Add a new todo
+#   done <id>         - Mark todo as complete
+#   delete <id>       - Delete a todo
+
+f show_usage()
+    print("Usage: todo <command> [args]")
+    print("")
+    print("Commands:")
+    print("  list              - List all todos")
+    print("  add <title>       - Add a new todo")
+    print("  done <id>         - Mark todo as complete")
+    print("  delete <id>       - Delete a todo")
+
+f main() -> Int
+    # Open or create database
+    m db_open("todos.db")
+        Ok(db) ->
+            # Initialize table
+            db_execute(db, "CREATE TABLE IF NOT EXISTS todos (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, completed INTEGER DEFAULT 0)")
+
+            # Parse command line arguments
+            arguments := args()
+            argc := vec_len(arguments)
+
+            m argc
+                1 -> show_usage()
+                _ ->
+                    m vec_get(arguments, 1)
+                        Some(cmd) ->
+                            m cmd
+                                "list" ->
+                                    m db_query(db, "SELECT id, title, completed FROM todos ORDER BY id")
+                                        Ok(rows) ->
+                                            m vec_len(rows)
+                                                0 -> print("No todos yet! Add one with: todo add <title>")
+                                                _ ->
+                                                    print("Your todos:")
+                                                    print("------------")
+                                                    for row in rows
+                                                        id := row_get_int(row, 0)
+                                                        title := row_get_str(row, 1)
+                                                        done := row_get_int(row, 2)
+                                                        status := m done
+                                                            1 -> "[x]"
+                                                            _ -> "[ ]"
+                                                        print(status + " " + int_to_str(id) + ". " + title)
+                                        Err(e) -> print("Error: " + e)
+
+                                "add" ->
+                                    m vec_get(arguments, 2)
+                                        Some(title) ->
+                                            m db_execute(db, "INSERT INTO todos (title) VALUES ('" + title + "')")
+                                                Ok(_) -> print("Added: " + title)
+                                                Err(e) -> print("Error: " + e)
+                                        None -> print("Usage: todo add <title>")
+
+                                "done" ->
+                                    m vec_get(arguments, 2)
+                                        Some(id_str) ->
+                                            m str_to_int(id_str)
+                                                Some(id) ->
+                                                    m db_execute(db, "UPDATE todos SET completed = 1 WHERE id = " + int_to_str(id))
+                                                        Ok(_) -> print("Completed todo " + int_to_str(id))
+                                                        Err(e) -> print("Error: " + e)
+                                                None -> print("Invalid id: " + id_str)
+                                        None -> print("Usage: todo done <id>")
+
+                                "delete" ->
+                                    m vec_get(arguments, 2)
+                                        Some(id_str) ->
+                                            m str_to_int(id_str)
+                                                Some(id) ->
+                                                    m db_execute(db, "DELETE FROM todos WHERE id = " + int_to_str(id))
+                                                        Ok(_) -> print("Deleted todo " + int_to_str(id))
+                                                        Err(e) -> print("Error: " + e)
+                                                None -> print("Invalid id: " + id_str)
+                                        None -> print("Usage: todo delete <id>")
+
+                                _ ->
+                                    print("Unknown command: " + cmd)
+                                    show_usage()
+                        None -> show_usage()
+
+            db_close(db)
+            0
+        Err(e) ->
+            print("Failed to open database: " + e)
+            1

@@ -1771,6 +1771,21 @@ impl TypeEnv {
             },
         );
 
+        // http_response_with_headers: (Int, Str, Map[Str, Str]) -> HttpResponse
+        env.bindings.insert(
+            "http_response_with_headers".to_string(),
+            TypeScheme {
+                vars: vec![],
+                ty: Ty::Fn(
+                    vec![Ty::Int, Ty::Str, Ty::Map(Box::new(Ty::Str), Box::new(Ty::Str))],
+                    Box::new(Ty::Named(
+                        crate::types::TypeId { name: "HttpResponse".to_string(), module: None },
+                        vec![]
+                    ))
+                )
+            },
+        );
+
         // http_json_response: (Int, Json) -> HttpResponse
         env.bindings.insert(
             "http_json_response".to_string(),
