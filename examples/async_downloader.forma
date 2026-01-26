@@ -2,8 +2,8 @@
 # Demonstrates async/spawn for parallel HTTP requests
 # Run with: cargo run -- run examples/async_downloader.forma
 
-# Fetch a single URL and return success/failure
-f fetch_url(url: Str) -> Bool
+# Fetch a single URL and return success status
+as f fetch_url(url: Str) -> Bool
     print("Fetching: " + url)
     m http_get(url)
         Ok(_) ->
@@ -24,16 +24,24 @@ f main() -> Int
     vec_push(urls, "https://httpbin.org/user-agent")
 
     url_count := vec_len(urls)
-    print("Downloading " + int_to_str(url_count) + " URLs...")
+    print("Downloading " + int_to_str(url_count) + " URLs in parallel...")
     print("")
 
     start := time_now_ms()
 
-    # Fetch each URL sequentially
+    # Spawn tasks for each URL in parallel
+    tasks := vec_new()
+    for url in urls
+        vec_push(tasks, sp fetch_url(url))
+
+    # Wait for all tasks to complete
+    results := await_all(tasks)
+
+    # Count successes and failures
     successes := 0
     failures := 0
-    for url in urls
-        if fetch_url(url) then successes := successes + 1 else failures := failures + 1
+    for result in results
+        if result then successes := successes + 1 else failures := failures + 1
 
     elapsed := time_now_ms() - start
     print("")

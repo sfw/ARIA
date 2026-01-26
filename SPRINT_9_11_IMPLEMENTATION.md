@@ -706,14 +706,35 @@ f test_prepared_statements() {
 
 ---
 
+## Deferred to v1.1
+
+### Task 11.2: MIR Type Propagation
+
+**Status:** Deferred to v1.1
+
+**Rationale:**
+- Medium priority - not critical for v1.0 functionality
+- Risk of regressions in working interpreter
+- Only needed for future LLVM codegen optimization
+- Current `Ty::Int` placeholder works correctly at runtime
+- Type information is available in HIR for any tooling needs
+
+**Future Work:**
+- Implement `infer_rvalue_type()` for proper MIR type propagation
+- Add `operand_type()` and `function_return_type()` helpers
+- Update all `new_temp()` calls to use inferred types
+- Required before LLVM backend implementation
+
+---
+
 ## Definition of Done
 
-- [ ] All `cargo test` passes (345+ tests)
-- [ ] Sprint 9 type safety tasks complete
-- [ ] Sprint 10 stdlib tasks complete
-- [ ] Sprint 11 polish tasks complete
-- [ ] Examples run without errors
-- [ ] No regression in existing functionality
+- [x] All `cargo test` passes (345+ tests)
+- [x] Sprint 9 type safety tasks complete
+- [x] Sprint 10 stdlib tasks complete
+- [x] Sprint 11 polish tasks complete (11.2 deferred to v1.1)
+- [x] Examples run without errors
+- [x] No regression in existing functionality
 
 ---
 

@@ -856,27 +856,27 @@ impl TypeEnv {
             },
         );
 
-        // await_all([Future[T]]) -> [T]
+        // await_all([Task[T]]) -> [T]
         let t = TypeVar::fresh();
         env.bindings.insert(
             "await_all".to_string(),
             TypeScheme {
                 vars: vec![t],
                 ty: Ty::Fn(
-                    vec![Ty::List(Box::new(Ty::Future(Box::new(Ty::Var(t)))))],
+                    vec![Ty::List(Box::new(Ty::Task(Box::new(Ty::Var(t)))))],
                     Box::new(Ty::List(Box::new(Ty::Var(t))))
                 )
             },
         );
 
-        // await_any([Future[T]]) -> T
+        // await_any([Task[T]]) -> T
         let t = TypeVar::fresh();
         env.bindings.insert(
             "await_any".to_string(),
             TypeScheme {
                 vars: vec![t],
                 ty: Ty::Fn(
-                    vec![Ty::List(Box::new(Ty::Future(Box::new(Ty::Var(t)))))],
+                    vec![Ty::List(Box::new(Ty::Task(Box::new(Ty::Var(t)))))],
                     Box::new(Ty::Var(t))
                 )
             },
