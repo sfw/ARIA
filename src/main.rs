@@ -1671,6 +1671,54 @@ DEDENT = ? decrease in indentation level ? ;
 
 (* JSON type: Json *)
 
+(* Shorthand Keywords *)
+(* These are aliases for common keywords to reduce token count *)
+shorthand_keyword = 'f' (* function *)
+                  | 's' (* struct *)
+                  | 'e' (* enum *)
+                  | 't' (* trait *)
+                  | 'i' (* impl *)
+                  | 'm' (* match *)
+                  | 'us' (* use *)
+                  | 'wh' (* while *)
+                  | 'lp' (* loop *)
+                  | 'br' (* break *)
+                  | 'ct' (* continue *)
+                  | 'ret' (* return *)
+                  | 'as' (* async *)
+                  | 'sp' (* spawn *)
+                  | 'aw' (* await *) ;
+
+(* Indentation Rules *)
+(* FORMA uses significant whitespace like Python *)
+(* Blocks are delimited by INDENT and DEDENT tokens *)
+(* INDENT is generated when indentation increases *)
+(* DEDENT is generated when indentation decreases *)
+(* Tab characters are not allowed - use spaces only *)
+indentation = INDENT statement* DEDENT ;
+
+(* Contextual Keywords *)
+(* Single-letter keywords can be used as identifiers when unambiguous *)
+(* The parser uses lookahead to determine if f/s/e/t/i/m is a keyword or identifier *)
+(* Example: 'f' followed by identifier and '(' is function definition *)
+(* Example: 'f' followed by ':' is identifier in struct field *)
+
+(* Operator Precedence (highest to lowest) *)
+(* 1. Primary: literals, identifiers, parenthesized expressions *)
+(* 2. Postfix: function calls, method calls, field access, indexing *)
+(* 3. Unary: -, !, & *)
+(* 4. Multiplicative: *, /, % *)
+(* 5. Additive: +, - *)
+(* 6. Shift: <<, >> *)
+(* 7. Bitwise AND: & *)
+(* 8. Bitwise XOR: ^ *)
+(* 9. Bitwise OR: | *)
+(* 10. Comparison: ==, !=, <, >, <=, >= *)
+(* 11. Logical AND: && *)
+(* 12. Logical OR: || *)
+(* 13. Range: .., ..= *)
+(* 14. Assignment: =, +=, -=, *=, /=, %= *)
+
 (* End of FORMA Grammar *)
 "#
     );

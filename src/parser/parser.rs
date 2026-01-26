@@ -1392,13 +1392,31 @@ impl<'a> Parser<'a> {
     fn parse_or(&mut self) -> Result<Expr> {
         let start = self.current_span();
         let mut expr = self.parse_and()?;
+        let mut total_indent_count = 0;
 
         while self.match_token(TokenKind::PipePipe) {
+            // Skip newlines and indentation after binary operator to allow continuation
+            while self.check(TokenKind::Newline) || self.check(TokenKind::Indent) {
+                if self.check(TokenKind::Indent) {
+                    total_indent_count += 1;
+                }
+                self.advance();
+            }
             let right = self.parse_and()?;
             expr = Expr {
                 kind: ExprKind::Binary(Box::new(expr), BinOp::Or, Box::new(right)),
                 span: start.merge(self.previous_span()),
             };
+        }
+
+        // Skip matching dedents at the end of expression
+        for _ in 0..total_indent_count {
+            while self.check(TokenKind::Newline) {
+                self.advance();
+            }
+            if self.check(TokenKind::Dedent) {
+                self.advance();
+            }
         }
 
         Ok(expr)
@@ -1407,13 +1425,31 @@ impl<'a> Parser<'a> {
     fn parse_and(&mut self) -> Result<Expr> {
         let start = self.current_span();
         let mut expr = self.parse_comparison()?;
+        let mut total_indent_count = 0;
 
         while self.match_token(TokenKind::AmpAmp) {
+            // Skip newlines and indentation after binary operator to allow continuation
+            while self.check(TokenKind::Newline) || self.check(TokenKind::Indent) {
+                if self.check(TokenKind::Indent) {
+                    total_indent_count += 1;
+                }
+                self.advance();
+            }
             let right = self.parse_comparison()?;
             expr = Expr {
                 kind: ExprKind::Binary(Box::new(expr), BinOp::And, Box::new(right)),
                 span: start.merge(self.previous_span()),
             };
+        }
+
+        // Skip matching dedents at the end of expression
+        for _ in 0..total_indent_count {
+            while self.check(TokenKind::Newline) {
+                self.advance();
+            }
+            if self.check(TokenKind::Dedent) {
+                self.advance();
+            }
         }
 
         Ok(expr)
@@ -1440,7 +1476,24 @@ impl<'a> Parser<'a> {
         };
 
         if let Some(op) = op {
+            // Skip newlines and indentation after binary operator to allow continuation
+            let mut indent_count = 0;
+            while self.check(TokenKind::Newline) || self.check(TokenKind::Indent) {
+                if self.check(TokenKind::Indent) {
+                    indent_count += 1;
+                }
+                self.advance();
+            }
             let right = self.parse_bitor()?;
+            // Skip matching dedents and newlines
+            for _ in 0..indent_count {
+                while self.check(TokenKind::Newline) {
+                    self.advance();
+                }
+                if self.check(TokenKind::Dedent) {
+                    self.advance();
+                }
+            }
             expr = Expr {
                 kind: ExprKind::Binary(Box::new(expr), op, Box::new(right)),
                 span: start.merge(self.previous_span()),
@@ -1459,13 +1512,31 @@ impl<'a> Parser<'a> {
     fn parse_bitxor(&mut self) -> Result<Expr> {
         let start = self.current_span();
         let mut expr = self.parse_bitand()?;
+        let mut total_indent_count = 0;
 
         while self.match_token(TokenKind::Caret) {
+            // Skip newlines and indentation after binary operator to allow continuation
+            while self.check(TokenKind::Newline) || self.check(TokenKind::Indent) {
+                if self.check(TokenKind::Indent) {
+                    total_indent_count += 1;
+                }
+                self.advance();
+            }
             let right = self.parse_bitand()?;
             expr = Expr {
                 kind: ExprKind::Binary(Box::new(expr), BinOp::BitXor, Box::new(right)),
                 span: start.merge(self.previous_span()),
             };
+        }
+
+        // Skip matching dedents at the end of expression
+        for _ in 0..total_indent_count {
+            while self.check(TokenKind::Newline) {
+                self.advance();
+            }
+            if self.check(TokenKind::Dedent) {
+                self.advance();
+            }
         }
 
         Ok(expr)
@@ -1479,6 +1550,7 @@ impl<'a> Parser<'a> {
     fn parse_shift(&mut self) -> Result<Expr> {
         let start = self.current_span();
         let mut expr = self.parse_additive()?;
+        let mut total_indent_count = 0;
 
         loop {
             let op = if self.match_token(TokenKind::LtLt) {
@@ -1489,11 +1561,28 @@ impl<'a> Parser<'a> {
                 break;
             };
 
+            // Skip newlines and indentation after binary operator to allow continuation
+            while self.check(TokenKind::Newline) || self.check(TokenKind::Indent) {
+                if self.check(TokenKind::Indent) {
+                    total_indent_count += 1;
+                }
+                self.advance();
+            }
             let right = self.parse_additive()?;
             expr = Expr {
                 kind: ExprKind::Binary(Box::new(expr), op, Box::new(right)),
                 span: start.merge(self.previous_span()),
             };
+        }
+
+        // Skip matching dedents at the end of expression
+        for _ in 0..total_indent_count {
+            while self.check(TokenKind::Newline) {
+                self.advance();
+            }
+            if self.check(TokenKind::Dedent) {
+                self.advance();
+            }
         }
 
         Ok(expr)
@@ -1502,6 +1591,7 @@ impl<'a> Parser<'a> {
     fn parse_additive(&mut self) -> Result<Expr> {
         let start = self.current_span();
         let mut expr = self.parse_multiplicative()?;
+        let mut total_indent_count = 0;
 
         loop {
             let op = if self.match_token(TokenKind::Plus) {
@@ -1512,11 +1602,28 @@ impl<'a> Parser<'a> {
                 break;
             };
 
+            // Skip newlines and indentation after binary operator to allow continuation
+            while self.check(TokenKind::Newline) || self.check(TokenKind::Indent) {
+                if self.check(TokenKind::Indent) {
+                    total_indent_count += 1;
+                }
+                self.advance();
+            }
             let right = self.parse_multiplicative()?;
             expr = Expr {
                 kind: ExprKind::Binary(Box::new(expr), op, Box::new(right)),
                 span: start.merge(self.previous_span()),
             };
+        }
+
+        // Skip matching dedents at the end of expression
+        for _ in 0..total_indent_count {
+            while self.check(TokenKind::Newline) {
+                self.advance();
+            }
+            if self.check(TokenKind::Dedent) {
+                self.advance();
+            }
         }
 
         Ok(expr)
@@ -1525,6 +1632,7 @@ impl<'a> Parser<'a> {
     fn parse_multiplicative(&mut self) -> Result<Expr> {
         let start = self.current_span();
         let mut expr = self.parse_unary()?;
+        let mut total_indent_count = 0;
 
         loop {
             let op = if self.match_token(TokenKind::Star) {
@@ -1537,11 +1645,28 @@ impl<'a> Parser<'a> {
                 break;
             };
 
+            // Skip newlines and indentation after binary operator to allow continuation
+            while self.check(TokenKind::Newline) || self.check(TokenKind::Indent) {
+                if self.check(TokenKind::Indent) {
+                    total_indent_count += 1;
+                }
+                self.advance();
+            }
             let right = self.parse_unary()?;
             expr = Expr {
                 kind: ExprKind::Binary(Box::new(expr), op, Box::new(right)),
                 span: start.merge(self.previous_span()),
             };
+        }
+
+        // Skip matching dedents at the end of expression
+        for _ in 0..total_indent_count {
+            while self.check(TokenKind::Newline) {
+                self.advance();
+            }
+            if self.check(TokenKind::Dedent) {
+                self.advance();
+            }
         }
 
         Ok(expr)
@@ -1766,7 +1891,22 @@ impl<'a> Parser<'a> {
         }
 
         if self.match_token(TokenKind::Br) {
-            let label = None; // TODO: parse labels
+            // Check for optional label (identifier starting with ')
+            let label = if let Some(TokenKind::Ident(name)) = self.current().map(|t| &t.kind) {
+                if name.starts_with('\'') {
+                    let label_name = name.clone();
+                    self.advance();
+                    Some(Ident {
+                        name: label_name,
+                        span: self.previous_span(),
+                    })
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
             let value = if self.check_expr_start() {
                 Some(Box::new(self.parse_expr()?))
             } else {
@@ -1779,8 +1919,24 @@ impl<'a> Parser<'a> {
         }
 
         if self.match_token(TokenKind::Ct) {
+            // Check for optional label
+            let label = if let Some(TokenKind::Ident(name)) = self.current().map(|t| &t.kind) {
+                if name.starts_with('\'') {
+                    let label_name = name.clone();
+                    self.advance();
+                    Some(Ident {
+                        name: label_name,
+                        span: self.previous_span(),
+                    })
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
             return Ok(Expr {
-                kind: ExprKind::Continue(None),
+                kind: ExprKind::Continue(label),
                 span: start.merge(self.previous_span()),
             });
         }

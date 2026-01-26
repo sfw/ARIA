@@ -1,0 +1,27 @@
+# Test multiline expressions
+
+f test_multiline_and() -> Bool
+    a := true
+    b := true
+    result := a &&
+        b
+    result
+
+f test_multiline_or() -> Bool
+    a := false
+    b := true
+    result := a ||
+        b
+    result
+
+f test_multiline_arithmetic() -> Int
+    x := 1 +
+        2 +
+        3
+    x
+
+f main() -> Int
+    if test_multiline_and() && test_multiline_or() && test_multiline_arithmetic() == 6
+        0
+    else
+        1

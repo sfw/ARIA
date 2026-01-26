@@ -174,27 +174,52 @@ f zip_add_loop(a: [Int], b: [Int], idx: Int, acc: [Int]) -> [Int]
             None -> acc
 
 # ============================================================
-# Enumerate helper
+# Enumerate - Proper Implementation
 # ============================================================
 
-# Pair each element with its index (returns array of (idx, value) tuples)
-# For simplicity, returns (index * 1000 + value) as single Int encoding
-f array_enumerate_encoded(arr: [Int]) -> [Int]
-    enumerate_loop(arr, 0, [])
+# Enumerated element with index and value
+s EnumeratedInt
+    index: Int
+    value: Int
 
-f enumerate_loop(arr: [Int], idx: Int, acc: [Int]) -> [Int]
-    if idx >= vec_len(arr) then acc
+# Enumerate an integer array - returns array of EnumeratedInt
+f array_enumerate(arr: [Int]) -> [EnumeratedInt]
+    enumerate_helper(arr, 0, [])
+
+f enumerate_helper(arr: [Int], idx: Int, acc: [EnumeratedInt]) -> [EnumeratedInt]
+    if idx >= vec_len(arr)
+        acc
     else
         m vec_get(arr, idx)
             Some(x) ->
-                # Encode (idx, x) as idx * 1000000 + x (assumes values < 1000000)
-                encoded := idx * 1000000 + x
-                enumerate_loop(arr, idx + 1, vec_push(acc, encoded))
+                elem := EnumeratedInt { index: idx, value: x }
+                enumerate_helper(arr, idx + 1, vec_push(acc, elem))
             None -> acc
 
-# Decode enumerated value
+# ============================================================
+# Legacy Encoded Enumerate (Deprecated)
+# ============================================================
+
+# DEPRECATED: Use array_enumerate instead
+# Kept for backwards compatibility only
+# Encode (idx, x) as idx * 1000000 + x (assumes values < 1000000)
+f array_enumerate_encoded(arr: [Int]) -> [Int]
+    enumerate_loop_encoded(arr, 0, [])
+
+f enumerate_loop_encoded(arr: [Int], idx: Int, acc: [Int]) -> [Int]
+    if idx >= vec_len(arr)
+        acc
+    else
+        m vec_get(arr, idx)
+            Some(x) ->
+                encoded := idx * 1000000 + x
+                enumerate_loop_encoded(arr, idx + 1, vec_push(acc, encoded))
+            None -> acc
+
+# DEPRECATED: Use elem.index instead
 f decode_index(encoded: Int) -> Int
     encoded / 1000000
 
+# DEPRECATED: Use elem.value instead
 f decode_value(encoded: Int) -> Int
     encoded % 1000000

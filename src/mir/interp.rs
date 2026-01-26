@@ -4,9 +4,11 @@
 //! for testing and validation purposes.
 
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
 use std::thread;
 use rand::Rng;
+use tokio::task::JoinHandle;
 use serde_json;
 use chrono::{DateTime, Utc, TimeZone, Datelike, Timelike, Weekday};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
@@ -110,6 +112,8 @@ pub enum Value {
     Statement(u64),
     /// Database row
     DbRow(Vec<Value>),
+    /// Tokio task handle ID (references spawned_tasks map)
+    TokioTask(u64),
 }
 
 impl Value {
@@ -241,6 +245,7 @@ impl std::fmt::Display for Value {
                 }
                 write!(f, "]")
             }
+            Value::TokioTask(id) => write!(f, "TokioTask({})", id),
         }
     }
 }
@@ -323,10 +328,21 @@ pub struct Interpreter {
     log_level: u8,
     /// Logging format: "text" or "json"
     log_format: String,
+    /// Tokio runtime for spawning async tasks
+    runtime: Arc<tokio::runtime::Runtime>,
+    /// Active spawned tasks: maps task ID to JoinHandle
+    spawned_tasks: Arc<StdMutex<std::collections::HashMap<u64, JoinHandle<Value>>>>,
+    /// Next task ID
+    next_task_id: u64,
 }
 
 impl Interpreter {
     pub fn new(program: Program) -> Self {
+        let runtime = Arc::new(
+            tokio::runtime::Runtime::new()
+                .expect("failed to create Tokio runtime")
+        );
+
         Self {
             program,
             call_stack: Vec::new(),
@@ -349,6 +365,9 @@ impl Interpreter {
             next_stmt_id: 0,
             log_level: 1, // Default to info level
             log_format: "text".to_string(),
+            runtime,
+            spawned_tasks: Arc::new(StdMutex::new(std::collections::HashMap::new())),
+            next_task_id: 0,
         }
     }
 
@@ -930,37 +949,70 @@ impl Interpreter {
                     frame.current_block = next;
                 }
 
-                Terminator::Spawn {
-                    expr,
-                    dest,
-                    next,
-                } => {
-                    // Spawn: evaluate the expression and wrap it in a Task
-                    // In this simplified synchronous implementation, we execute immediately
+                Terminator::Spawn { expr, dest, next } => {
+                    // Evaluate the expression to get the value to spawn
                     let value = self.eval_operand(&expr)?;
-                    let task_value = match value {
-                        Value::Future(inner) => Value::Task(inner),
-                        other => Value::Task(Box::new(other)),
-                    };
 
+                    // Create task ID
+                    let task_id = self.next_task_id;
+                    self.next_task_id += 1;
+
+                    // Clone runtime for spawning
+                    let runtime = Arc::clone(&self.runtime);
+                    let spawned_tasks = Arc::clone(&self.spawned_tasks);
+
+                    // Spawn the task onto Tokio runtime
+                    let handle = runtime.spawn(async move {
+                        // The value is already evaluated, just return it
+                        // For true async, this would execute an async block
+                        value
+                    });
+
+                    // Store the handle
+                    {
+                        let mut tasks = spawned_tasks.lock().unwrap();
+                        tasks.insert(task_id, handle);
+                    }
+
+                    // Store task ID in destination
                     let frame = self.current_frame_mut()?;
                     if let Some(d) = dest {
-                        frame.locals.insert(d, task_value);
+                        frame.locals.insert(d, Value::TokioTask(task_id));
                     }
                     frame.current_block = next;
                 }
 
-                Terminator::Await {
-                    task,
-                    dest,
-                    next,
-                } => {
-                    // Await: extract the value from a Task or Future
+                Terminator::Await { task, dest, next } => {
                     let value = self.eval_operand(&task)?;
+
                     let result = match value {
+                        Value::TokioTask(task_id) => {
+                            // Get and remove the task handle
+                            let handle = {
+                                let mut tasks = self.spawned_tasks.lock().unwrap();
+                                tasks.remove(&task_id)
+                            };
+
+                            if let Some(handle) = handle {
+                                // Block on the async task using runtime
+                                match self.runtime.block_on(handle) {
+                                    Ok(val) => val,
+                                    Err(e) => {
+                                        return Err(InterpError {
+                                            message: format!("task panicked: {}", e),
+                                        });
+                                    }
+                                }
+                            } else {
+                                return Err(InterpError {
+                                    message: format!("task {} not found or already awaited", task_id),
+                                });
+                            }
+                        }
+                        // Backwards compatibility with old Task/Future values
                         Value::Task(inner) => *inner,
                         Value::Future(inner) => *inner,
-                        other => other, // For backwards compatibility
+                        other => other,
                     };
 
                     let frame = self.current_frame_mut()?;
@@ -1840,6 +1892,7 @@ impl Interpreter {
                     Value::Database(_) => "Database",
                     Value::Statement(_) => "Statement",
                     Value::DbRow(_) => "Row",
+                    Value::TokioTask(_) => "TokioTask",
                 };
                 Ok(Some(Value::Str(type_name.to_string())))
             }
@@ -2312,14 +2365,28 @@ impl Interpreter {
 
             // ===== Async operations =====
             "sleep_async" => {
-                // sleep_async(ms: Int) -> Future[()]
-                // In this simplified implementation, we sleep synchronously but wrap in Future
                 let ms = match &args[0] {
                     Value::Int(n) => *n as u64,
                     _ => return Err(InterpError { message: "sleep_async: expected Int".to_string() })
                 };
-                thread::sleep(Duration::from_millis(ms));
-                Ok(Some(Value::Future(Box::new(Value::Unit))))
+
+                // Create task ID
+                let task_id = self.next_task_id;
+                self.next_task_id += 1;
+
+                // Spawn async sleep
+                let handle = self.runtime.spawn(async move {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(ms)).await;
+                    Value::Unit
+                });
+
+                // Store handle
+                {
+                    let mut tasks = self.spawned_tasks.lock().unwrap();
+                    tasks.insert(task_id, handle);
+                }
+
+                Ok(Some(Value::TokioTask(task_id)))
             }
 
             "timeout" => {
@@ -2344,19 +2411,32 @@ impl Interpreter {
             }
 
             "await_all" => {
-                // await_all(tasks: [Task[T]]) -> [T]
-                // Awaits all tasks and returns their results
                 let tasks = match &args[0] {
                     Value::Array(arr) => arr.clone(),
                     _ => return Err(InterpError { message: "await_all: expected array of tasks".to_string() })
                 };
-                let results: Vec<Value> = tasks.into_iter().map(|task| {
-                    match task {
-                        Value::Task(inner) => *inner,
-                        Value::Future(inner) => *inner,
-                        other => other,
+
+                // Collect all task IDs
+                let task_ids: Vec<u64> = tasks.iter().filter_map(|t| {
+                    match t {
+                        Value::TokioTask(id) => Some(*id),
+                        _ => None,
                     }
                 }).collect();
+
+                // Get all handles
+                let handles: Vec<_> = {
+                    let mut task_map = self.spawned_tasks.lock().unwrap();
+                    task_ids.iter().filter_map(|id| task_map.remove(id)).collect()
+                };
+
+                // Await all concurrently using join_all
+                let results: Vec<Value> = self.runtime.block_on(async {
+                    let futures: Vec<_> = handles.into_iter().collect();
+                    let results = futures::future::join_all(futures).await;
+                    results.into_iter().map(|r| r.unwrap_or(Value::Unit)).collect()
+                });
+
                 Ok(Some(Value::Array(results)))
             }
 

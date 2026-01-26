@@ -67,6 +67,7 @@ pub struct Lowerer {
 
 #[derive(Debug, Clone)]
 struct LoopContext {
+    label: Option<String>,
     continue_block: BlockId,
     break_block: BlockId,
     result_local: Option<Local>,
@@ -806,21 +807,44 @@ impl Lowerer {
                 None
             }
 
-            ExprKind::Break(_, value) => {
-                if let Some(ctx) = self.loop_stack.last().cloned() {
+            ExprKind::Break(label, value) => {
+                // Find the target loop context by label
+                let target_ctx = if let Some(label_ident) = label {
+                    self.loop_stack.iter().rev()
+                        .find(|ctx| ctx.label.as_ref() == Some(&label_ident.name))
+                        .cloned()
+                } else {
+                    self.loop_stack.last().cloned()
+                };
+
+                if let Some(ctx) = target_ctx {
                     if let Some(val) = value.as_ref().and_then(|v| self.lower_expr(v)) {
                         if let Some(result_local) = ctx.result_local {
                             self.emit(StatementKind::Assign(result_local, Rvalue::Use(val)));
                         }
                     }
                     self.terminate(Terminator::Goto(ctx.break_block));
+                } else if let Some(label_ident) = label {
+                    // Label not found - this would be caught by type checker ideally
+                    eprintln!("Warning: break label '{}' not found", label_ident.name);
                 }
                 None
             }
 
-            ExprKind::Continue(_) => {
-                if let Some(ctx) = self.loop_stack.last().cloned() {
+            ExprKind::Continue(label) => {
+                // Find the target loop context by label
+                let target_ctx = if let Some(label_ident) = label {
+                    self.loop_stack.iter().rev()
+                        .find(|ctx| ctx.label.as_ref() == Some(&label_ident.name))
+                        .cloned()
+                } else {
+                    self.loop_stack.last().cloned()
+                };
+
+                if let Some(ctx) = target_ctx {
                     self.terminate(Terminator::Goto(ctx.continue_block));
+                } else if let Some(label_ident) = label {
+                    eprintln!("Warning: continue label '{}' not found", label_ident.name);
                 }
                 None
             }
@@ -1854,6 +1878,7 @@ impl Lowerer {
 
         // Push loop context (continue goes to increment, break goes to exit)
         self.loop_stack.push(LoopContext {
+            label: None,
             continue_block: incr_block,
             break_block: exit_block,
             result_local: None,
@@ -1978,6 +2003,7 @@ impl Lowerer {
 
         // Push loop context (continue goes to increment, break goes to exit)
         self.loop_stack.push(LoopContext {
+            label: None,
             continue_block: incr_block,
             break_block: exit_block,
             result_local: None,
@@ -2043,6 +2069,7 @@ impl Lowerer {
 
         // Push loop context
         self.loop_stack.push(LoopContext {
+            label: None,
             continue_block: cond_block,
             break_block: exit_block,
             result_local: None,
@@ -2083,6 +2110,7 @@ impl Lowerer {
 
         // Push loop context
         self.loop_stack.push(LoopContext {
+            label: None,
             continue_block: body_block,
             break_block: exit_block,
             result_local: Some(result),

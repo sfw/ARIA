@@ -68,6 +68,8 @@ pub struct LLVMCodegen<'ctx> {
     current_function: Option<FunctionValue<'ctx>>,
     /// Optimization level
     opt_level: OptimizationLevel,
+    /// Closure environment types for each closure local
+    closure_env_types: HashMap<usize, inkwell::types::StructType<'ctx>>,
 }
 
 impl<'ctx> LLVMCodegen<'ctx> {
@@ -85,6 +87,7 @@ impl<'ctx> LLVMCodegen<'ctx> {
             local_types: HashMap::new(),
             current_function: None,
             opt_level: OptimizationLevel::Default,
+            closure_env_types: HashMap::new(),
         }
     }
 
@@ -258,6 +261,9 @@ impl<'ctx> LLVMCodegen<'ctx> {
                 let val = self.compile_operand(operand)?;
                 self.compile_cast(val, target_ty)
             }
+            Rvalue::Closure { func_name, captures } => {
+                self.compile_closure(func_name, captures)
+            }
             // Note: function calls are handled in Terminator::Call, not in Rvalue
             _ => Err(CodegenError {
                 message: format!("Unsupported rvalue: {:?}", rvalue),
@@ -382,6 +388,105 @@ impl<'ctx> LLVMCodegen<'ctx> {
             }
         };
         Ok(result.into())
+    }
+
+    fn compile_closure(
+        &mut self,
+        func_name: &str,
+        captures: &[Operand],
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        // 1. Compile captured values and determine their types
+        let mut env_field_types: Vec<BasicTypeEnum> = Vec::new();
+        let mut env_values: Vec<BasicValueEnum> = Vec::new();
+
+        for cap in captures {
+            let val = self.compile_operand(cap)?;
+            env_field_types.push(val.get_type());
+            env_values.push(val);
+        }
+
+        // 2. Create environment struct type
+        let env_struct_type = self.context.struct_type(
+            &env_field_types.iter().map(|t| (*t).into()).collect::<Vec<_>>(),
+            false
+        );
+
+        // 3. Allocate environment on heap (call malloc)
+        let i64_type = self.context.i64_type();
+        let i8_ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::default());
+
+        // Get or declare malloc
+        let malloc_fn = self.module.get_function("malloc").unwrap_or_else(|| {
+            let malloc_type = i8_ptr_type.fn_type(&[i64_type.into()], false);
+            self.module.add_function("malloc", malloc_type, None)
+        });
+
+        // Calculate size and allocate
+        let env_size = env_struct_type.size_of().unwrap();
+        let env_ptr_i8 = self.builder
+            .build_call(malloc_fn, &[env_size.into()], "env_alloc")
+            .map_err(|e| CodegenError { message: format!("malloc call failed: {:?}", e) })?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| CodegenError { message: "malloc returned void".into() })?
+            .into_pointer_value();
+
+        // 4. Cast to environment struct pointer
+        let env_struct_ptr = self.builder
+            .build_pointer_cast(
+                env_ptr_i8,
+                env_struct_type.ptr_type(inkwell::AddressSpace::default()),
+                "env_struct_ptr"
+            )
+            .map_err(|e| CodegenError { message: format!("pointer cast failed: {:?}", e) })?;
+
+        // 5. Store captured values into environment struct
+        for (i, val) in env_values.iter().enumerate() {
+            let field_ptr = self.builder
+                .build_struct_gep(env_struct_type, env_struct_ptr, i as u32, &format!("env_field_{}", i))
+                .map_err(|e| CodegenError { message: format!("struct gep failed: {:?}", e) })?;
+            self.builder
+                .build_store(field_ptr, *val)
+                .map_err(|e| CodegenError { message: format!("store failed: {:?}", e) })?;
+        }
+
+        // 6. Get the lifted function pointer
+        let lifted_fn = self.functions.get(func_name)
+            .copied()
+            .ok_or_else(|| CodegenError {
+                message: format!("Lifted closure function not found: {}", func_name),
+            })?;
+
+        // 7. Cast function pointer to i8*
+        let fn_ptr_i8 = self.builder
+            .build_pointer_cast(
+                lifted_fn.as_global_value().as_pointer_value(),
+                i8_ptr_type,
+                "fn_ptr_i8"
+            )
+            .map_err(|e| CodegenError { message: format!("fn pointer cast failed: {:?}", e) })?;
+
+        // 8. Cast env pointer back to i8*
+        let env_ptr_i8_final = self.builder
+            .build_pointer_cast(env_struct_ptr, i8_ptr_type, "env_ptr_i8")
+            .map_err(|e| CodegenError { message: format!("env pointer cast failed: {:?}", e) })?;
+
+        // 9. Create closure fat pointer struct: { i8*, i8* }
+        let closure_struct_type = self.context.struct_type(
+            &[i8_ptr_type.into(), i8_ptr_type.into()],
+            false
+        );
+
+        // Build the struct value
+        let closure_undef = closure_struct_type.get_undef();
+        let closure_with_fn = self.builder
+            .build_insert_value(closure_undef, fn_ptr_i8, 0, "closure_fn")
+            .map_err(|e| CodegenError { message: format!("insert fn failed: {:?}", e) })?;
+        let closure_complete = self.builder
+            .build_insert_value(closure_with_fn, env_ptr_i8_final, 1, "closure_env")
+            .map_err(|e| CodegenError { message: format!("insert env failed: {:?}", e) })?;
+
+        Ok(closure_complete.into_struct_value().into())
     }
 
     /// Coerce a value to match a target type (e.g., i1 to i64 for comparisons stored in Int).
@@ -578,9 +683,64 @@ impl<'ctx> LLVMCodegen<'ctx> {
                         .map_err(|e| CodegenError { message: format!("branch failed: {:?}", e) })?;
                 }
             }
-            Terminator::CallIndirect { callee: _, args: _, dest: _, next } => {
-                // TODO: Implement indirect calls for closures
-                // For now, just jump to the next block
+            Terminator::CallIndirect { callee, args, dest, next } => {
+                let i8_ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::default());
+                let i64_type = self.context.i64_type();
+
+                // 1. Compile the closure operand (should be a fat pointer struct)
+                let closure_val = self.compile_operand(callee)?;
+                let closure_struct = closure_val.into_struct_value();
+
+                // 2. Extract function pointer and environment pointer
+                let fn_ptr_i8 = self.builder
+                    .build_extract_value(closure_struct, 0, "fn_ptr_raw")
+                    .map_err(|e| CodegenError { message: format!("extract fn_ptr failed: {:?}", e) })?
+                    .into_pointer_value();
+                let env_ptr = self.builder
+                    .build_extract_value(closure_struct, 1, "env_ptr")
+                    .map_err(|e| CodegenError { message: format!("extract env_ptr failed: {:?}", e) })?
+                    .into_pointer_value();
+
+                // 3. Compile arguments (environment pointer is implicit first arg)
+                let mut compiled_args: Vec<BasicMetadataValueEnum> = vec![env_ptr.into()];
+                for arg in args {
+                    let val = self.compile_operand(arg)?;
+                    compiled_args.push(val.into());
+                }
+
+                // 4. Build function type: (i8*, args...) -> i64
+                // Environment pointer is always first parameter
+                let mut param_types: Vec<BasicMetadataTypeEnum> = vec![i8_ptr_type.into()];
+                for _ in args {
+                    param_types.push(i64_type.into());
+                }
+                let fn_type = i64_type.fn_type(&param_types, false);
+
+                // 5. Cast function pointer to correct type
+                let fn_ptr_typed = self.builder
+                    .build_pointer_cast(
+                        fn_ptr_i8,
+                        fn_type.ptr_type(inkwell::AddressSpace::default()),
+                        "fn_ptr_typed"
+                    )
+                    .map_err(|e| CodegenError { message: format!("fn type cast failed: {:?}", e) })?;
+
+                // 6. Build indirect call
+                let call = self.builder
+                    .build_indirect_call(fn_type, fn_ptr_typed, &compiled_args, "indirect_call")
+                    .map_err(|e| CodegenError { message: format!("indirect call failed: {:?}", e) })?;
+
+                // 7. Store result if there's a destination
+                if let Some(local) = dest {
+                    if let Some(result) = call.try_as_basic_value().left() {
+                        if let Some(alloca) = self.locals.get(&(local.0 as usize)) {
+                            self.builder.build_store(*alloca, result)
+                                .map_err(|e| CodegenError { message: format!("store failed: {:?}", e) })?;
+                        }
+                    }
+                }
+
+                // 8. Jump to next block
                 if let Some(&bb) = blocks.get(&(next.0 as usize)) {
                     self.builder.build_unconditional_branch(bb)
                         .map_err(|e| CodegenError { message: format!("branch failed: {:?}", e) })?;
