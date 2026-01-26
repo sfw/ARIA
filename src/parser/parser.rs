@@ -704,7 +704,10 @@ impl<'a> Parser<'a> {
             let is_async = self.match_token(TokenKind::As);
             match self.parse_function(is_async, false, Visibility::Private)? {
                 ItemKind::Function(f) => Ok(TraitItem::Function(f)),
-                _ => unreachable!(),
+                other => Err(ParseError::new(
+                    format!("Expected function in trait, got {:?}", other),
+                    self.current_span(),
+                ).into()),
             }
         } else {
             Err(self.error("expected trait item (type or f)"))
@@ -796,7 +799,10 @@ impl<'a> Parser<'a> {
             let is_async = self.match_token(TokenKind::As);
             match self.parse_function(is_async, false, vis)? {
                 ItemKind::Function(f) => Ok(ImplItem::Function(f)),
-                _ => unreachable!(),
+                other => Err(ParseError::new(
+                    format!("Expected function in impl, got {:?}", other),
+                    self.current_span(),
+                ).into()),
             }
         } else {
             Err(self.error("expected impl item (type or f)"))
@@ -2294,7 +2300,12 @@ impl<'a> Parser<'a> {
                     let else_if = self.parse_if_expr(self.current_span())?;
                     match else_if.kind {
                         ExprKind::If(if_expr) => Some(ElseBranch::ElseIf(if_expr)),
-                        _ => unreachable!(),
+                        _ => {
+                            return Err(ParseError::new(
+                                "Expected if expression after 'else if'",
+                                else_if.span,
+                            ).into());
+                        }
                     }
                 } else {
                     Some(ElseBranch::Block(self.parse_block()?))

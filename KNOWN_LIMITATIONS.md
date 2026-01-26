@@ -1,7 +1,7 @@
-# FORMA v1.2 Known Limitations
+# FORMA v1.3 Known Limitations
 
 **Last Updated:** January 26, 2026
-**Status:** Post-Sprint 16 - v1.2 FEATURE COMPLETE
+**Status:** Post-Sprint 19 - v1.3 PRODUCTION READY
 
 This document lists known limitations in FORMA v1.2, categorized by severity and planned resolution timeline.
 
@@ -126,11 +126,19 @@ f map_functor[F[_], A, B](fa: F[A], f: (A) -> B) -> F[B]
 - ✅ True async parallelism (Tokio)
 - ✅ Indirect closure calls (LLVM)
 
-### v1.2 (CURRENT - January 2026) - COMPLETE
+### v1.2 (January 2026) - COMPLETE
 - ✅ Loop labels
 - ✅ Proper tuple iteration
 - ✅ Multiline expression improvements
 - ✅ Grammar export completeness
+
+### v1.3 (CURRENT - January 2026) - COMPLETE
+- ✅ Production-grade stability
+- ✅ Near-zero panic points
+- ✅ All 83 builtins validate args
+- ✅ Reserved type var IDs
+- ✅ Safe MIR lowering
+- ✅ Safe JSON serialization
 
 ### v2.0 (Future)
 - Higher-kinded types (research)
@@ -140,11 +148,12 @@ f map_functor[F[_], A, B](fa: F[A], f: (A) -> B) -> F[B]
 ## Test Results
 
 ```
-Rust unit tests:     250 passing
+Rust unit tests:     251 passing
 All std/*.forma:     Verified
 All examples/*.forma: Verified
+Panic points:        ~5 (all guarded)
 ```
 
 ---
 
-*"v1.2: Feature complete. All planned v1.x features implemented."*
+*"v1.3: Production-grade. Ready for release."*

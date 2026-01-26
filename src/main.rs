@@ -224,6 +224,14 @@ fn main() {
     }
 }
 
+/// Helper to print JSON without panicking on serialization errors
+fn print_json<T: Serialize>(value: &T) {
+    match serde_json::to_string_pretty(value) {
+        Ok(json) => println!("{}", json),
+        Err(e) => eprintln!("Error serializing output: {}", e),
+    }
+}
+
 /// Helper to create a JsonError from a span and message
 fn span_to_json_error(
     file: &str,
@@ -252,7 +260,7 @@ fn output_json_errors(errors: Vec<JsonError>, items_count: Option<usize>) {
         errors,
         items_count,
     };
-    println!("{}", serde_json::to_string_pretty(&output).unwrap());
+    print_json(&output);
 }
 
 fn compile(file: &PathBuf, error_format: ErrorFormat) -> Result<(), String> {
@@ -749,7 +757,7 @@ fn check(file: &PathBuf, partial: bool, error_format: ErrorFormat) -> Result<(),
                     "holes": [],  // TODO: identify incomplete expressions
                     "items": ast.items.len()
                 });
-                println!("{}", serde_json::to_string_pretty(&result).unwrap());
+                print_json(&result);
             } else {
                 output_json_errors(json_errors, Some(ast.items.len()));
             }
@@ -766,7 +774,7 @@ fn check(file: &PathBuf, partial: bool, error_format: ErrorFormat) -> Result<(),
                         "holes": [],
                         "items": ast.items.len()
                     });
-                    println!("{}", serde_json::to_string_pretty(&result).unwrap());
+                    print_json(&result);
                 } else {
                     output_json_errors(vec![], Some(ast.items.len()));
                 }
@@ -835,7 +843,7 @@ fn complete(file: &PathBuf, position: &str, error_format: ErrorFormat) -> Result
                 "expected_type": expected_type,
                 "context_token": found_token.map(|t| format!("{:?}", t.kind))
             });
-            println!("{}", serde_json::to_string_pretty(&result).unwrap());
+            print_json(&result);
         }
     }
     Ok(())
@@ -986,7 +994,7 @@ fn typeof_at(file: &PathBuf, position: &str, error_format: ErrorFormat) -> Resul
                 "type": result_type,
                 "context": context
             });
-            println!("{}", serde_json::to_string_pretty(&result).unwrap());
+            print_json(&result);
         }
     }
     Ok(())
@@ -1170,7 +1178,7 @@ fn build(file: &PathBuf, output: Option<&PathBuf>, _opt_level: u8, error_format:
                     "output": output_path.to_string_lossy(),
                     "opt_level": opt_level
                 });
-                println!("{}", serde_json::to_string_pretty(&result).unwrap());
+                print_json(&result);
             }
         }
     }
@@ -1186,7 +1194,7 @@ fn build(file: &PathBuf, output: Option<&PathBuf>, _opt_level: u8, error_format:
                     "status": "not_available",
                     "message": "LLVM support not enabled. Rebuild with --features llvm"
                 });
-                println!("{}", serde_json::to_string_pretty(&result).unwrap());
+                print_json(&result);
             }
         }
         return Err("LLVM not available".into());
@@ -1836,7 +1844,7 @@ fn print_grammar_json() {
             }
         }
     });
-    println!("{}", serde_json::to_string_pretty(&grammar).unwrap());
+    print_json(&grammar);
 }
 
 /// Start an interactive REPL

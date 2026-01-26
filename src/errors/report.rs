@@ -23,17 +23,16 @@ pub fn report_error(filename: &str, source: &str, span: Span, message: &str, hel
         report = report.with_help(h);
     }
 
-    report
+    let _ = report
         .finish()
-        .print((filename, Source::from(source)))
-        .unwrap();
+        .print((filename, Source::from(source)));
 }
 
 /// Report a warning with source context.
 pub fn report_warning(filename: &str, source: &str, span: Span, message: &str) {
     let offset = span.start;
 
-    Report::build(ReportKind::Warning, filename, offset)
+    let _ = Report::build(ReportKind::Warning, filename, offset)
         .with_message(message)
         .with_label(
             Label::new((filename, offset..span.end))
@@ -41,8 +40,7 @@ pub fn report_warning(filename: &str, source: &str, span: Span, message: &str) {
                 .with_color(Color::Yellow),
         )
         .finish()
-        .print((filename, Source::from(source)))
-        .unwrap();
+        .print((filename, Source::from(source)));
 }
 
 /// Report multiple errors efficiently.

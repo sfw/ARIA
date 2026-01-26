@@ -2958,19 +2958,19 @@ impl Interpreter {
                 // time_format(timestamp, format_str) -> Str
                 let ts = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_format: timestamp must be Int".to_string() }) };
                 let fmt = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "time_format: format must be Str".to_string() }) };
-                let dt = DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc.timestamp_opt(0, 0).unwrap());
+                let dt = DateTime::from_timestamp(ts, 0).unwrap_or(DateTime::UNIX_EPOCH);
                 Ok(Some(Value::Str(dt.format(&fmt).to_string())))
             }
             "time_format_iso" => {
                 // time_format_iso(timestamp) -> Str
                 let ts = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_format_iso: timestamp must be Int".to_string() }) };
-                let dt = DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc.timestamp_opt(0, 0).unwrap());
+                let dt = DateTime::from_timestamp(ts, 0).unwrap_or(DateTime::UNIX_EPOCH);
                 Ok(Some(Value::Str(dt.to_rfc3339())))
             }
             "time_format_rfc2822" => {
                 // time_format_rfc2822(timestamp) -> Str
                 let ts = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_format_rfc2822: timestamp must be Int".to_string() }) };
-                let dt = DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc.timestamp_opt(0, 0).unwrap());
+                let dt = DateTime::from_timestamp(ts, 0).unwrap_or(DateTime::UNIX_EPOCH);
                 Ok(Some(Value::Str(dt.to_rfc2822())))
             }
             "time_parse" => {
@@ -3009,43 +3009,43 @@ impl Interpreter {
             "time_year" => {
                 // time_year(timestamp) -> Int
                 let ts = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_year: timestamp must be Int".to_string() }) };
-                let dt = DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc.timestamp_opt(0, 0).unwrap());
+                let dt = DateTime::from_timestamp(ts, 0).unwrap_or(DateTime::UNIX_EPOCH);
                 Ok(Some(Value::Int(dt.year() as i64)))
             }
             "time_month" => {
                 // time_month(timestamp) -> Int
                 let ts = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_month: timestamp must be Int".to_string() }) };
-                let dt = DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc.timestamp_opt(0, 0).unwrap());
+                let dt = DateTime::from_timestamp(ts, 0).unwrap_or(DateTime::UNIX_EPOCH);
                 Ok(Some(Value::Int(dt.month() as i64)))
             }
             "time_day" => {
                 // time_day(timestamp) -> Int
                 let ts = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_day: timestamp must be Int".to_string() }) };
-                let dt = DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc.timestamp_opt(0, 0).unwrap());
+                let dt = DateTime::from_timestamp(ts, 0).unwrap_or(DateTime::UNIX_EPOCH);
                 Ok(Some(Value::Int(dt.day() as i64)))
             }
             "time_hour" => {
                 // time_hour(timestamp) -> Int
                 let ts = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_hour: timestamp must be Int".to_string() }) };
-                let dt = DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc.timestamp_opt(0, 0).unwrap());
+                let dt = DateTime::from_timestamp(ts, 0).unwrap_or(DateTime::UNIX_EPOCH);
                 Ok(Some(Value::Int(dt.hour() as i64)))
             }
             "time_minute" => {
                 // time_minute(timestamp) -> Int
                 let ts = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_minute: timestamp must be Int".to_string() }) };
-                let dt = DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc.timestamp_opt(0, 0).unwrap());
+                let dt = DateTime::from_timestamp(ts, 0).unwrap_or(DateTime::UNIX_EPOCH);
                 Ok(Some(Value::Int(dt.minute() as i64)))
             }
             "time_second" => {
                 // time_second(timestamp) -> Int
                 let ts = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_second: timestamp must be Int".to_string() }) };
-                let dt = DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc.timestamp_opt(0, 0).unwrap());
+                let dt = DateTime::from_timestamp(ts, 0).unwrap_or(DateTime::UNIX_EPOCH);
                 Ok(Some(Value::Int(dt.second() as i64)))
             }
             "time_weekday" => {
                 // time_weekday(timestamp) -> Int (0=Sunday, 6=Saturday)
                 let ts = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_weekday: timestamp must be Int".to_string() }) };
-                let dt = DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc.timestamp_opt(0, 0).unwrap());
+                let dt = DateTime::from_timestamp(ts, 0).unwrap_or(DateTime::UNIX_EPOCH);
                 let weekday = match dt.weekday() {
                     Weekday::Sun => 0,
                     Weekday::Mon => 1,

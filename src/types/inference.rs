@@ -23,6 +23,9 @@ pub mod reserved_type_vars {
     pub const ELEM_TYPE: u32 = u32::MAX;      // T (element type)
     pub const KEY_TYPE: u32 = u32::MAX - 1;   // K (key type)
     pub const VALUE_TYPE: u32 = u32::MAX - 2; // V (value type)
+    pub const OPTION_T: u32 = u32::MAX - 3;   // Option's T
+    pub const RESULT_T: u32 = u32::MAX - 4;   // Result's T
+    pub const RESULT_E: u32 = u32::MAX - 5;   // Result's E
 }
 
 /// Type error during inference.
@@ -120,7 +123,7 @@ impl TypeEnv {
             TypeDef::Enum {
                 type_params: vec!["T".to_string()],
                 variants: vec![
-                    ("Some".to_string(), vec![Ty::Var(TypeVar { id: 0 })]),
+                    ("Some".to_string(), vec![Ty::Var(TypeVar { id: reserved_type_vars::OPTION_T })]),
                     ("None".to_string(), vec![]),
                 ],
             },
@@ -152,8 +155,8 @@ impl TypeEnv {
             TypeDef::Enum {
                 type_params: vec!["T".to_string(), "E".to_string()],
                 variants: vec![
-                    ("Ok".to_string(), vec![Ty::Var(TypeVar { id: 0 })]),
-                    ("Err".to_string(), vec![Ty::Var(TypeVar { id: 1 })]),
+                    ("Ok".to_string(), vec![Ty::Var(TypeVar { id: reserved_type_vars::RESULT_T })]),
+                    ("Err".to_string(), vec![Ty::Var(TypeVar { id: reserved_type_vars::RESULT_E })]),
                 ],
             },
         );
@@ -2898,7 +2901,7 @@ impl InferenceEngine {
 
         // A placeholder type variable for generic element types
         // At call time, we'll substitute this with the actual element type
-        let t_var = Ty::fresh_var();  // Use proper fresh var generator
+        let t_var = Ty::Var(TypeVar { id: reserved_type_vars::ELEM_TYPE });
 
         // ===== Vec/List methods =====
         // len: [T] -> Int
@@ -3032,8 +3035,8 @@ impl InferenceEngine {
         });
 
         // ===== Map methods =====
-        let k_var = Ty::fresh_var();  // Key type
-        let v_var = Ty::fresh_var();  // Value type
+        let k_var = Ty::Var(TypeVar { id: reserved_type_vars::KEY_TYPE });
+        let v_var = Ty::Var(TypeVar { id: reserved_type_vars::VALUE_TYPE });
 
         // len: Map[K,V] -> Int
         self.builtin_methods.insert(mk("Map", "len"), MethodSignature {
@@ -4209,7 +4212,10 @@ impl InferenceEngine {
                         if let Some(ty) = &p.ty {
                             self.ast_type_to_ty(ty)
                         } else {
-                            Ok(Ty::fresh_var())
+                            Err(TypeError::new(
+                                format!("Cannot infer type of lambda parameter '{}'", p.name.name),
+                                p.span,
+                            ))
                         }
                     })
                     .collect::<Result<Vec<_>, _>>()?;
@@ -4693,13 +4699,11 @@ impl InferenceEngine {
                         }
                     }
                     _ => {
-                        // Not a known struct - use fallback behavior
-                        for field in fields {
-                            if let Some(p) = &field.pattern {
-                                self.check_pattern(p, &Ty::fresh_var())?;
-                            }
-                        }
-                        Ok(())
+                        // Unknown struct type - return error
+                        Err(TypeError::new(
+                            format!("Unknown struct type in pattern: '{}'", struct_name),
+                            pattern.span,
+                        ))
                     }
                 }
             }
@@ -4780,7 +4784,10 @@ impl InferenceEngine {
                     let field_ty = struct_fields.iter()
                         .find(|(name, _)| name == &field.name.name)
                         .map(|(_, ty)| ty.clone())
-                        .unwrap_or_else(Ty::fresh_var);
+                        .ok_or_else(|| TypeError::new(
+                            format!("Unknown field '{}' in struct pattern", field.name.name),
+                            field.name.span,
+                        ))?;
 
                     if let Some(p) = &field.pattern {
                         self.collect_pattern_bindings(p, &field_ty, env)?;

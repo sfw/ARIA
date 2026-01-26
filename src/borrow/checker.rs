@@ -171,11 +171,14 @@ impl BorrowChecker {
         }
     }
 
-    /// Get a mutable reference to the current scope, panicking if the stack is empty.
-    /// This should never fail as the scope_stack is always initialized with at least one scope.
+    /// Get a mutable reference to the current scope.
+    /// If the stack is empty (which should never happen), pushes a new empty scope and reports an error.
     fn current_scope_mut(&mut self) -> &mut HashSet<String> {
-        self.scope_stack.last_mut()
-            .expect("internal error: empty scope stack in borrow checker")
+        if self.scope_stack.is_empty() {
+            eprintln!("Internal error: empty scope stack in borrow checker");
+            self.scope_stack.push(HashSet::new());
+        }
+        self.scope_stack.last_mut().unwrap()
     }
 
     /// Check a complete source file.
@@ -313,11 +316,11 @@ impl BorrowChecker {
 
             // For the last statement, if it's an expression and the function
             // returns a reference, check it as a return value
-            if is_last && self.returns_ref {
-                if let StmtKind::Expr(expr) = &stmt.kind {
-                    self.check_return_ref(expr, fn_span);
-                    continue;
-                }
+            if is_last && self.returns_ref
+                && let StmtKind::Expr(expr) = &stmt.kind
+            {
+                self.check_return_ref(expr, fn_span);
+                continue;
             }
 
             self.check_stmt(stmt);
@@ -583,17 +586,17 @@ impl BorrowChecker {
 
             ExprKind::Assign(target, value, _mutable) => {
                 // Check if target is borrowed
-                if let Some(name) = self.get_borrowed_name(target) {
-                    if let Some(info) = self.vars.get(&name) {
-                        match info.state {
-                            VarState::ImmutBorrowed(_) | VarState::MutBorrowed => {
-                                self.errors.push(BorrowError::new(
-                                    BorrowErrorKind::AssignWhileBorrowed { name: name.clone() },
-                                    expr.span,
-                                ));
-                            }
-                            _ => {}
+                if let Some(name) = self.get_borrowed_name(target)
+                    && let Some(info) = self.vars.get(&name)
+                {
+                    match info.state {
+                        VarState::ImmutBorrowed(_) | VarState::MutBorrowed => {
+                            self.errors.push(BorrowError::new(
+                                BorrowErrorKind::AssignWhileBorrowed { name: name.clone() },
+                                expr.span,
+                            ));
                         }
+                        _ => {}
                     }
                 }
                 self.check_expr(value);

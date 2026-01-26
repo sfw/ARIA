@@ -723,8 +723,16 @@ impl Lowerer {
 
                 if is_direct {
                     // Direct function call
+                    let func = match func_name {
+                        Some(name) => name,
+                        None => {
+                            eprintln!("Internal error: function call without function name at {:?}", expr.span);
+                            return None;
+                        }
+                    };
+
                     self.terminate(Terminator::Call {
-                        func: func_name.unwrap(),
+                        func,
                         args: mir_args,
                         dest: Some(result),
                         next: next_block,
@@ -1170,19 +1178,29 @@ impl Lowerer {
                 let continue_block = self.new_block();
 
                 // Switch on discriminant:
-                // For Option: None=0, Some=1
-                // For Result: Ok=0, Err=1
-                // We check: if discriminant == 0, it's None (for Option) or Ok (for Result)
-                // Since we can't know the type statically, we use a heuristic:
-                // Check if discriminant == 1 (Some) for Option, or == 0 (Ok) for Result
-                // Actually, let's use: discriminant == 1 means it has a value (Some), else (None) return
+                // For Option: None=0, Some=1 - continue on disc==1 (Some)
+                // For Result: Ok=0, Err=1 - continue on disc==0 (Ok)
+                // Determine if this is Option or Result type
+                let inner_type = self.infer_expr_type(inner);
+                let is_result = matches!(inner_type, Ty::Result(_, _));
 
-                // Branch: discriminant > 0 means Some (has value)
+                // Branch based on type:
+                // - Option: discriminant > 0 means Some (has value, continue)
+                // - Result: discriminant == 0 means Ok (has value, continue)
                 let has_value = self.new_temp(Ty::Bool);
-                self.emit(StatementKind::Assign(
-                    has_value,
-                    Rvalue::BinaryOp(BinOp::Gt, Operand::Copy(disc), Operand::Constant(Constant::Int(0))),
-                ));
+                if is_result {
+                    // Result: Ok has discriminant 0
+                    self.emit(StatementKind::Assign(
+                        has_value,
+                        Rvalue::BinaryOp(BinOp::Eq, Operand::Copy(disc), Operand::Constant(Constant::Int(0))),
+                    ));
+                } else {
+                    // Option: Some has discriminant 1
+                    self.emit(StatementKind::Assign(
+                        has_value,
+                        Rvalue::BinaryOp(BinOp::Gt, Operand::Copy(disc), Operand::Constant(Constant::Int(0))),
+                    ));
+                }
                 self.terminate(Terminator::If {
                     cond: Operand::Local(has_value),
                     then_block: some_ok_block,
@@ -2341,16 +2359,26 @@ impl Lowerer {
     // Helper methods
 
     fn new_temp(&mut self, ty: Ty) -> Local {
-        let func = self.current_function_mut()
-            .expect("new_temp called without current function");
+        let func = match self.current_function_mut() {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("Internal error: new_temp - {}", e.message);
+                return Local(0);
+            }
+        };
         let local = func.add_local(ty.clone(), None);
         self.local_types.insert(local, ty);
         local
     }
 
     fn new_local(&mut self, ty: Ty, name: Option<String>) -> Local {
-        let func = self.current_function_mut()
-            .expect("new_local called without current function");
+        let func = match self.current_function_mut() {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("Internal error: new_local - {}", e.message);
+                return Local(0);
+            }
+        };
         let local = func.add_local(ty.clone(), name.clone());
         self.local_types.insert(local, ty.clone());
         if let Some(n) = name {
@@ -2644,24 +2672,49 @@ impl Lowerer {
     }
 
     fn new_block(&mut self) -> BlockId {
-        let func = self.current_function_mut()
-            .expect("new_block called without current function");
+        let func = match self.current_function_mut() {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("Internal error: new_block - {}", e.message);
+                return BlockId(0);
+            }
+        };
         func.add_block()
     }
 
     fn emit(&mut self, kind: StatementKind) {
-        let block = self.current_block_id()
-            .expect("emit called without current block");
-        let func = self.current_function_mut()
-            .expect("emit called without current function");
+        let block = match self.current_block_id() {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("Internal error: emit block - {}", e.message);
+                return;
+            }
+        };
+        let func = match self.current_function_mut() {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("Internal error: emit func - {}", e.message);
+                return;
+            }
+        };
         func.block_mut(block).push(Statement { kind });
     }
 
     fn terminate(&mut self, term: Terminator) {
-        let block = self.current_block_id()
-            .expect("terminate called without current block");
-        let func = self.current_function_mut()
-            .expect("terminate called without current function");
+        let block = match self.current_block_id() {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("Internal error: terminate block - {}", e.message);
+                return;
+            }
+        };
+        let func = match self.current_function_mut() {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("Internal error: terminate func - {}", e.message);
+                return;
+            }
+        };
         func.block_mut(block).terminate(term);
     }
 
@@ -2854,7 +2907,7 @@ impl Lowerer {
         )
     }
 
-    fn get_struct_fields(&self, struct_name: &str) -> Option<Vec<(String, Ty)>> {
+    fn get_struct_fields(&self, _struct_name: &str) -> Option<Vec<(String, Ty)>> {
         // Look up struct definition in var_types or type registry
         // For now, return None and rely on type checker having validated
         // In a full implementation, this would query the struct registry

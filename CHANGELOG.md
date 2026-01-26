@@ -4,6 +4,29 @@ All notable changes to FORMA are documented in this file.
 
 ---
 
+## [1.3.0] - January 26, 2026
+
+### 🛡️ Production-Grade Stability Release
+
+FORMA v1.3 achieves near-zero panic points in production code through systematic safety improvements.
+
+**251 Rust tests passing** | All std/*.forma and examples/*.forma verified
+
+#### Stability Improvements (Sprint 17-19)
+
+| Category | Changes |
+|----------|---------|
+| **Builtin Validation** | All 83 builtins validate argument counts |
+| **Type Inference Safety** | Reserved type var IDs, no silent fresh_var fallbacks |
+| **MIR Lowerer** | Safe error handling, no unwrap panics |
+| **Parser** | All unreachable!() replaced with proper errors |
+| **LLVM Codegen** | Safe type coercion helpers |
+| **JSON Output** | Safe serialization with print_json helper |
+
+#### Panic Points Eliminated: ~45
+
+---
+
 ## [1.2.0] - January 26, 2026
 
 ### 🚀 Feature Complete Release
