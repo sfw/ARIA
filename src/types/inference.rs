@@ -4851,15 +4851,47 @@ impl InferenceEngine {
                     }
                     Some((variant_name, TypeDef::Enum { variants, .. })) => {
                         // Handle enum variant pattern (e.g., Some(x), Ok(value))
-                        if let Some((_, field_types)) = variants.iter().find(|(n, _)| n == &variant_name) {
-                            // Bind each field pattern to its expected type
-                            for (field, expected_ty) in fields.iter().zip(field_types.iter()) {
-                                if let Some(p) = &field.pattern {
-                                    self.collect_pattern_bindings(p, expected_ty, env)?;
+                        // Get the concrete type being matched
+                        let resolved_ty = ty.apply(&self.unifier.subst);
+
+                        // Extract field types directly from the concrete type
+                        // This handles built-in Option/Result with their actual type arguments
+                        let concrete_field_types: Vec<Ty> = match (&resolved_ty, variant_name.as_str()) {
+                            (Ty::Option(inner), "Some") => vec![(**inner).clone()],
+                            (Ty::Option(_), "None") => vec![],
+                            (Ty::Result(ok_ty, _), "Ok") => vec![(**ok_ty).clone()],
+                            (Ty::Result(_, err_ty), "Err") => vec![(**err_ty).clone()],
+                            (Ty::Named(_, args), _) => {
+                                // For user-defined enums, get field types from definition
+                                // and substitute type args if needed
+                                if let Some((_, tys)) = variants.iter().find(|(n, _)| n == &variant_name) {
+                                    // TODO: Properly substitute type params with args
+                                    // For now, use args directly if they match field count
+                                    if !args.is_empty() && tys.len() <= args.len() {
+                                        args.iter().take(tys.len()).cloned().collect()
+                                    } else {
+                                        tys.clone()
+                                    }
                                 } else {
-                                    // The field name is the binding
-                                    env.insert(field.name.name.clone(), TypeScheme::mono(expected_ty.clone()));
+                                    vec![]
                                 }
+                            }
+                            _ => {
+                                // Fall back to enum definition's field types
+                                variants.iter()
+                                    .find(|(n, _)| n == &variant_name)
+                                    .map(|(_, tys)| tys.clone())
+                                    .unwrap_or_default()
+                            }
+                        };
+
+                        // Bind each field pattern to its CONCRETE type
+                        for (field, concrete_ty) in fields.iter().zip(concrete_field_types.iter()) {
+                            if let Some(p) = &field.pattern {
+                                self.collect_pattern_bindings(p, concrete_ty, env)?;
+                            } else {
+                                // The field name is the binding
+                                env.insert(field.name.name.clone(), TypeScheme::mono(concrete_ty.clone()));
                             }
                         }
                     }
