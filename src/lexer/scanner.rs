@@ -125,7 +125,13 @@ impl<'a> Scanner<'a> {
             ',' => self.make_token(TokenKind::Comma),
             ';' => self.make_token(TokenKind::Semicolon),
             '@' => self.make_token(TokenKind::At),
-            '%' => self.make_token(TokenKind::Percent),
+            '%' => {
+                if self.match_char('=') {
+                    self.make_token(TokenKind::PercentEq)
+                } else {
+                    self.make_token(TokenKind::Percent)
+                }
+            }
             '^' => self.make_token(TokenKind::Caret),
 
             // Two-character tokens

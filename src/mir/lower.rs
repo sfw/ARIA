@@ -359,12 +359,78 @@ impl Lowerer {
             }
 
             ExprKind::Binary(left, op, right) => {
-                let l = self.lower_expr(left)?;
-                let r = self.lower_expr(right)?;
-                let bin_op = self.lower_bin_op(*op);
-                let result = self.new_temp(Ty::Int); // TODO: proper type
-                self.emit(StatementKind::Assign(result, Rvalue::BinaryOp(bin_op, l, r)));
-                Some(Operand::Local(result))
+                // Handle short-circuit evaluation for && and ||
+                match op {
+                    AstBinOp::And => {
+                        // a && b: only evaluate b if a is true
+                        let result = self.new_temp(Ty::Bool);
+                        let l = self.lower_expr(left)?;
+
+                        let eval_right_block = self.new_block();
+                        let short_circuit_block = self.new_block();
+                        let merge_block = self.new_block();
+
+                        // If left is true, evaluate right; else short-circuit to false
+                        self.terminate(Terminator::If {
+                            cond: l,
+                            then_block: eval_right_block,
+                            else_block: short_circuit_block,
+                        });
+
+                        // Evaluate right operand
+                        self.current_block = Some(eval_right_block);
+                        let r = self.lower_expr(right)?;
+                        self.emit(StatementKind::Assign(result, Rvalue::Use(r)));
+                        self.terminate(Terminator::Goto(merge_block));
+
+                        // Short-circuit: left was false, result is false
+                        self.current_block = Some(short_circuit_block);
+                        self.emit(StatementKind::Assign(result, Rvalue::Use(Operand::Constant(Constant::Bool(false)))));
+                        self.terminate(Terminator::Goto(merge_block));
+
+                        self.current_block = Some(merge_block);
+                        Some(Operand::Local(result))
+                    }
+                    AstBinOp::Or => {
+                        // a || b: only evaluate b if a is false
+                        let result = self.new_temp(Ty::Bool);
+                        let l = self.lower_expr(left)?;
+
+                        let short_circuit_block = self.new_block();
+                        let eval_right_block = self.new_block();
+                        let merge_block = self.new_block();
+
+                        // If left is true, short-circuit to true; else evaluate right
+                        self.terminate(Terminator::If {
+                            cond: l,
+                            then_block: short_circuit_block,
+                            else_block: eval_right_block,
+                        });
+
+                        // Short-circuit: left was true, result is true
+                        self.current_block = Some(short_circuit_block);
+                        self.emit(StatementKind::Assign(result, Rvalue::Use(Operand::Constant(Constant::Bool(true)))));
+                        self.terminate(Terminator::Goto(merge_block));
+
+                        // Evaluate right operand
+                        self.current_block = Some(eval_right_block);
+                        let r = self.lower_expr(right)?;
+                        self.emit(StatementKind::Assign(result, Rvalue::Use(r)));
+                        self.terminate(Terminator::Goto(merge_block));
+
+                        self.current_block = Some(merge_block);
+                        Some(Operand::Local(result))
+                    }
+                    _ => {
+                        // Other binary ops: evaluate both operands
+                        let l = self.lower_expr(left)?;
+                        let r = self.lower_expr(right)?;
+                        let bin_op = self.lower_bin_op(*op);
+                        let result = self.new_temp(Ty::Int); // TODO: proper type
+                        self.emit(StatementKind::Assign(result, Rvalue::BinaryOp(bin_op, l, r)));
+                        Some(Operand::Local(result))
+                    }
+                }
             }
 
             ExprKind::Unary(op, operand) => {

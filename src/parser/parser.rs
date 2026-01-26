@@ -19,9 +19,11 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse a complete source file.
+    /// Uses error recovery to continue parsing after errors and report multiple issues.
     pub fn parse(mut self) -> Result<SourceFile> {
         let start = self.current_span();
         let mut items = Vec::new();
+        let mut first_error: Option<crate::errors::CompileError> = None;
 
         while !self.at_end() {
             // Skip newlines at top level
@@ -31,7 +33,22 @@ impl<'a> Parser<'a> {
             if self.at_end() {
                 break;
             }
-            items.push(self.parse_item()?);
+
+            match self.parse_item() {
+                Ok(item) => items.push(item),
+                Err(e) => {
+                    // Store the first error but continue parsing to find more items
+                    if first_error.is_none() {
+                        first_error = Some(e);
+                    }
+                    self.synchronize();
+                }
+            }
+        }
+
+        // Return the first error if any occurred
+        if let Some(err) = first_error {
+            return Err(err);
         }
 
         let end = self.previous_span();
@@ -1323,6 +1340,8 @@ impl<'a> Parser<'a> {
             Some(BinOp::Mul)
         } else if self.match_token(TokenKind::SlashEq) {
             Some(BinOp::Div)
+        } else if self.match_token(TokenKind::PercentEq) {
+            Some(BinOp::Mod)
         } else {
             None
         };
@@ -3135,6 +3154,40 @@ impl<'a> Parser<'a> {
 
     fn at_end(&self) -> bool {
         matches!(self.current_kind(), Some(TokenKind::Eof) | None)
+    }
+
+    /// Synchronize to the next item boundary after a parse error.
+    /// This allows the parser to continue and report multiple errors.
+    fn synchronize(&mut self) {
+        self.advance();
+
+        while !self.at_end() {
+            // If we just passed a newline at column 0, we might be at a new item
+            if let Some(prev) = self.tokens.get(self.pos.saturating_sub(1)) {
+                if prev.kind == TokenKind::Newline {
+                    // Check if current token starts a new item
+                    if matches!(
+                        self.current_kind(),
+                        Some(TokenKind::F)      // function
+                        | Some(TokenKind::S)   // struct
+                        | Some(TokenKind::E)   // enum
+                        | Some(TokenKind::T)   // trait
+                        | Some(TokenKind::I)   // impl
+                        | Some(TokenKind::Type) // type alias
+                        | Some(TokenKind::Us)  // use
+                        | Some(TokenKind::Md)  // module
+                        | Some(TokenKind::At)  // attribute (starts an item)
+                        | Some(TokenKind::As)  // async modifier
+                        | Some(TokenKind::Un)  // unsafe modifier
+                        | Some(TokenKind::Pub) // pub modifier
+                    ) {
+                        return;
+                    }
+                }
+            }
+
+            self.advance();
+        }
     }
 
     fn expect(&mut self, kind: TokenKind) -> Result<()> {

@@ -151,6 +151,7 @@ pub enum TokenKind {
     MinusEq,    // -=
     StarEq,     // *=
     SlashEq,    // /=
+    PercentEq,  // %=
 
     // Special operators
     Question,       // ?
@@ -366,6 +367,7 @@ impl fmt::Display for TokenKind {
             TokenKind::MinusEq => write!(f, "-="),
             TokenKind::StarEq => write!(f, "*="),
             TokenKind::SlashEq => write!(f, "/="),
+            TokenKind::PercentEq => write!(f, "%="),
             TokenKind::Question => write!(f, "?"),
             TokenKind::QuestionQuestion => write!(f, "??"),
             TokenKind::Arrow => write!(f, "->"),
