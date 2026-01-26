@@ -1030,7 +1030,15 @@ impl Interpreter {
                                     task_interp.call_stack.push(frame);
                                     match task_interp.execute(&func) {
                                         Ok(val) => val,
-                                        Err(_) => Value::Unit,
+                                        Err(e) => {
+                                            eprintln!("Spawned task error: {}", e.message);
+                                            // Return as a Result::Err variant so caller can detect failure
+                                            Value::Enum {
+                                                type_name: "Result".to_string(),
+                                                variant: "Err".to_string(),
+                                                fields: vec![Value::Str(e.message)],
+                                            }
+                                        }
                                     }
                                 }).await.unwrap_or(Value::Unit)
                             })
@@ -1960,6 +1968,7 @@ impl Interpreter {
                 Ok(Some(Value::Tuple(vec![Value::Map(new_map), opt])))
             }
             "map_values" => {
+                validate_args!(args, 1, "map_values");
                 // map_values(map) -> array of values
                 let map = match &args[0] {
                     Value::Map(m) => m,
@@ -1978,6 +1987,7 @@ impl Interpreter {
 
             // ===== Type/Debug operations =====
             "type_of" => {
+                validate_args!(args, 1, "type_of");
                 let type_name = match &args[0] {
                     Value::Unit => "Unit",
                     Value::Bool(_) => "Bool",
@@ -2868,6 +2878,7 @@ impl Interpreter {
             }
 
             "mutex_try_lock" => {
+                validate_args!(args, 1, "mutex_try_lock");
                 // mutex_try_lock(m: Mutex[T]) -> MutexGuard[T]?
                 let id = match &args[0] {
                     Value::Mutex(id) => *id,
@@ -2898,6 +2909,7 @@ impl Interpreter {
             }
 
             "mutex_unlock" => {
+                validate_args!(args, 1, "mutex_unlock");
                 // mutex_unlock(guard: MutexGuard[T]) -> ()
                 let id = match &args[0] {
                     Value::MutexGuard(id) => *id,
@@ -2911,6 +2923,7 @@ impl Interpreter {
             }
 
             "mutex_get" => {
+                validate_args!(args, 1, "mutex_get");
                 // mutex_get(guard: MutexGuard[T]) -> T
                 let id = match &args[0] {
                     Value::MutexGuard(id) => *id,
@@ -2925,6 +2938,7 @@ impl Interpreter {
             }
 
             "mutex_set" => {
+                validate_args!(args, 2, "mutex_set");
                 // mutex_set(guard: MutexGuard[T], value: T) -> ()
                 let id = match &args[0] {
                     Value::MutexGuard(id) => *id,
@@ -2942,6 +2956,7 @@ impl Interpreter {
 
             // ===== DateTime operations (chrono-based) =====
             "time_from_parts" => {
+                validate_args!(args, 6, "time_from_parts");
                 // time_from_parts(year, month, day, hour, min, sec) -> Int
                 let year = match &args[0] { Value::Int(n) => *n as i32, _ => return Err(InterpError { message: "time_from_parts: year must be Int".to_string() }) };
                 let month = match &args[1] { Value::Int(n) => *n as u32, _ => return Err(InterpError { message: "time_from_parts: month must be Int".to_string() }) };
@@ -2955,6 +2970,7 @@ impl Interpreter {
                 }
             }
             "time_format" => {
+                validate_args!(args, 2, "time_format");
                 // time_format(timestamp, format_str) -> Str
                 let ts = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_format: timestamp must be Int".to_string() }) };
                 let fmt = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "time_format: format must be Str".to_string() }) };
@@ -2962,6 +2978,7 @@ impl Interpreter {
                 Ok(Some(Value::Str(dt.format(&fmt).to_string())))
             }
             "time_format_iso" => {
+                validate_args!(args, 1, "time_format_iso");
                 // time_format_iso(timestamp) -> Str
                 let ts = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_format_iso: timestamp must be Int".to_string() }) };
                 let dt = DateTime::from_timestamp(ts, 0).unwrap_or(DateTime::UNIX_EPOCH);
@@ -2974,6 +2991,7 @@ impl Interpreter {
                 Ok(Some(Value::Str(dt.to_rfc2822())))
             }
             "time_parse" => {
+                validate_args!(args, 2, "time_parse");
                 // time_parse(s, format) -> Result[Int, Str]
                 let s = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "time_parse: input must be Str".to_string() }) };
                 let fmt = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "time_parse: format must be Str".to_string() }) };
@@ -2991,6 +3009,7 @@ impl Interpreter {
                 }
             }
             "time_parse_iso" => {
+                validate_args!(args, 1, "time_parse_iso");
                 // time_parse_iso(s) -> Result[Int, Str]
                 let s = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "time_parse_iso: input must be Str".to_string() }) };
                 match DateTime::parse_from_rfc3339(&s) {
@@ -3007,42 +3026,49 @@ impl Interpreter {
                 }
             }
             "time_year" => {
+                validate_args!(args, 1, "time_year");
                 // time_year(timestamp) -> Int
                 let ts = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_year: timestamp must be Int".to_string() }) };
                 let dt = DateTime::from_timestamp(ts, 0).unwrap_or(DateTime::UNIX_EPOCH);
                 Ok(Some(Value::Int(dt.year() as i64)))
             }
             "time_month" => {
+                validate_args!(args, 1, "time_month");
                 // time_month(timestamp) -> Int
                 let ts = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_month: timestamp must be Int".to_string() }) };
                 let dt = DateTime::from_timestamp(ts, 0).unwrap_or(DateTime::UNIX_EPOCH);
                 Ok(Some(Value::Int(dt.month() as i64)))
             }
             "time_day" => {
+                validate_args!(args, 1, "time_day");
                 // time_day(timestamp) -> Int
                 let ts = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_day: timestamp must be Int".to_string() }) };
                 let dt = DateTime::from_timestamp(ts, 0).unwrap_or(DateTime::UNIX_EPOCH);
                 Ok(Some(Value::Int(dt.day() as i64)))
             }
             "time_hour" => {
+                validate_args!(args, 1, "time_hour");
                 // time_hour(timestamp) -> Int
                 let ts = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_hour: timestamp must be Int".to_string() }) };
                 let dt = DateTime::from_timestamp(ts, 0).unwrap_or(DateTime::UNIX_EPOCH);
                 Ok(Some(Value::Int(dt.hour() as i64)))
             }
             "time_minute" => {
+                validate_args!(args, 1, "time_minute");
                 // time_minute(timestamp) -> Int
                 let ts = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_minute: timestamp must be Int".to_string() }) };
                 let dt = DateTime::from_timestamp(ts, 0).unwrap_or(DateTime::UNIX_EPOCH);
                 Ok(Some(Value::Int(dt.minute() as i64)))
             }
             "time_second" => {
+                validate_args!(args, 1, "time_second");
                 // time_second(timestamp) -> Int
                 let ts = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_second: timestamp must be Int".to_string() }) };
                 let dt = DateTime::from_timestamp(ts, 0).unwrap_or(DateTime::UNIX_EPOCH);
                 Ok(Some(Value::Int(dt.second() as i64)))
             }
             "time_weekday" => {
+                validate_args!(args, 1, "time_weekday");
                 // time_weekday(timestamp) -> Int (0=Sunday, 6=Saturday)
                 let ts = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_weekday: timestamp must be Int".to_string() }) };
                 let dt = DateTime::from_timestamp(ts, 0).unwrap_or(DateTime::UNIX_EPOCH);
@@ -3058,18 +3084,21 @@ impl Interpreter {
                 Ok(Some(Value::Int(weekday)))
             }
             "time_add" => {
+                validate_args!(args, 2, "time_add");
                 // time_add(timestamp, duration) -> Int
                 let ts = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_add: timestamp must be Int".to_string() }) };
                 let dur = match &args[1] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_add: duration must be Int".to_string() }) };
                 Ok(Some(Value::Int(ts + dur)))
             }
             "time_sub" => {
+                validate_args!(args, 2, "time_sub");
                 // time_sub(timestamp, duration) -> Int
                 let ts = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_sub: timestamp must be Int".to_string() }) };
                 let dur = match &args[1] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_sub: duration must be Int".to_string() }) };
                 Ok(Some(Value::Int(ts - dur)))
             }
             "time_diff" => {
+                validate_args!(args, 2, "time_diff");
                 // time_diff(a, b) -> Int (a - b in seconds)
                 let a = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_diff: first arg must be Int".to_string() }) };
                 let b = match &args[1] { Value::Int(n) => *n, _ => return Err(InterpError { message: "time_diff: second arg must be Int".to_string() }) };
@@ -3078,11 +3107,13 @@ impl Interpreter {
 
             // ===== Encoding operations =====
             "base64_encode" => {
+                validate_args!(args, 1, "base64_encode");
                 // base64_encode(s: Str) -> Str
                 let s = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "base64_encode: expected Str".to_string() }) };
                 Ok(Some(Value::Str(BASE64.encode(s.as_bytes()))))
             }
             "base64_decode" => {
+                validate_args!(args, 1, "base64_decode");
                 // base64_decode(s: Str) -> Result[Str, Str]
                 let s = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "base64_decode: expected Str".to_string() }) };
                 match BASE64.decode(&s) {
@@ -3106,6 +3137,7 @@ impl Interpreter {
                 }
             }
             "base64_encode_bytes" => {
+                validate_args!(args, 1, "base64_encode_bytes");
                 // base64_encode_bytes(bytes: [Int]) -> Str
                 let bytes: Vec<u8> = match &args[0] {
                     Value::Array(arr) => arr.iter().map(|v| match v { Value::Int(n) => *n as u8, _ => 0 }).collect(),
@@ -3114,6 +3146,7 @@ impl Interpreter {
                 Ok(Some(Value::Str(BASE64.encode(&bytes))))
             }
             "base64_decode_bytes" => {
+                validate_args!(args, 1, "base64_decode_bytes");
                 // base64_decode_bytes(s: Str) -> Result[[Int], Str]
                 let s = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "base64_decode_bytes: expected Str".to_string() }) };
                 match BASE64.decode(&s) {
@@ -3130,11 +3163,13 @@ impl Interpreter {
                 }
             }
             "hex_encode" => {
+                validate_args!(args, 1, "hex_encode");
                 // hex_encode(s: Str) -> Str
                 let s = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "hex_encode: expected Str".to_string() }) };
                 Ok(Some(Value::Str(hex::encode(s.as_bytes()))))
             }
             "hex_decode" => {
+                validate_args!(args, 1, "hex_decode");
                 // hex_decode(s: Str) -> Result[Str, Str]
                 let s = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "hex_decode: expected Str".to_string() }) };
                 match hex::decode(&s) {
@@ -3158,6 +3193,7 @@ impl Interpreter {
                 }
             }
             "hex_encode_bytes" => {
+                validate_args!(args, 1, "hex_encode_bytes");
                 // hex_encode_bytes(bytes: [Int]) -> Str
                 let bytes: Vec<u8> = match &args[0] {
                     Value::Array(arr) => arr.iter().map(|v| match v { Value::Int(n) => *n as u8, _ => 0 }).collect(),
@@ -3166,6 +3202,7 @@ impl Interpreter {
                 Ok(Some(Value::Str(hex::encode(&bytes))))
             }
             "hex_decode_bytes" => {
+                validate_args!(args, 1, "hex_decode_bytes");
                 // hex_decode_bytes(s: Str) -> Result[[Int], Str]
                 let s = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "hex_decode_bytes: expected Str".to_string() }) };
                 match hex::decode(&s) {
@@ -3184,6 +3221,7 @@ impl Interpreter {
 
             // ===== Hashing operations =====
             "sha256" => {
+                validate_args!(args, 1, "sha256");
                 // sha256(s: Str) -> Str
                 let s = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "sha256: expected Str".to_string() }) };
                 let mut hasher = Sha256::new();
@@ -3192,6 +3230,7 @@ impl Interpreter {
                 Ok(Some(Value::Str(hex::encode(result))))
             }
             "sha256_bytes" => {
+                validate_args!(args, 1, "sha256_bytes");
                 // sha256_bytes(bytes: [Int]) -> Str
                 let bytes: Vec<u8> = match &args[0] {
                     Value::Array(arr) => arr.iter().map(|v| match v { Value::Int(n) => *n as u8, _ => 0 }).collect(),
@@ -3203,6 +3242,7 @@ impl Interpreter {
                 Ok(Some(Value::Str(hex::encode(result))))
             }
             "hash_string" => {
+                validate_args!(args, 1, "hash_string");
                 // hash_string(s: Str) -> Int (fast non-crypto hash)
                 let s = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "hash_string: expected Str".to_string() }) };
                 use std::hash::{Hash, Hasher};
@@ -3218,6 +3258,7 @@ impl Interpreter {
                 Ok(Some(Value::Str(Uuid::new_v4().to_string())))
             }
             "uuid_parse" => {
+                validate_args!(args, 1, "uuid_parse");
                 // uuid_parse(s: Str) -> Result[Str, Str]
                 let s = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "uuid_parse: expected Str".to_string() }) };
                 match Uuid::parse_str(&s) {
@@ -3236,6 +3277,7 @@ impl Interpreter {
 
             // ===== Regex operations =====
             "regex_match" => {
+                validate_args!(args, 2, "regex_match");
                 // regex_match(pattern, text) -> Bool
                 let pattern = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "regex_match: pattern must be Str".to_string() }) };
                 let text = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "regex_match: text must be Str".to_string() }) };
@@ -3245,6 +3287,7 @@ impl Interpreter {
                 }
             }
             "regex_find" => {
+                validate_args!(args, 2, "regex_find");
                 // regex_find(pattern, text) -> Str?
                 let pattern = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "regex_find: pattern must be Str".to_string() }) };
                 let text = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "regex_find: text must be Str".to_string() }) };
@@ -3269,6 +3312,7 @@ impl Interpreter {
                 }
             }
             "regex_find_all" => {
+                validate_args!(args, 2, "regex_find_all");
                 // regex_find_all(pattern, text) -> [Str]
                 let pattern = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "regex_find_all: pattern must be Str".to_string() }) };
                 let text = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "regex_find_all: text must be Str".to_string() }) };
@@ -3283,6 +3327,7 @@ impl Interpreter {
                 }
             }
             "regex_replace" => {
+                validate_args!(args, 3, "regex_replace");
                 // regex_replace(pattern, text, replacement) -> Str
                 let pattern = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "regex_replace: pattern must be Str".to_string() }) };
                 let text = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "regex_replace: text must be Str".to_string() }) };
@@ -3293,6 +3338,7 @@ impl Interpreter {
                 }
             }
             "regex_replace_all" => {
+                validate_args!(args, 3, "regex_replace_all");
                 // regex_replace_all(pattern, text, replacement) -> Str
                 let pattern = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "regex_replace_all: pattern must be Str".to_string() }) };
                 let text = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "regex_replace_all: text must be Str".to_string() }) };
@@ -3303,6 +3349,7 @@ impl Interpreter {
                 }
             }
             "regex_split" => {
+                validate_args!(args, 2, "regex_split");
                 // regex_split(pattern, text) -> [Str]
                 let pattern = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "regex_split: pattern must be Str".to_string() }) };
                 let text = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "regex_split: text must be Str".to_string() }) };
@@ -3317,6 +3364,7 @@ impl Interpreter {
                 }
             }
             "regex_captures" => {
+                validate_args!(args, 2, "regex_captures");
                 // regex_captures(pattern, text) -> [Str]?
                 let pattern = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "regex_captures: pattern must be Str".to_string() }) };
                 let text = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "regex_captures: text must be Str".to_string() }) };
@@ -3349,6 +3397,7 @@ impl Interpreter {
                 }
             }
             "regex_is_valid" => {
+                validate_args!(args, 1, "regex_is_valid");
                 // regex_is_valid(pattern) -> Bool
                 let pattern = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "regex_is_valid: pattern must be Str".to_string() }) };
                 Ok(Some(Value::Bool(Regex::new(&pattern).is_ok())))
@@ -3356,6 +3405,7 @@ impl Interpreter {
 
             // ===== Process operations =====
             "exec" => {
+                validate_args!(args, 1, "exec");
                 // exec(cmd: Str) -> Result[(Str, Str, Int), Str]
                 let cmd = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "exec: cmd must be Str".to_string() }) };
                 match std::process::Command::new("sh").arg("-c").arg(&cmd).output() {
@@ -3376,18 +3426,23 @@ impl Interpreter {
                     })),
                 }
             }
+            // WARNING: Environment variable modifications are not thread-safe.
+            // Using env_set/env_remove with spawned tasks may cause data races.
+            // Prefer passing configuration through function arguments instead.
             "env_set" => {
+                validate_args!(args, 2, "env_set");
                 // env_set(name: Str, value: Str) -> ()
                 let name = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "env_set: name must be Str".to_string() }) };
                 let value = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "env_set: value must be Str".to_string() }) };
-                // SAFETY: We're setting a single env var in a single-threaded interpreter context
+                // SAFETY: std::env::set_var is unsafe in multi-threaded contexts
                 unsafe { std::env::set_var(&name, &value); }
                 Ok(Some(Value::Unit))
             }
             "env_remove" => {
+                validate_args!(args, 1, "env_remove");
                 // env_remove(name: Str) -> ()
                 let name = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "env_remove: name must be Str".to_string() }) };
-                // SAFETY: We're removing a single env var in a single-threaded interpreter context
+                // SAFETY: std::env::remove_var is unsafe in multi-threaded contexts
                 unsafe { std::env::remove_var(&name); }
                 Ok(Some(Value::Unit))
             }
@@ -3411,6 +3466,7 @@ impl Interpreter {
                 }
             }
             "chdir" => {
+                validate_args!(args, 1, "chdir");
                 // chdir(path: Str) -> Result[(), Str]
                 let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "chdir: path must be Str".to_string() }) };
                 match std::env::set_current_dir(&path) {
@@ -3448,6 +3504,7 @@ impl Interpreter {
 
             // ===== Path operations =====
             "path_join" => {
+                validate_args!(args, 1, "path_join");
                 // path_join(parts: [Str]) -> Str
                 let parts: Vec<String> = match &args[0] {
                     Value::Array(arr) => arr.iter().filter_map(|v| match v {
@@ -3460,6 +3517,7 @@ impl Interpreter {
                 Ok(Some(Value::Str(path.to_string_lossy().to_string())))
             }
             "path_parent" => {
+                validate_args!(args, 1, "path_parent");
                 // path_parent(path: Str) -> Str?
                 let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "path_parent: path must be Str".to_string() }) };
                 let p = std::path::Path::new(&path);
@@ -3477,6 +3535,7 @@ impl Interpreter {
                 }
             }
             "path_filename" => {
+                validate_args!(args, 1, "path_filename");
                 // path_filename(path: Str) -> Str?
                 let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "path_filename: path must be Str".to_string() }) };
                 let p = std::path::Path::new(&path);
@@ -3494,6 +3553,7 @@ impl Interpreter {
                 }
             }
             "path_stem" => {
+                validate_args!(args, 1, "path_stem");
                 // path_stem(path: Str) -> Str?
                 let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "path_stem: path must be Str".to_string() }) };
                 let p = std::path::Path::new(&path);
@@ -3511,6 +3571,7 @@ impl Interpreter {
                 }
             }
             "path_extension" => {
+                validate_args!(args, 1, "path_extension");
                 // path_extension(path: Str) -> Str?
                 let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "path_extension: path must be Str".to_string() }) };
                 let p = std::path::Path::new(&path);
@@ -3528,16 +3589,19 @@ impl Interpreter {
                 }
             }
             "path_is_absolute" => {
+                validate_args!(args, 1, "path_is_absolute");
                 // path_is_absolute(path: Str) -> Bool
                 let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "path_is_absolute: path must be Str".to_string() }) };
                 Ok(Some(Value::Bool(std::path::Path::new(&path).is_absolute())))
             }
             "path_is_relative" => {
+                validate_args!(args, 1, "path_is_relative");
                 // path_is_relative(path: Str) -> Bool
                 let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "path_is_relative: path must be Str".to_string() }) };
                 Ok(Some(Value::Bool(std::path::Path::new(&path).is_relative())))
             }
             "path_absolute" => {
+                validate_args!(args, 1, "path_absolute");
                 // path_absolute(path: Str) -> Result[Str, Str]
                 let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "path_absolute: path must be Str".to_string() }) };
                 match std::fs::canonicalize(&path) {
@@ -3554,16 +3618,19 @@ impl Interpreter {
                 }
             }
             "file_is_file" => {
+                validate_args!(args, 1, "file_is_file");
                 // file_is_file(path: Str) -> Bool
                 let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "file_is_file: path must be Str".to_string() }) };
                 Ok(Some(Value::Bool(std::path::Path::new(&path).is_file())))
             }
             "file_is_dir" => {
+                validate_args!(args, 1, "file_is_dir");
                 // file_is_dir(path: Str) -> Bool
                 let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "file_is_dir: path must be Str".to_string() }) };
                 Ok(Some(Value::Bool(std::path::Path::new(&path).is_dir())))
             }
             "file_size" => {
+                validate_args!(args, 1, "file_size");
                 // file_size(path: Str) -> Result[Int, Str]
                 let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "file_size: path must be Str".to_string() }) };
                 match std::fs::metadata(&path) {
@@ -3580,6 +3647,7 @@ impl Interpreter {
                 }
             }
             "dir_create" => {
+                validate_args!(args, 1, "dir_create");
                 // dir_create(path: Str) -> Result[(), Str]
                 let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "dir_create: path must be Str".to_string() }) };
                 match std::fs::create_dir(&path) {
@@ -3596,6 +3664,7 @@ impl Interpreter {
                 }
             }
             "dir_create_all" => {
+                validate_args!(args, 1, "dir_create_all");
                 // dir_create_all(path: Str) -> Result[(), Str]
                 let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "dir_create_all: path must be Str".to_string() }) };
                 match std::fs::create_dir_all(&path) {
@@ -3612,6 +3681,7 @@ impl Interpreter {
                 }
             }
             "dir_remove" => {
+                validate_args!(args, 1, "dir_remove");
                 // dir_remove(path: Str) -> Result[(), Str]
                 let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "dir_remove: path must be Str".to_string() }) };
                 match std::fs::remove_dir(&path) {
@@ -3628,6 +3698,7 @@ impl Interpreter {
                 }
             }
             "dir_remove_all" => {
+                validate_args!(args, 1, "dir_remove_all");
                 // dir_remove_all(path: Str) -> Result[(), Str]
                 let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "dir_remove_all: path must be Str".to_string() }) };
                 match std::fs::remove_dir_all(&path) {
@@ -3644,6 +3715,7 @@ impl Interpreter {
                 }
             }
             "dir_list" => {
+                validate_args!(args, 1, "dir_list");
                 // dir_list(path: Str) -> Result[[Str], Str]
                 let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "dir_list: path must be Str".to_string() }) };
                 match std::fs::read_dir(&path) {
@@ -3666,6 +3738,7 @@ impl Interpreter {
                 }
             }
             "file_copy" => {
+                validate_args!(args, 2, "file_copy");
                 // file_copy(from: Str, to: Str) -> Result[(), Str]
                 let from = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "file_copy: from must be Str".to_string() }) };
                 let to = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "file_copy: to must be Str".to_string() }) };
@@ -3683,6 +3756,7 @@ impl Interpreter {
                 }
             }
             "file_move" => {
+                validate_args!(args, 2, "file_move");
                 // file_move(from: Str, to: Str) -> Result[(), Str]
                 let from = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "file_move: from must be Str".to_string() }) };
                 let to = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "file_move: to must be Str".to_string() }) };
@@ -3700,6 +3774,7 @@ impl Interpreter {
                 }
             }
             "file_remove" => {
+                validate_args!(args, 1, "file_remove");
                 // file_remove(path: Str) -> Result[(), Str]
                 let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "file_remove: path must be Str".to_string() }) };
                 match std::fs::remove_file(&path) {
@@ -3718,6 +3793,7 @@ impl Interpreter {
 
             // ===== HTTP operations =====
             "http_get" => {
+                validate_args!(args, 1, "http_get");
                 // http_get(url: Str) -> Result[(Int, Str, {Str: Str}), Str]
                 let url = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "http_get: url must be Str".to_string() }) };
                 match reqwest::blocking::get(&url) {
@@ -3742,6 +3818,7 @@ impl Interpreter {
                 }
             }
             "http_post" => {
+                validate_args!(args, 2, "http_post");
                 // http_post(url: Str, body: Str) -> Result[(Int, Str, {Str: Str}), Str]
                 let url = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "http_post: url must be Str".to_string() }) };
                 let body = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "http_post: body must be Str".to_string() }) };
@@ -3768,6 +3845,7 @@ impl Interpreter {
                 }
             }
             "http_post_json" => {
+                validate_args!(args, 2, "http_post_json");
                 // http_post_json(url: Str, json: Json) -> Result[(Int, Str, {Str: Str}), Str]
                 let url = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "http_post_json: url must be Str".to_string() }) };
                 let json = match &args[1] { Value::Json(j) => j.clone(), _ => return Err(InterpError { message: "http_post_json: body must be Json".to_string() }) };
@@ -3794,6 +3872,7 @@ impl Interpreter {
                 }
             }
             "http_put" => {
+                validate_args!(args, 2, "http_put");
                 // http_put(url: Str, body: Str) -> Result[(Int, Str, {Str: Str}), Str]
                 let url = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "http_put: url must be Str".to_string() }) };
                 let body = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "http_put: body must be Str".to_string() }) };
@@ -3820,6 +3899,7 @@ impl Interpreter {
                 }
             }
             "http_delete" => {
+                validate_args!(args, 1, "http_delete");
                 // http_delete(url: Str) -> Result[(Int, Str, {Str: Str}), Str]
                 let url = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "http_delete: url must be Str".to_string() }) };
                 let client = reqwest::blocking::Client::new();
@@ -3847,6 +3927,7 @@ impl Interpreter {
 
             // ===== HTTP Server builtins =====
             "http_response" => {
+                validate_args!(args, 2, "http_response");
                 // http_response(status: Int, body: Str) -> HttpResponse
                 let status = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "http_response: status must be Int".to_string() }) };
                 let body = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "http_response: body must be Str".to_string() }) };
@@ -3857,6 +3938,7 @@ impl Interpreter {
                 Ok(Some(Value::Struct("HttpResponse".to_string(), fields)))
             }
             "http_response_with_headers" => {
+                validate_args!(args, 3, "http_response_with_headers");
                 // http_response_with_headers(status: Int, body: Str, headers: Map) -> HttpResponse
                 let status = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "http_response_with_headers: status must be Int".to_string() }) };
                 let body = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "http_response_with_headers: body must be Str".to_string() }) };
@@ -3868,6 +3950,7 @@ impl Interpreter {
                 Ok(Some(Value::Struct("HttpResponse".to_string(), fields)))
             }
             "http_json_response" => {
+                validate_args!(args, 2, "http_json_response");
                 // http_json_response(status: Int, data: Json) -> HttpResponse
                 let status = match &args[0] { Value::Int(n) => *n, _ => return Err(InterpError { message: "http_json_response: status must be Int".to_string() }) };
                 let json = match &args[1] { Value::Json(j) => j.clone(), _ => return Err(InterpError { message: "http_json_response: data must be Json".to_string() }) };
@@ -3881,6 +3964,7 @@ impl Interpreter {
                 Ok(Some(Value::Struct("HttpResponse".to_string(), fields)))
             }
             "http_redirect" => {
+                validate_args!(args, 1, "http_redirect");
                 // http_redirect(url: Str) -> HttpResponse
                 let url = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "http_redirect: url must be Str".to_string() }) };
                 let mut headers = HashMap::new();
@@ -3892,6 +3976,7 @@ impl Interpreter {
                 Ok(Some(Value::Struct("HttpResponse".to_string(), fields)))
             }
             "http_file_response" => {
+                validate_args!(args, 1, "http_file_response");
                 // http_file_response(path: Str) -> Result[HttpResponse, Str]
                 let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "http_file_response: path must be Str".to_string() }) };
                 match std::fs::read_to_string(&path) {
@@ -3930,6 +4015,7 @@ impl Interpreter {
                 }
             }
             "http_req_json" => {
+                validate_args!(args, 1, "http_req_json");
                 // http_req_json(req: HttpRequest) -> Result[Json, Str]
                 let body = match &args[0] {
                     Value::Struct(name, fields) if name == "HttpRequest" => {
@@ -3954,6 +4040,7 @@ impl Interpreter {
                 }
             }
             "http_req_form" => {
+                validate_args!(args, 1, "http_req_form");
                 // http_req_form(req: HttpRequest) -> Map[Str, Str]
                 let body = match &args[0] {
                     Value::Struct(name, fields) if name == "HttpRequest" => {
@@ -3978,6 +4065,7 @@ impl Interpreter {
                 Ok(Some(Value::Map(result)))
             }
             "http_req_param" => {
+                validate_args!(args, 2, "http_req_param");
                 // http_req_param(req: HttpRequest, name: Str) -> Str?
                 let query = match &args[0] {
                     Value::Struct(name, fields) if name == "HttpRequest" => {
@@ -4003,6 +4091,7 @@ impl Interpreter {
                 }
             }
             "http_req_header" => {
+                validate_args!(args, 2, "http_req_header");
                 // http_req_header(req: HttpRequest, name: Str) -> Str?
                 let headers = match &args[0] {
                     Value::Struct(name, fields) if name == "HttpRequest" => {
@@ -4034,6 +4123,7 @@ impl Interpreter {
                 }))
             }
             "http_serve" => {
+                validate_args!(args, 2, "http_serve");
                 // http_serve(port: Int, handler: Fn) -> Result[(), Str]
                 // Blocking HTTP server implementation
                 use std::io::{Read, Write, BufRead, BufReader};
@@ -4251,6 +4341,7 @@ impl Interpreter {
                 }
             }
             "http_request_new" => {
+                validate_args!(args, 3, "http_request_new");
                 // http_request_new(method: Str, path: Str, body: Str) -> HttpRequest
                 // Helper to create HttpRequest structs for testing
                 let method = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "http_request_new: method must be Str".to_string() }) };
@@ -4283,6 +4374,7 @@ impl Interpreter {
 
             // ===== TCP/UDP Socket builtins =====
             "tcp_connect" => {
+                validate_args!(args, 2, "tcp_connect");
                 // tcp_connect(host: Str, port: Int) -> Result[TcpStream, Str]
                 let host = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "tcp_connect: host must be Str".to_string() }) };
                 let port = match &args[1] { Value::Int(n) => *n as u16, _ => return Err(InterpError { message: "tcp_connect: port must be Int".to_string() }) };
@@ -4306,6 +4398,7 @@ impl Interpreter {
                 }
             }
             "tcp_read" => {
+                validate_args!(args, 2, "tcp_read");
                 // tcp_read(stream: TcpStream, max_bytes: Int) -> Result[Str, Str]
                 use std::io::Read;
                 let id = match &args[0] { Value::TcpStream(id) => *id, _ => return Err(InterpError { message: "tcp_read: expected TcpStream".to_string() }) };
@@ -4336,6 +4429,7 @@ impl Interpreter {
                 }
             }
             "tcp_read_exact" => {
+                validate_args!(args, 2, "tcp_read_exact");
                 // tcp_read_exact(stream: TcpStream, bytes: Int) -> Result[Str, Str]
                 use std::io::Read;
                 let id = match &args[0] { Value::TcpStream(id) => *id, _ => return Err(InterpError { message: "tcp_read_exact: expected TcpStream".to_string() }) };
@@ -4365,6 +4459,7 @@ impl Interpreter {
                 }
             }
             "tcp_read_line" => {
+                validate_args!(args, 1, "tcp_read_line");
                 // tcp_read_line(stream: TcpStream) -> Result[Str, Str]
                 use std::io::{BufRead, BufReader};
                 let id = match &args[0] { Value::TcpStream(id) => *id, _ => return Err(InterpError { message: "tcp_read_line: expected TcpStream".to_string() }) };
@@ -4402,6 +4497,7 @@ impl Interpreter {
                 }
             }
             "tcp_write" => {
+                validate_args!(args, 2, "tcp_write");
                 // tcp_write(stream: TcpStream, data: Str) -> Result[Int, Str]
                 use std::io::Write;
                 let id = match &args[0] { Value::TcpStream(id) => *id, _ => return Err(InterpError { message: "tcp_write: expected TcpStream".to_string() }) };
@@ -4428,6 +4524,7 @@ impl Interpreter {
                 }
             }
             "tcp_write_all" => {
+                validate_args!(args, 2, "tcp_write_all");
                 // tcp_write_all(stream: TcpStream, data: Str) -> Result[(), Str]
                 use std::io::Write;
                 let id = match &args[0] { Value::TcpStream(id) => *id, _ => return Err(InterpError { message: "tcp_write_all: expected TcpStream".to_string() }) };
@@ -4454,12 +4551,14 @@ impl Interpreter {
                 }
             }
             "tcp_close" => {
+                validate_args!(args, 1, "tcp_close");
                 // tcp_close(stream: TcpStream) -> ()
                 let id = match &args[0] { Value::TcpStream(id) => *id, _ => return Err(InterpError { message: "tcp_close: expected TcpStream".to_string() }) };
                 self.tcp_streams.remove(&id);
                 Ok(Some(Value::Unit))
             }
             "tcp_set_timeout" => {
+                validate_args!(args, 2, "tcp_set_timeout");
                 // tcp_set_timeout(stream: TcpStream, ms: Int) -> ()
                 let id = match &args[0] { Value::TcpStream(id) => *id, _ => return Err(InterpError { message: "tcp_set_timeout: expected TcpStream".to_string() }) };
                 let ms = match &args[1] { Value::Int(n) => *n as u64, _ => return Err(InterpError { message: "tcp_set_timeout: ms must be Int".to_string() }) };
@@ -4471,6 +4570,7 @@ impl Interpreter {
                 Ok(Some(Value::Unit))
             }
             "tcp_peer_addr" => {
+                validate_args!(args, 1, "tcp_peer_addr");
                 // tcp_peer_addr(stream: TcpStream) -> Str
                 let id = match &args[0] { Value::TcpStream(id) => *id, _ => return Err(InterpError { message: "tcp_peer_addr: expected TcpStream".to_string() }) };
                 if let Some(stream) = self.tcp_streams.get(&id) {
@@ -4483,6 +4583,7 @@ impl Interpreter {
                 }
             }
             "tcp_local_addr" => {
+                validate_args!(args, 1, "tcp_local_addr");
                 // tcp_local_addr(stream: TcpStream) -> Str
                 let id = match &args[0] { Value::TcpStream(id) => *id, _ => return Err(InterpError { message: "tcp_local_addr: expected TcpStream".to_string() }) };
                 if let Some(stream) = self.tcp_streams.get(&id) {
@@ -4495,6 +4596,7 @@ impl Interpreter {
                 }
             }
             "tcp_listen" => {
+                validate_args!(args, 2, "tcp_listen");
                 // tcp_listen(host: Str, port: Int) -> Result[TcpListener, Str]
                 let host = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "tcp_listen: host must be Str".to_string() }) };
                 let port = match &args[1] { Value::Int(n) => *n as u16, _ => return Err(InterpError { message: "tcp_listen: port must be Int".to_string() }) };
@@ -4518,6 +4620,7 @@ impl Interpreter {
                 }
             }
             "tcp_accept" => {
+                validate_args!(args, 1, "tcp_accept");
                 // tcp_accept(listener: TcpListener) -> Result[TcpStream, Str]
                 let id = match &args[0] { Value::TcpListener(id) => *id, _ => return Err(InterpError { message: "tcp_accept: expected TcpListener".to_string() }) };
                 if let Some(listener) = self.tcp_listeners.get(&id) {
@@ -4547,6 +4650,7 @@ impl Interpreter {
                 }
             }
             "tcp_listener_close" => {
+                validate_args!(args, 1, "tcp_listener_close");
                 // tcp_listener_close(listener: TcpListener) -> ()
                 let id = match &args[0] { Value::TcpListener(id) => *id, _ => return Err(InterpError { message: "tcp_listener_close: expected TcpListener".to_string() }) };
                 self.tcp_listeners.remove(&id);
@@ -4555,6 +4659,7 @@ impl Interpreter {
 
             // UDP builtins
             "udp_bind" => {
+                validate_args!(args, 2, "udp_bind");
                 // udp_bind(host: Str, port: Int) -> Result[UdpSocket, Str]
                 let host = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "udp_bind: host must be Str".to_string() }) };
                 let port = match &args[1] { Value::Int(n) => *n as u16, _ => return Err(InterpError { message: "udp_bind: port must be Int".to_string() }) };
@@ -4578,6 +4683,7 @@ impl Interpreter {
                 }
             }
             "udp_send_to" => {
+                validate_args!(args, 4, "udp_send_to");
                 // udp_send_to(socket: UdpSocket, addr: Str, port: Int, data: Str) -> Result[Int, Str]
                 let id = match &args[0] { Value::UdpSocket(id) => *id, _ => return Err(InterpError { message: "udp_send_to: expected UdpSocket".to_string() }) };
                 let addr = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "udp_send_to: addr must be Str".to_string() }) };
@@ -4606,6 +4712,7 @@ impl Interpreter {
                 }
             }
             "udp_recv_from" => {
+                validate_args!(args, 2, "udp_recv_from");
                 // udp_recv_from(socket: UdpSocket, max_bytes: Int) -> Result[(Str, Str, Int), Str]
                 let id = match &args[0] { Value::UdpSocket(id) => *id, _ => return Err(InterpError { message: "udp_recv_from: expected UdpSocket".to_string() }) };
                 let max_bytes = match &args[1] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "udp_recv_from: max_bytes must be Int".to_string() }) };
@@ -4641,12 +4748,14 @@ impl Interpreter {
                 }
             }
             "udp_close" => {
+                validate_args!(args, 1, "udp_close");
                 // udp_close(socket: UdpSocket) -> ()
                 let id = match &args[0] { Value::UdpSocket(id) => *id, _ => return Err(InterpError { message: "udp_close: expected UdpSocket".to_string() }) };
                 self.udp_sockets.remove(&id);
                 Ok(Some(Value::Unit))
             }
             "udp_connect" => {
+                validate_args!(args, 3, "udp_connect");
                 // udp_connect(socket: UdpSocket, addr: Str, port: Int) -> Result[(), Str]
                 let id = match &args[0] { Value::UdpSocket(id) => *id, _ => return Err(InterpError { message: "udp_connect: expected UdpSocket".to_string() }) };
                 let addr = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "udp_connect: addr must be Str".to_string() }) };
@@ -4674,6 +4783,7 @@ impl Interpreter {
                 }
             }
             "udp_send" => {
+                validate_args!(args, 2, "udp_send");
                 // udp_send(socket: UdpSocket, data: Str) -> Result[Int, Str]
                 let id = match &args[0] { Value::UdpSocket(id) => *id, _ => return Err(InterpError { message: "udp_send: expected UdpSocket".to_string() }) };
                 let data = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "udp_send: data must be Str".to_string() }) };
@@ -4699,6 +4809,7 @@ impl Interpreter {
                 }
             }
             "udp_recv" => {
+                validate_args!(args, 2, "udp_recv");
                 // udp_recv(socket: UdpSocket, max_bytes: Int) -> Result[Str, Str]
                 let id = match &args[0] { Value::UdpSocket(id) => *id, _ => return Err(InterpError { message: "udp_recv: expected UdpSocket".to_string() }) };
                 let max_bytes = match &args[1] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "udp_recv: max_bytes must be Int".to_string() }) };
@@ -4730,6 +4841,7 @@ impl Interpreter {
 
             // DNS builtins
             "dns_lookup" => {
+                validate_args!(args, 1, "dns_lookup");
                 // dns_lookup(hostname: Str) -> Result[[Str], Str]
                 use std::net::ToSocketAddrs;
                 let hostname = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "dns_lookup: hostname must be Str".to_string() }) };
@@ -4752,6 +4864,7 @@ impl Interpreter {
                 }
             }
             "dns_reverse_lookup" => {
+                validate_args!(args, 1, "dns_reverse_lookup");
                 // dns_reverse_lookup(ip: Str) -> Result[Str, Str]
                 // Note: Reverse DNS is not directly supported by std::net, return the IP as-is
                 let ip = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "dns_reverse_lookup: ip must be Str".to_string() }) };
@@ -4776,11 +4889,13 @@ impl Interpreter {
                 Ok(Some(Value::RawPtr(0)))
             }
             "ptr_is_null" => {
+                validate_args!(args, 1, "ptr_is_null");
                 // ptr_is_null(p: *T) -> Bool
                 let addr = match &args[0] { Value::RawPtr(a) => *a, _ => return Err(InterpError { message: "ptr_is_null: expected RawPtr".to_string() }) };
                 Ok(Some(Value::Bool(addr == 0)))
             }
             "ptr_offset" => {
+                validate_args!(args, 2, "ptr_offset");
                 // ptr_offset(p: *T, offset: Int) -> *T
                 let addr = match &args[0] { Value::RawPtr(a) => *a, _ => return Err(InterpError { message: "ptr_offset: expected RawPtr".to_string() }) };
                 let offset = match &args[1] { Value::Int(n) => *n, _ => return Err(InterpError { message: "ptr_offset: offset must be Int".to_string() }) };
@@ -4792,18 +4907,27 @@ impl Interpreter {
                 Ok(Some(Value::RawPtr(new_addr)))
             }
             "ptr_addr" => {
+                validate_args!(args, 1, "ptr_addr");
                 // ptr_addr(p: *T) -> Int - get the numeric address of a pointer
                 let addr = match &args[0] { Value::RawPtr(a) => *a, _ => return Err(InterpError { message: "ptr_addr: expected RawPtr".to_string() }) };
                 Ok(Some(Value::Int(addr as i64)))
             }
             "ptr_from_addr" => {
+                validate_args!(args, 1, "ptr_from_addr");
                 // ptr_from_addr(addr: Int) -> *Void - create a pointer from an address
                 let addr = match &args[0] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "ptr_from_addr: addr must be Int".to_string() }) };
                 Ok(Some(Value::RawPtr(addr)))
             }
 
+            // ===== FFI String and Memory Operations =====
+            // SAFETY: These FFI functions operate on raw pointers provided by user code.
+            // Passing invalid addresses will cause undefined behavior or crashes.
+            // Users are responsible for ensuring pointer validity.
+            // These functions are inherently unsafe and should be used with caution.
+
             // String conversion
             "str_to_cstr" => {
+                validate_args!(args, 1, "str_to_cstr");
                 // str_to_cstr(s: Str) -> *Char
                 // Allocate a null-terminated C string and return pointer to it
                 let s = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "str_to_cstr: expected Str".to_string() }) };
@@ -4812,6 +4936,7 @@ impl Interpreter {
                 Ok(Some(Value::RawPtr(ptr as usize)))
             }
             "cstr_to_str" => {
+                validate_args!(args, 1, "cstr_to_str");
                 // cstr_to_str(p: *Char) -> Str
                 let addr = match &args[0] { Value::RawPtr(a) => *a, _ => return Err(InterpError { message: "cstr_to_str: expected RawPtr".to_string() }) };
                 if addr == 0 {
@@ -4823,6 +4948,7 @@ impl Interpreter {
                 }
             }
             "cstr_to_str_len" => {
+                validate_args!(args, 2, "cstr_to_str_len");
                 // cstr_to_str_len(p: *Char, len: Int) -> Str
                 let addr = match &args[0] { Value::RawPtr(a) => *a, _ => return Err(InterpError { message: "cstr_to_str_len: expected RawPtr".to_string() }) };
                 let len = match &args[1] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "cstr_to_str_len: len must be Int".to_string() }) };
@@ -4835,6 +4961,7 @@ impl Interpreter {
                 }
             }
             "cstr_free" => {
+                validate_args!(args, 1, "cstr_free");
                 // cstr_free(p: *Char) -> () - free a C string allocated by str_to_cstr
                 let addr = match &args[0] { Value::RawPtr(a) => *a, _ => return Err(InterpError { message: "cstr_free: expected RawPtr".to_string() }) };
                 if addr != 0 {
@@ -4847,6 +4974,7 @@ impl Interpreter {
 
             // Memory allocation
             "alloc" => {
+                validate_args!(args, 1, "alloc");
                 // alloc(size: Int) -> *Void
                 let size = match &args[0] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "alloc: size must be Int".to_string() }) };
                 if size == 0 {
@@ -4861,6 +4989,7 @@ impl Interpreter {
                 }
             }
             "alloc_zeroed" => {
+                validate_args!(args, 1, "alloc_zeroed");
                 // alloc_zeroed(size: Int) -> *Void
                 let size = match &args[0] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "alloc_zeroed: size must be Int".to_string() }) };
                 if size == 0 {
@@ -4875,6 +5004,7 @@ impl Interpreter {
                 }
             }
             "dealloc" => {
+                validate_args!(args, 2, "dealloc");
                 // dealloc(ptr: *Void, size: Int) -> ()
                 let addr = match &args[0] { Value::RawPtr(a) => *a, _ => return Err(InterpError { message: "dealloc: expected RawPtr".to_string() }) };
                 let size = match &args[1] { Value::Int(n) => *n as usize, _ => return Err(InterpError { message: "dealloc: size must be Int".to_string() }) };
@@ -4885,6 +5015,7 @@ impl Interpreter {
                 Ok(Some(Value::Unit))
             }
             "mem_copy" => {
+                validate_args!(args, 3, "mem_copy");
                 // mem_copy(dst: *Void, src: *Void, size: Int) -> ()
                 let dst = match &args[0] { Value::RawPtr(a) => *a, _ => return Err(InterpError { message: "mem_copy: dst must be RawPtr".to_string() }) };
                 let src = match &args[1] { Value::RawPtr(a) => *a, _ => return Err(InterpError { message: "mem_copy: src must be RawPtr".to_string() }) };
@@ -4895,6 +5026,7 @@ impl Interpreter {
                 Ok(Some(Value::Unit))
             }
             "mem_set" => {
+                validate_args!(args, 3, "mem_set");
                 // mem_set(ptr: *Void, value: Int, size: Int) -> ()
                 let ptr = match &args[0] { Value::RawPtr(a) => *a, _ => return Err(InterpError { message: "mem_set: ptr must be RawPtr".to_string() }) };
                 let value = match &args[1] { Value::Int(n) => *n as u8, _ => return Err(InterpError { message: "mem_set: value must be Int".to_string() }) };
@@ -4977,6 +5109,7 @@ impl Interpreter {
                 Ok(Some(Value::Int(n)))
             }
             "sizeof" => {
+                validate_args!(args, 1, "sizeof");
                 // sizeof(type_name: Str) -> Int - returns size of C type in bytes
                 let type_name = match &args[0] { Value::Str(s) => s.as_str(), _ => return Err(InterpError { message: "sizeof: expected Str".to_string() }) };
                 let size = match type_name {
@@ -4999,6 +5132,7 @@ impl Interpreter {
 
             // ===== JSON operations =====
             "json_parse" => {
+                validate_args!(args, 1, "json_parse");
                 // json_parse(s: Str) -> Result[Json, Str]
                 let s = match &args[0] {
                     Value::Str(s) => s.clone(),
@@ -5018,6 +5152,7 @@ impl Interpreter {
                 }
             }
             "json_stringify" => {
+                validate_args!(args, 1, "json_stringify");
                 // json_stringify(json: Json) -> Str
                 let json = match &args[0] {
                     Value::Json(j) => j.clone(),
@@ -5026,6 +5161,7 @@ impl Interpreter {
                 Ok(Some(Value::Str(json.to_string())))
             }
             "json_stringify_pretty" => {
+                validate_args!(args, 1, "json_stringify_pretty");
                 // json_stringify_pretty(json: Json) -> Str
                 let json = match &args[0] {
                     Value::Json(j) => j.clone(),
@@ -5034,6 +5170,7 @@ impl Interpreter {
                 Ok(Some(Value::Str(serde_json::to_string_pretty(&json).unwrap_or_default())))
             }
             "json_get" => {
+                validate_args!(args, 2, "json_get");
                 // json_get(json: Json, key: Str) -> Json?
                 let json = match &args[0] {
                     Value::Json(j) => j.clone(),
@@ -5057,6 +5194,7 @@ impl Interpreter {
                 }
             }
             "json_get_str" => {
+                validate_args!(args, 2, "json_get_str");
                 // json_get_str(json: Json, key: Str) -> Str?
                 let json = match &args[0] {
                     Value::Json(j) => j.clone(),
@@ -5080,6 +5218,7 @@ impl Interpreter {
                 }
             }
             "json_get_int" => {
+                validate_args!(args, 2, "json_get_int");
                 // json_get_int(json: Json, key: Str) -> Int?
                 let json = match &args[0] {
                     Value::Json(j) => j.clone(),
@@ -5103,6 +5242,7 @@ impl Interpreter {
                 }
             }
             "json_get_float" => {
+                validate_args!(args, 2, "json_get_float");
                 // json_get_float(json: Json, key: Str) -> Float?
                 let json = match &args[0] {
                     Value::Json(j) => j.clone(),
@@ -5126,6 +5266,7 @@ impl Interpreter {
                 }
             }
             "json_get_bool" => {
+                validate_args!(args, 2, "json_get_bool");
                 // json_get_bool(json: Json, key: Str) -> Bool?
                 let json = match &args[0] {
                     Value::Json(j) => j.clone(),
@@ -5149,6 +5290,7 @@ impl Interpreter {
                 }
             }
             "json_get_array" => {
+                validate_args!(args, 2, "json_get_array");
                 // json_get_array(json: Json, key: Str) -> [Json]?
                 let json = match &args[0] {
                     Value::Json(j) => j.clone(),
@@ -5175,6 +5317,7 @@ impl Interpreter {
                 }
             }
             "json_array_get" => {
+                validate_args!(args, 2, "json_array_get");
                 // json_array_get(json: Json, idx: Int) -> Json?
                 let json = match &args[0] {
                     Value::Json(j) => j.clone(),
@@ -5198,6 +5341,7 @@ impl Interpreter {
                 }
             }
             "json_array_len" => {
+                validate_args!(args, 1, "json_array_len");
                 // json_array_len(json: Json) -> Int
                 let json = match &args[0] {
                     Value::Json(j) => j.clone(),
@@ -5207,6 +5351,7 @@ impl Interpreter {
                 Ok(Some(Value::Int(len as i64)))
             }
             "json_keys" => {
+                validate_args!(args, 1, "json_keys");
                 // json_keys(json: Json) -> [Str]
                 let json = match &args[0] {
                     Value::Json(j) => j.clone(),
@@ -5218,6 +5363,7 @@ impl Interpreter {
                 Ok(Some(Value::Array(keys)))
             }
             "json_values" => {
+                validate_args!(args, 1, "json_values");
                 // json_values(json: Json) -> [Json]
                 let json = match &args[0] {
                     Value::Json(j) => j.clone(),
@@ -5229,6 +5375,7 @@ impl Interpreter {
                 Ok(Some(Value::Array(vals)))
             }
             "json_type" => {
+                validate_args!(args, 1, "json_type");
                 // json_type(json: Json) -> Str
                 let json = match &args[0] {
                     Value::Json(j) => j.clone(),
@@ -5245,6 +5392,7 @@ impl Interpreter {
                 Ok(Some(Value::Str(type_name.to_string())))
             }
             "json_is_null" => {
+                validate_args!(args, 1, "json_is_null");
                 let json = match &args[0] {
                     Value::Json(j) => j.clone(),
                     _ => return Err(InterpError { message: "json_is_null: expected Json".to_string() })
@@ -5252,6 +5400,7 @@ impl Interpreter {
                 Ok(Some(Value::Bool(json.is_null())))
             }
             "json_is_bool" => {
+                validate_args!(args, 1, "json_is_bool");
                 let json = match &args[0] {
                     Value::Json(j) => j.clone(),
                     _ => return Err(InterpError { message: "json_is_bool: expected Json".to_string() })
@@ -5259,6 +5408,7 @@ impl Interpreter {
                 Ok(Some(Value::Bool(json.is_boolean())))
             }
             "json_is_number" => {
+                validate_args!(args, 1, "json_is_number");
                 let json = match &args[0] {
                     Value::Json(j) => j.clone(),
                     _ => return Err(InterpError { message: "json_is_number: expected Json".to_string() })
@@ -5266,6 +5416,7 @@ impl Interpreter {
                 Ok(Some(Value::Bool(json.is_number())))
             }
             "json_is_string" => {
+                validate_args!(args, 1, "json_is_string");
                 let json = match &args[0] {
                     Value::Json(j) => j.clone(),
                     _ => return Err(InterpError { message: "json_is_string: expected Json".to_string() })
@@ -5273,6 +5424,7 @@ impl Interpreter {
                 Ok(Some(Value::Bool(json.is_string())))
             }
             "json_is_array" => {
+                validate_args!(args, 1, "json_is_array");
                 let json = match &args[0] {
                     Value::Json(j) => j.clone(),
                     _ => return Err(InterpError { message: "json_is_array: expected Json".to_string() })
@@ -5280,6 +5432,7 @@ impl Interpreter {
                 Ok(Some(Value::Bool(json.is_array())))
             }
             "json_is_object" => {
+                validate_args!(args, 1, "json_is_object");
                 let json = match &args[0] {
                     Value::Json(j) => j.clone(),
                     _ => return Err(InterpError { message: "json_is_object: expected Json".to_string() })
@@ -5287,6 +5440,7 @@ impl Interpreter {
                 Ok(Some(Value::Bool(json.is_object())))
             }
             "json_from_str" => {
+                validate_args!(args, 1, "json_from_str");
                 let s = match &args[0] {
                     Value::Str(s) => s.clone(),
                     _ => return Err(InterpError { message: "json_from_str: expected Str".to_string() })
@@ -5294,6 +5448,7 @@ impl Interpreter {
                 Ok(Some(Value::Json(serde_json::Value::String(s))))
             }
             "json_from_int" => {
+                validate_args!(args, 1, "json_from_int");
                 let n = match &args[0] {
                     Value::Int(n) => *n,
                     _ => return Err(InterpError { message: "json_from_int: expected Int".to_string() })
@@ -5301,6 +5456,7 @@ impl Interpreter {
                 Ok(Some(Value::Json(serde_json::Value::Number(n.into()))))
             }
             "json_from_float" => {
+                validate_args!(args, 1, "json_from_float");
                 let n = match &args[0] {
                     Value::Float(n) => *n,
                     _ => return Err(InterpError { message: "json_from_float: expected Float".to_string() })
@@ -5309,6 +5465,7 @@ impl Interpreter {
                 Ok(Some(Value::Json(serde_json::Value::Number(num))))
             }
             "json_from_bool" => {
+                validate_args!(args, 1, "json_from_bool");
                 let b = match &args[0] {
                     Value::Bool(b) => *b,
                     _ => return Err(InterpError { message: "json_from_bool: expected Bool".to_string() })
@@ -5327,6 +5484,7 @@ impl Interpreter {
                 Ok(Some(Value::Json(serde_json::Value::Array(vec![]))))
             }
             "json_set" => {
+                validate_args!(args, 3, "json_set");
                 // json_set(json: Json, key: Str, value: Json) -> Json
                 let json = match &args[0] {
                     Value::Json(j) => j.clone(),
@@ -5345,6 +5503,7 @@ impl Interpreter {
                 Ok(Some(Value::Json(serde_json::Value::Object(obj))))
             }
             "json_has" => {
+                validate_args!(args, 2, "json_has");
                 // json_has(json: Json, key: Str) -> Bool
                 let json = match &args[0] {
                     Value::Json(j) => j.clone(),
@@ -5358,6 +5517,7 @@ impl Interpreter {
                 Ok(Some(Value::Bool(has)))
             }
             "json_to_value" => {
+                validate_args!(args, 1, "json_to_value");
                 // json_to_value(json: Json) -> native FORMA value
                 // Converts JSON to native FORMA types where possible
                 let json = match &args[0] {
@@ -5460,6 +5620,7 @@ impl Interpreter {
                 Ok(Some(Value::Array(strs.into_iter().map(Value::Str).collect())))
             }
             "reverse" => {
+                validate_args!(args, 1, "reverse");
                 // reverse(arr: [T]) -> [T]
                 let arr = match &args[0] {
                     Value::Array(arr) => arr.clone(),
@@ -5470,6 +5631,7 @@ impl Interpreter {
                 Ok(Some(Value::Array(result)))
             }
             "shuffle" => {
+                validate_args!(args, 1, "shuffle");
                 // shuffle(arr: [T]) -> [T]
                 let arr = match &args[0] {
                     Value::Array(arr) => arr.clone(),
@@ -5484,6 +5646,7 @@ impl Interpreter {
                 Ok(Some(Value::Array(result)))
             }
             "min_of" => {
+                validate_args!(args, 1, "min_of");
                 // min_of(arr: [Int]) -> Int?
                 let arr = match &args[0] {
                     Value::Array(arr) => arr.clone(),
@@ -5504,6 +5667,7 @@ impl Interpreter {
                 }
             }
             "max_of" => {
+                validate_args!(args, 1, "max_of");
                 // max_of(arr: [Int]) -> Int?
                 let arr = match &args[0] {
                     Value::Array(arr) => arr.clone(),
@@ -5524,6 +5688,7 @@ impl Interpreter {
                 }
             }
             "sum_of" => {
+                validate_args!(args, 1, "sum_of");
                 // sum_of(arr: [Int]) -> Int
                 let arr = match &args[0] {
                     Value::Array(arr) => arr.clone(),
@@ -5533,6 +5698,7 @@ impl Interpreter {
                 Ok(Some(Value::Int(sum)))
             }
             "binary_search" => {
+                validate_args!(args, 2, "binary_search");
                 // binary_search(arr: [Int], target: Int) -> Int?
                 // Returns index if found
                 let arr = match &args[0] {
@@ -5560,6 +5726,7 @@ impl Interpreter {
 
             // ===== Logging operations =====
             "log_debug" => {
+                validate_args!(args, 1, "log_debug");
                 // log_debug(msg: Str) -> ()
                 let msg = match &args[0] { Value::Str(s) => s.clone(), _ => format!("{}", args[0]) };
                 if self.log_level == 0 {
@@ -5572,6 +5739,7 @@ impl Interpreter {
                 Ok(Some(Value::Unit))
             }
             "log_info" => {
+                validate_args!(args, 1, "log_info");
                 // log_info(msg: Str) -> ()
                 let msg = match &args[0] { Value::Str(s) => s.clone(), _ => format!("{}", args[0]) };
                 if self.log_level <= 1 {
@@ -5584,6 +5752,7 @@ impl Interpreter {
                 Ok(Some(Value::Unit))
             }
             "log_warn" => {
+                validate_args!(args, 1, "log_warn");
                 // log_warn(msg: Str) -> ()
                 let msg = match &args[0] { Value::Str(s) => s.clone(), _ => format!("{}", args[0]) };
                 if self.log_level <= 2 {
@@ -5596,6 +5765,7 @@ impl Interpreter {
                 Ok(Some(Value::Unit))
             }
             "log_error" => {
+                validate_args!(args, 1, "log_error");
                 // log_error(msg: Str) -> ()
                 let msg = match &args[0] { Value::Str(s) => s.clone(), _ => format!("{}", args[0]) };
                 if self.log_level <= 3 {
@@ -5608,6 +5778,7 @@ impl Interpreter {
                 Ok(Some(Value::Unit))
             }
             "log_set_level" => {
+                validate_args!(args, 1, "log_set_level");
                 // log_set_level(level: Str) -> ()
                 let level = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "log_set_level: expected Str".to_string() }) };
                 self.log_level = match level.to_lowercase().as_str() {
@@ -5620,6 +5791,7 @@ impl Interpreter {
                 Ok(Some(Value::Unit))
             }
             "log_set_format" => {
+                validate_args!(args, 1, "log_set_format");
                 // log_set_format(format: Str) -> ()
                 let format = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "log_set_format: expected Str".to_string() }) };
                 if format != "text" && format != "json" {
@@ -5631,6 +5803,7 @@ impl Interpreter {
 
             // ===== TLS operations =====
             "tls_connect" => {
+                validate_args!(args, 2, "tls_connect");
                 // tls_connect(host: Str, port: Int) -> Result[TlsStream, Str]
                 let host = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "tls_connect: host must be Str".to_string() }) };
                 let port = match &args[1] { Value::Int(n) => *n as u16, _ => return Err(InterpError { message: "tls_connect: port must be Int".to_string() }) };
@@ -5672,6 +5845,7 @@ impl Interpreter {
                 }
             }
             "tls_read" => {
+                validate_args!(args, 2, "tls_read");
                 // tls_read(stream: TlsStream, max_bytes: Int) -> Result[Str, Str]
                 use std::io::Read;
                 let id = match &args[0] { Value::TlsStream(id) => *id, _ => return Err(InterpError { message: "tls_read: expected TlsStream".to_string() }) };
@@ -5701,6 +5875,7 @@ impl Interpreter {
                 }
             }
             "tls_write" => {
+                validate_args!(args, 2, "tls_write");
                 // tls_write(stream: TlsStream, data: Str) -> Result[Int, Str]
                 use std::io::Write;
                 let id = match &args[0] { Value::TlsStream(id) => *id, _ => return Err(InterpError { message: "tls_write: expected TlsStream".to_string() }) };
@@ -5725,6 +5900,7 @@ impl Interpreter {
                 }
             }
             "tls_close" => {
+                validate_args!(args, 1, "tls_close");
                 // tls_close(stream: TlsStream) -> ()
                 let id = match &args[0] { Value::TlsStream(id) => *id, _ => return Err(InterpError { message: "tls_close: expected TlsStream".to_string() }) };
                 self.tls_streams.remove(&id);
@@ -5733,6 +5909,7 @@ impl Interpreter {
 
             // ===== Compression operations =====
             "gzip_compress" => {
+                validate_args!(args, 1, "gzip_compress");
                 // gzip_compress(data: Str) -> [Int]
                 use flate2::write::GzEncoder;
                 use flate2::Compression;
@@ -5750,6 +5927,7 @@ impl Interpreter {
                 Ok(Some(Value::Array(result)))
             }
             "gzip_decompress" => {
+                validate_args!(args, 1, "gzip_decompress");
                 // gzip_decompress(data: [Int]) -> Result[Str, Str]
                 use flate2::read::GzDecoder;
                 use std::io::Read;
@@ -5773,6 +5951,7 @@ impl Interpreter {
                 }
             }
             "zlib_compress" => {
+                validate_args!(args, 1, "zlib_compress");
                 // zlib_compress(data: Str) -> [Int]
                 use flate2::write::ZlibEncoder;
                 use flate2::Compression;
@@ -5790,6 +5969,7 @@ impl Interpreter {
                 Ok(Some(Value::Array(result)))
             }
             "zlib_decompress" => {
+                validate_args!(args, 1, "zlib_decompress");
                 // zlib_decompress(data: [Int]) -> Result[Str, Str]
                 use flate2::read::ZlibDecoder;
                 use std::io::Read;
@@ -5815,6 +5995,7 @@ impl Interpreter {
 
             // ===== SQLite database operations =====
             "db_open" => {
+                validate_args!(args, 1, "db_open");
                 // db_open(path: Str) -> Result[Database, Str]
                 let path = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "db_open: expected Str path".to_string() }) };
 
@@ -5857,6 +6038,7 @@ impl Interpreter {
                 }
             }
             "db_execute" => {
+                validate_args!(args, 2, "db_execute");
                 // db_execute(db: Database, sql: Str) -> Result[Int, Str]
                 let id = match &args[0] { Value::Database(id) => *id, _ => return Err(InterpError { message: "db_execute: expected Database".to_string() }) };
                 let sql = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "db_execute: expected Str sql".to_string() }) };
@@ -6353,7 +6535,10 @@ impl Interpreter {
 
             Rvalue::Discriminant(local) => {
                 let frame = self.current_frame()?;
-                let val = frame.locals.get(local).cloned().unwrap_or(Value::Unit);
+                let val = frame.locals.get(local).cloned()
+                    .ok_or_else(|| InterpError {
+                        message: format!("Internal error: undefined local {:?}", local),
+                    })?;
                 match val {
                     Value::Enum { type_name, variant, .. } => {
                         let disc = match (type_name.as_str(), variant.as_str()) {
@@ -6389,7 +6574,10 @@ impl Interpreter {
 
             Rvalue::EnumField(local, idx) => {
                 let frame = self.current_frame()?;
-                let val = frame.locals.get(local).cloned().unwrap_or(Value::Unit);
+                let val = frame.locals.get(local).cloned()
+                    .ok_or_else(|| InterpError {
+                        message: format!("Internal error: undefined local {:?}", local),
+                    })?;
                 match val {
                     Value::Enum { fields, .. } => {
                         fields.get(*idx).cloned().ok_or_else(|| InterpError {

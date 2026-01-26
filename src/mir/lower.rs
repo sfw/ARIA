@@ -1222,13 +1222,56 @@ impl Lowerer {
             }
 
             ExprKind::Coalesce(left, right) => {
-                // TODO: proper option handling
-                let l = self.lower_expr(left);
-                if l.is_some() {
-                    l
-                } else {
-                    self.lower_expr(right)
+                // Coalesce operator: left ?? right
+                // Returns the inner value of left if it's Some, otherwise evaluates right
+
+                let left_val = self.lower_expr(left)?;
+
+                // Store the left value
+                let scrutinee = self.new_temp(Ty::Int);
+                self.emit(StatementKind::Assign(scrutinee, Rvalue::Use(left_val)));
+
+                // Get discriminant to check if Some vs None
+                let disc = self.new_temp(Ty::Int);
+                self.emit(StatementKind::Assign(disc, Rvalue::Discriminant(scrutinee)));
+
+                // Create blocks
+                let some_block = self.new_block();   // Left is Some - extract value
+                let none_block = self.new_block();   // Left is None - use right
+                let continue_block = self.new_block();
+
+                // Result variable (use same type as left's inner type, or Int as fallback)
+                let result = self.new_temp(Ty::Int);
+
+                // Branch: discriminant > 0 means Some (has value)
+                // Option: None=0, Some=1
+                let has_value = self.new_temp(Ty::Bool);
+                self.emit(StatementKind::Assign(
+                    has_value,
+                    Rvalue::BinaryOp(BinOp::Gt, Operand::Copy(disc), Operand::Constant(Constant::Int(0))),
+                ));
+                self.terminate(Terminator::If {
+                    cond: Operand::Local(has_value),
+                    then_block: some_block,
+                    else_block: none_block,
+                });
+
+                // Some block: extract the inner value
+                self.current_block = Some(some_block);
+                let extracted = self.new_temp(Ty::Int);
+                self.emit(StatementKind::Assign(extracted, Rvalue::EnumField(scrutinee, 0)));
+                self.emit(StatementKind::Assign(result, Rvalue::Use(Operand::Local(extracted))));
+                self.terminate(Terminator::Goto(continue_block));
+
+                // None block: evaluate and use the right expression
+                self.current_block = Some(none_block);
+                if let Some(right_val) = self.lower_expr(right) {
+                    self.emit(StatementKind::Assign(result, Rvalue::Use(right_val)));
                 }
+                self.terminate(Terminator::Goto(continue_block));
+
+                self.current_block = Some(continue_block);
+                Some(Operand::Local(result))
             }
 
             ExprKind::Paren(inner) => {
@@ -1340,8 +1383,14 @@ impl Lowerer {
         let else_block = self.new_block();
         let merge_block = self.new_block();
 
-        // Result variable for if expression
-        let result = self.new_temp(Ty::Int); // TODO: proper type
+        // Infer result type from the then branch expression (without lowering yet)
+        let result_ty = match &if_expr.then_branch {
+            IfBranch::Expr(e) => self.infer_expr_type(e),
+            IfBranch::Block(_) => Ty::Unit, // Block expressions return Unit unless last expr
+        };
+
+        // Result variable for if expression with inferred type
+        let result = self.new_temp(result_ty);
 
         // Branch on condition
         self.terminate(Terminator::If {

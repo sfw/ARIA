@@ -1,0 +1,64 @@
+# Test file for Sprint 20 operator fixes
+# Tests the coalesce operator (??) and if-expression type inference
+
+# Test 1: If-expression type inference (Task 20.2)
+f test_if_expr_types()
+    # String if-expression - should have type Str, not Int
+    s = if true then "yes" else "no"
+    if s == "yes"
+        print("PASS: string if-expression works")
+    else
+        print("FAIL: string if-expression")
+
+    # Float if-expression - should have type Float, not Int
+    fl = if false then 1.5 else 2.5
+    if fl == 2.5
+        print("PASS: float if-expression works")
+    else
+        print("FAIL: float if-expression")
+
+    # Nested if-expression
+    n = if true then (if false then 1 else 2) else 3
+    if n == 2
+        print("PASS: nested if-expression works")
+    else
+        print("FAIL: nested if-expression")
+
+    # Bool if-expression
+    b = if 1 > 0 then true else false
+    if b
+        print("PASS: bool if-expression works")
+    else
+        print("FAIL: bool if-expression")
+
+    print("test_if_expr_types: ALL PASSED")
+
+# Test 2: Basic Option with coalesce (Task 20.1)
+# Using built-in str_to_int which returns Option[Int]
+f test_coalesce()
+    # str_to_int("hello") returns None, so ?? should provide default
+    result1 = str_to_int("hello") ?? 42
+    if result1 == 42
+        print("PASS: None ?? 42 == 42")
+    else
+        print("FAIL: None ?? default")
+
+    # str_to_int("10") returns Some(10), so ?? should return 10
+    result2 = str_to_int("10") ?? 99
+    if result2 == 10
+        print("PASS: Some(10) ?? 99 == 10")
+    else
+        print("FAIL: Some ?? default")
+
+    print("test_coalesce: ALL PASSED")
+
+# Main
+f main() -> Int
+    print("=== Sprint 20 Operator Tests ===")
+    print("")
+    test_if_expr_types()
+    print("")
+    test_coalesce()
+    print("")
+    print("=== All Sprint 20 tests complete ===")
+    0

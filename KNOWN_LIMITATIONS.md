@@ -64,9 +64,36 @@ This document lists known limitations in FORMA v1.2, categorized by severity and
 
 ## Remaining Limitations
 
+### Safety Considerations
+
+#### 1. FFI Safety
+**Status:** Documented (use with caution)
+
+The following functions operate on raw pointers and are inherently unsafe:
+- `cstr_to_str`, `cstr_to_str_len`, `cstr_free`
+- `alloc`, `alloc_zeroed`, `dealloc`
+- `mem_copy`, `mem_set`
+- `ptr_*` functions (`ptr_is_null`, `ptr_offset`, `ptr_addr`, `ptr_from_addr`)
+
+Passing invalid addresses will cause undefined behavior. Users are responsible for ensuring pointer validity.
+
+#### 2. Environment Variable Thread Safety
+**Status:** Documented (use with caution)
+
+`env_set` and `env_remove` use Rust's `std::env::set_var` which is not thread-safe. Using these functions with spawned tasks may cause data races.
+
+**Recommendation:** Pass configuration through function arguments instead of relying on environment variables when using concurrent code.
+
+#### 3. LLVM Closure Memory
+**Status:** Documented (known limitation)
+
+Closures in LLVM-compiled code allocate environment memory that is not automatically freed. For long-running programs with many closure creations, consider using the interpreter or restructuring code to avoid closure-heavy patterns.
+
+**Planned:** Garbage collection or reference counting in v2.0.
+
 ### Type System
 
-#### 1. Higher-Kinded Types (Not Planned)
+#### 4. Higher-Kinded Types (Not Planned)
 **Status:** Not supported
 
 Higher-kinded types are not supported and not planned for v1.x.
