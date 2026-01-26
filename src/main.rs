@@ -1003,7 +1003,7 @@ fn typeof_at(file: &PathBuf, position: &str, error_format: ErrorFormat) -> Resul
 /// Build native executable using LLVM
 #[allow(unused_variables)] // output_path and program are used only when LLVM feature is enabled
 #[allow(unreachable_code)] // Ok(()) is reachable only when LLVM feature is enabled
-fn build(file: &PathBuf, output: Option<&PathBuf>, _opt_level: u8, error_format: ErrorFormat) -> Result<(), String> {
+fn build(file: &PathBuf, output: Option<&PathBuf>, opt_level: u8, error_format: ErrorFormat) -> Result<(), String> {
     let source = read_file(file)?;
     let filename = file.to_string_lossy().to_string();
     let ctx = ErrorContext::new(&filename, &source);

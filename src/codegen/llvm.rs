@@ -25,7 +25,7 @@ use inkwell::module::Module;
 use inkwell::targets::{
     CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine,
 };
-use inkwell::types::{BasicMetadataTypeEnum, BasicTypeEnum};
+use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum};
 use inkwell::values::BasicMetadataValueEnum;
 use inkwell::values::{BasicValueEnum, FloatValue, FunctionValue, IntValue, PointerValue, StructValue};
 use inkwell::OptimizationLevel;
@@ -339,13 +339,13 @@ impl<'ctx> LLVMCodegen<'ctx> {
                 Ok(self.builder.build_load(array_type, array_alloca, "array_val")
                     .map_err(|e| CodegenError { message: format!("array load failed: {:?}", e) })?)
             }
-            // Field access
-            Rvalue::Field(base, field_idx) => {
-                let base_val = self.compile_operand(base)?;
-                let struct_val = self.as_struct_value(base_val)?;
-                self.builder.build_extract_value(struct_val, *field_idx as u32, "field")
-                    .map_err(|e| CodegenError { message: format!("Failed to extract field: {:?}", e) })
-                    .map(|v| v.into())
+            // Field access by name - requires struct type info to map name to index
+            Rvalue::Field(_base, field_name) => {
+                // TODO: Need struct type info to map field name to index
+                // For now, return error since we can't resolve field names without type info
+                Err(CodegenError {
+                    message: format!("Field access by name '{}' not yet supported in LLVM codegen - need type info", field_name),
+                })
             }
             // Tuple field access
             Rvalue::TupleField(base, idx) => {
@@ -356,7 +356,7 @@ impl<'ctx> LLVMCodegen<'ctx> {
                     .map(|v| v.into())
             }
             // Struct construction
-            Rvalue::Struct(fields) => {
+            Rvalue::Struct(_name, fields) => {
                 let mut values = Vec::new();
                 for (_, operand) in fields {
                     values.push(self.compile_operand(operand)?);
@@ -372,6 +372,167 @@ impl<'ctx> LLVMCodegen<'ctx> {
                         .into_struct_value();
                 }
                 Ok(struct_val.into())
+            }
+            // Reference creation: &place or &mut place
+            Rvalue::Ref(local, _mutability) => {
+                let idx = local.0 as usize;
+                if let Some(alloca) = self.locals.get(&idx) {
+                    // Return the pointer to the local
+                    Ok((*alloca).into())
+                } else {
+                    Err(CodegenError {
+                        message: format!("Cannot create reference to unknown local: {}", local.0),
+                    })
+                }
+            }
+            // Dereference: *operand
+            Rvalue::Deref(operand) => {
+                let ptr_val = self.compile_operand(operand)?;
+                let ptr = self.as_pointer_value(ptr_val)?;
+                // Load the value through the pointer
+                // Default to i64 type if we don't know the pointee type
+                let pointee_ty = self.context.i64_type();
+                self.builder.build_load(pointee_ty, ptr, "deref")
+                    .map_err(|e| CodegenError { message: format!("deref load failed: {:?}", e) })
+            }
+            // Enum construction: Some(42), None, Ok(x), Err(e), etc.
+            Rvalue::Enum { type_name: _, variant: _, fields } => {
+                // Enum layout: { i32 discriminant, field0, field1, ... }
+                // For simplicity, compute discriminant from variant name hash
+                // In practice, we'd use a proper enum registry
+                let i32_type = self.context.i32_type();
+                let i64_type = self.context.i64_type();
+
+                // Compile field values
+                let mut field_values: Vec<BasicValueEnum> = Vec::new();
+                for field_op in fields {
+                    field_values.push(self.compile_operand(field_op)?);
+                }
+
+                // Build struct type for enum: { i32, fields... }
+                let mut field_types: Vec<BasicTypeEnum> = vec![i32_type.into()];
+                for fv in &field_values {
+                    field_types.push(fv.get_type());
+                }
+                // Pad to ensure enum has at least 2 fields (discriminant + data)
+                if field_types.len() == 1 {
+                    field_types.push(i64_type.into());
+                }
+
+                let enum_type = self.context.struct_type(&field_types, false);
+                let mut enum_val = enum_type.get_undef();
+
+                // Insert discriminant (use 0 for now - proper mapping would use enum registry)
+                let disc_val = i32_type.const_int(0, false);
+                enum_val = self.builder.build_insert_value(enum_val, disc_val, 0, "enum_disc")
+                    .map_err(|e| CodegenError { message: format!("insert discriminant failed: {:?}", e) })?
+                    .into_struct_value();
+
+                // Insert fields
+                for (i, fv) in field_values.into_iter().enumerate() {
+                    enum_val = self.builder.build_insert_value(enum_val, fv, (i + 1) as u32, "enum_field")
+                        .map_err(|e| CodegenError { message: format!("insert enum field failed: {:?}", e) })?
+                        .into_struct_value();
+                }
+
+                Ok(enum_val.into())
+            }
+            // Get enum discriminant for pattern matching
+            Rvalue::Discriminant(local) => {
+                let idx = local.0 as usize;
+                if let Some(alloca) = self.locals.get(&idx) {
+                    // Load the enum value
+                    let local_ty = self.local_types.get(&idx)
+                        .copied()
+                        .unwrap_or_else(|| self.context.i64_type().into());
+                    let enum_val = self.builder.build_load(local_ty, *alloca, "enum_val")
+                        .map_err(|e| CodegenError { message: format!("load enum failed: {:?}", e) })?;
+
+                    // Try to extract discriminant (first field, i32)
+                    if let BasicValueEnum::StructValue(sv) = enum_val {
+                        let disc = self.builder.build_extract_value(sv, 0, "disc")
+                            .map_err(|e| CodegenError { message: format!("extract discriminant failed: {:?}", e) })?;
+                        // Extend i32 to i64 for consistency
+                        if let BasicValueEnum::IntValue(iv) = disc.into() {
+                            let extended = self.builder.build_int_z_extend(iv, self.context.i64_type(), "disc_ext")
+                                .map_err(|e| CodegenError { message: format!("extend discriminant failed: {:?}", e) })?;
+                            Ok(extended.into())
+                        } else {
+                            Ok(disc.into())
+                        }
+                    } else {
+                        // Not a struct - return 0 as discriminant
+                        Ok(self.context.i64_type().const_zero().into())
+                    }
+                } else {
+                    Err(CodegenError {
+                        message: format!("Cannot get discriminant of unknown local: {}", local.0),
+                    })
+                }
+            }
+            // Extract field from enum variant
+            Rvalue::EnumField(local, field_idx) => {
+                let idx = local.0 as usize;
+                if let Some(alloca) = self.locals.get(&idx) {
+                    let local_ty = self.local_types.get(&idx)
+                        .copied()
+                        .unwrap_or_else(|| self.context.i64_type().into());
+                    let enum_val = self.builder.build_load(local_ty, *alloca, "enum_val")
+                        .map_err(|e| CodegenError { message: format!("load enum failed: {:?}", e) })?;
+
+                    if let BasicValueEnum::StructValue(sv) = enum_val {
+                        // Field 0 is discriminant, so add 1 to field_idx
+                        let field = self.builder.build_extract_value(sv, (*field_idx + 1) as u32, "enum_field")
+                            .map_err(|e| CodegenError { message: format!("extract enum field failed: {:?}", e) })?;
+                        Ok(field.into())
+                    } else {
+                        Err(CodegenError {
+                            message: "EnumField on non-struct value".to_string(),
+                        })
+                    }
+                } else {
+                    Err(CodegenError {
+                        message: format!("Cannot extract field from unknown local: {}", local.0),
+                    })
+                }
+            }
+            // Index access: array[index]
+            Rvalue::Index(base, index) => {
+                let base_val = self.compile_operand(base)?;
+                let idx_val = self.compile_operand(index)?;
+                let idx_int = self.as_int_value(idx_val)?;
+
+                // Handle array types
+                if let BasicValueEnum::ArrayValue(arr) = base_val {
+                    // For array values, we need to alloca, store, then GEP
+                    let arr_ty = arr.get_type();
+                    let elem_ty = arr_ty.get_element_type();
+                    let alloca = self.builder.build_alloca(arr_ty, "arr_tmp")
+                        .map_err(|e| CodegenError { message: format!("alloca failed: {:?}", e) })?;
+                    self.builder.build_store(alloca, arr)
+                        .map_err(|e| CodegenError { message: format!("store failed: {:?}", e) })?;
+
+                    let zero = self.context.i64_type().const_zero();
+                    let gep = unsafe {
+                        self.builder.build_gep(arr_ty, alloca, &[zero, idx_int], "elem_ptr")
+                            .map_err(|e| CodegenError { message: format!("gep failed: {:?}", e) })?
+                    };
+                    self.builder.build_load(elem_ty, gep, "elem")
+                        .map_err(|e| CodegenError { message: format!("load failed: {:?}", e) })
+                } else if let BasicValueEnum::PointerValue(ptr) = base_val {
+                    // Pointer indexing - assume i64 elements
+                    let elem_ty = self.context.i64_type();
+                    let gep = unsafe {
+                        self.builder.build_gep(elem_ty, ptr, &[idx_int], "elem_ptr")
+                            .map_err(|e| CodegenError { message: format!("gep failed: {:?}", e) })?
+                    };
+                    self.builder.build_load(elem_ty, gep, "elem")
+                        .map_err(|e| CodegenError { message: format!("load failed: {:?}", e) })
+                } else {
+                    Err(CodegenError {
+                        message: format!("Index on unsupported type: {:?}", base_val.get_type()),
+                    })
+                }
             }
             // Note: function calls are handled in Terminator::Call, not in Rvalue
             _ => Err(CodegenError {
@@ -584,6 +745,37 @@ impl<'ctx> LLVMCodegen<'ctx> {
             .ok_or_else(|| CodegenError { message: "malloc returned void".into() })?;
         let env_ptr_i8 = self.as_pointer_value(malloc_result)?;
 
+        // Check if malloc returned null
+        let is_null = self.builder
+            .build_is_null(env_ptr_i8, "is_null")
+            .map_err(|e| CodegenError { message: format!("is_null check failed: {:?}", e) })?;
+
+        // Get or declare abort for allocation failure
+        let abort_fn = self.module.get_function("abort").unwrap_or_else(|| {
+            let abort_type = self.context.void_type().fn_type(&[], false);
+            self.module.add_function("abort", abort_type, None)
+        });
+
+        // Create basic blocks for null check
+        let current_fn = self.current_function.ok_or_else(|| CodegenError {
+            message: "No current function for malloc null check".to_string(),
+        })?;
+        let alloc_ok = self.context.append_basic_block(current_fn, "alloc_ok");
+        let alloc_fail = self.context.append_basic_block(current_fn, "alloc_fail");
+
+        self.builder.build_conditional_branch(is_null, alloc_fail, alloc_ok)
+            .map_err(|e| CodegenError { message: format!("cond branch failed: {:?}", e) })?;
+
+        // In alloc_fail: call abort and unreachable
+        self.builder.position_at_end(alloc_fail);
+        self.builder.build_call(abort_fn, &[], "")
+            .map_err(|e| CodegenError { message: format!("abort call failed: {:?}", e) })?;
+        self.builder.build_unreachable()
+            .map_err(|e| CodegenError { message: format!("unreachable failed: {:?}", e) })?;
+
+        // Continue in alloc_ok
+        self.builder.position_at_end(alloc_ok);
+
         // 4. Cast to environment struct pointer
         let env_struct_ptr = self.builder
             .build_pointer_cast(
@@ -759,13 +951,15 @@ impl<'ctx> LLVMCodegen<'ctx> {
                 }
             }
             Terminator::Goto(target) => {
-                if let Some(&bb) = blocks.get(&(target.0 as usize)) {
-                    self.builder.build_unconditional_branch(bb)
-                        .map_err(|e| CodegenError { message: format!("branch failed: {:?}", e) })?;
-                }
+                let bb = blocks.get(&(target.0 as usize)).ok_or_else(|| CodegenError {
+                    message: format!("Goto: target block {} not found", target.0),
+                })?;
+                self.builder.build_unconditional_branch(*bb)
+                    .map_err(|e| CodegenError { message: format!("branch failed: {:?}", e) })?;
             }
             Terminator::If { cond, then_block, else_block } => {
-                let cond_val = self.as_int_value(self.compile_operand(cond)?)?;
+                let cond_operand = self.compile_operand(cond)?;
+                let cond_val = self.as_int_value(cond_operand)?;
                 let then_bb = blocks.get(&(then_block.0 as usize)).copied().ok_or_else(|| CodegenError {
                     message: "Missing then block".into(),
                 })?;
@@ -786,7 +980,8 @@ impl<'ctx> LLVMCodegen<'ctx> {
                     .map_err(|e| CodegenError { message: format!("branch failed: {:?}", e) })?;
             }
             Terminator::Switch { operand, targets, default } => {
-                let val = self.as_int_value(self.compile_operand(operand)?)?;
+                let switch_operand = self.compile_operand(operand)?;
+                let val = self.as_int_value(switch_operand)?;
                 let default_bb = blocks.get(&(default.0 as usize)).copied().ok_or_else(|| CodegenError {
                     message: "Missing default block".into(),
                 })?;
@@ -901,6 +1096,53 @@ impl<'ctx> LLVMCodegen<'ctx> {
                 if let Some(&bb) = blocks.get(&(next.0 as usize)) {
                     self.builder.build_unconditional_branch(bb)
                         .map_err(|e| CodegenError { message: format!("branch failed: {:?}", e) })?;
+                }
+            }
+            // Spawn an async task - for LLVM, execute synchronously
+            Terminator::Spawn { expr, dest, next } => {
+                // In LLVM backend, we don't have true async support
+                // Execute the expression synchronously and store the result
+                let val = self.compile_operand(expr)?;
+
+                // Store result if there's a destination
+                if let Some(local) = dest {
+                    if let Some(alloca) = self.locals.get(&(local.0 as usize)) {
+                        self.builder.build_store(*alloca, val)
+                            .map_err(|e| CodegenError { message: format!("store failed: {:?}", e) })?;
+                    }
+                }
+
+                // Jump to next block
+                if let Some(&bb) = blocks.get(&(next.0 as usize)) {
+                    self.builder.build_unconditional_branch(bb)
+                        .map_err(|e| CodegenError { message: format!("branch failed: {:?}", e) })?;
+                } else {
+                    return Err(CodegenError {
+                        message: format!("Spawn: missing next block {}", next.0),
+                    });
+                }
+            }
+            // Await a task/future - for LLVM, the value is already resolved
+            Terminator::Await { task, dest, next } => {
+                // In LLVM backend without true async, the task value IS the result
+                let val = self.compile_operand(task)?;
+
+                // Store result if there's a destination
+                if let Some(local) = dest {
+                    if let Some(alloca) = self.locals.get(&(local.0 as usize)) {
+                        self.builder.build_store(*alloca, val)
+                            .map_err(|e| CodegenError { message: format!("store failed: {:?}", e) })?;
+                    }
+                }
+
+                // Jump to next block
+                if let Some(&bb) = blocks.get(&(next.0 as usize)) {
+                    self.builder.build_unconditional_branch(bb)
+                        .map_err(|e| CodegenError { message: format!("branch failed: {:?}", e) })?;
+                } else {
+                    return Err(CodegenError {
+                        message: format!("Await: missing next block {}", next.0),
+                    });
                 }
             }
             Terminator::Unreachable => {
