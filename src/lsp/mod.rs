@@ -71,15 +71,17 @@ impl FormaLanguageServer {
         let parser = Parser::new(&tokens);
         let ast = match parser.parse() {
             Ok(ast) => ast,
-            Err(e) => {
-                diagnostics.push(Diagnostic {
-                    range: span_to_range(e.span()),
-                    severity: Some(DiagnosticSeverity::ERROR),
-                    code: Some(NumberOrString::String("PARSE".to_string())),
-                    source: Some("forma".to_string()),
-                    message: format!("{}", e),
-                    ..Default::default()
-                });
+            Err(errors) => {
+                for e in errors {
+                    diagnostics.push(Diagnostic {
+                        range: span_to_range(e.span()),
+                        severity: Some(DiagnosticSeverity::ERROR),
+                        code: Some(NumberOrString::String("PARSE".to_string())),
+                        source: Some("forma".to_string()),
+                        message: format!("{}", e),
+                        ..Default::default()
+                    });
+                }
                 return diagnostics;
             }
         };
@@ -383,10 +385,54 @@ impl LanguageServer for FormaLanguageServer {
 
     async fn goto_definition(
         &self,
-        _params: GotoDefinitionParams,
+        params: GotoDefinitionParams,
     ) -> Result<Option<GotoDefinitionResponse>> {
-        // TODO: Implement go-to-definition
-        // This requires tracking definition locations in the type checker
+        let uri = params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        let content = {
+            let docs = self.documents.read().await;
+            docs.get(&uri).map(|d| d.content.clone())
+        };
+
+        if let Some(content) = content {
+            let scanner = Scanner::new(&content);
+            let (tokens, _) = scanner.scan_all();
+
+            let line = position.line as usize + 1;
+            let col = position.character as usize + 1;
+
+            // Find identifier at cursor
+            let identifier_name = tokens.iter()
+                .find(|token| {
+                    let token_end = token.span.column + (token.span.end - token.span.start);
+                    token.span.line == line && token.span.column <= col && col <= token_end
+                })
+                .and_then(|token| {
+                    if let crate::lexer::TokenKind::Ident(name) = &token.kind {
+                        Some(name.clone())
+                    } else {
+                        None
+                    }
+                });
+
+            if let Some(name) = identifier_name {
+                let parser = crate::parser::Parser::new(&tokens);
+                if let Ok(ast) = parser.parse() {
+                    let mut type_checker = crate::types::TypeChecker::new();
+                    if type_checker.check(&ast).is_ok() {
+                        if let Some((def_span, _)) = type_checker.get_definition_location(&name) {
+                            let location = Location {
+                                uri: uri.clone(),
+                                range: span_to_range(def_span),
+                            };
+                            return Ok(Some(GotoDefinitionResponse::Scalar(location)));
+                        }
+                    }
+                }
+            }
+        }
+
         Ok(None)
     }
 }

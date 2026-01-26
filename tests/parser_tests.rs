@@ -3,7 +3,7 @@
 use forma::parser::*;
 use forma::{Parser, Scanner};
 
-fn parse(source: &str) -> Result<SourceFile, forma::CompileError> {
+fn parse(source: &str) -> Result<SourceFile, Vec<forma::CompileError>> {
     let scanner = Scanner::new(source);
     let (tokens, _) = scanner.scan_all();
     Parser::new(&tokens).parse()

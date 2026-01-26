@@ -52,6 +52,21 @@ pub struct FunctionInfo {
     pub param_types: Vec<Ty>,
 }
 
+#[derive(Debug, Clone)]
+pub struct TraitInfo {
+    pub name: String,
+    pub type_params: Vec<String>,
+    pub methods: Vec<TraitMethodInfo>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TraitMethodInfo {
+    pub name: String,
+    pub params: Vec<Ty>,
+    pub return_type: Ty,
+    pub has_default: bool,
+}
+
 /// Type environment mapping names to type schemes.
 #[derive(Debug, Clone, Default)]
 pub struct TypeEnv {
@@ -61,6 +76,8 @@ pub struct TypeEnv {
     types: HashMap<String, TypeDef>,
     /// Function info (for tracking default parameters)
     fn_info: HashMap<String, FunctionInfo>,
+    /// Trait definitions
+    traits: HashMap<String, TraitInfo>,
 }
 
 /// Definition of a named type.
@@ -2490,6 +2507,14 @@ impl TypeEnv {
         self.types.get(name)
     }
 
+    pub fn insert_trait(&mut self, name: String, info: TraitInfo) {
+        self.traits.insert(name, info);
+    }
+
+    pub fn get_trait(&self, name: &str) -> Option<&TraitInfo> {
+        self.traits.get(name)
+    }
+
     /// Get free type variables in the environment.
     pub fn free_vars(&self) -> Vec<TypeVar> {
         let mut vars = Vec::new();
@@ -2510,6 +2535,7 @@ impl TypeEnv {
             bindings: self.bindings.clone(),
             types: self.types.clone(),
             fn_info: self.fn_info.clone(),
+            traits: self.traits.clone(),
         }
     }
 
@@ -2822,6 +2848,8 @@ pub struct InferenceEngine {
     builtin_methods: HashMap<MethodKey, MethodSignature>,
     /// Current impl target type (for resolving `Self` in impl blocks)
     impl_self_type: Option<Ty>,
+    /// Track where symbols are defined for LSP
+    symbol_locations: HashMap<String, (Span, super::checker::DefinitionKind)>,
 }
 
 impl InferenceEngine {
@@ -2833,6 +2861,7 @@ impl InferenceEngine {
             type_params: HashMap::new(),
             builtin_methods: HashMap::new(),
             impl_self_type: None,
+            symbol_locations: HashMap::new(),
         };
         engine.register_builtin_methods();
         engine
@@ -2846,6 +2875,7 @@ impl InferenceEngine {
             type_params: HashMap::new(),
             builtin_methods: HashMap::new(),
             impl_self_type: None,
+            symbol_locations: HashMap::new(),
         };
         engine.register_builtin_methods();
         engine
@@ -3422,8 +3452,12 @@ impl InferenceEngine {
                 self.env.insert(struct_name.clone(), scheme);
 
                 self.env.insert_type(
-                    struct_name,
+                    struct_name.clone(),
                     TypeDef::Struct { type_params, fields },
+                );
+                self.symbol_locations.insert(
+                    struct_name,
+                    (s.name.span, super::checker::DefinitionKind::Struct),
                 );
             }
             ItemKind::Enum(e) => {
@@ -3488,8 +3522,12 @@ impl InferenceEngine {
                 }
 
                 self.env.insert_type(
-                    enum_name,
+                    enum_name.clone(),
                     TypeDef::Enum { type_params, variants },
+                );
+                self.symbol_locations.insert(
+                    enum_name,
+                    (e.name.span, super::checker::DefinitionKind::Enum),
                 );
             }
             ItemKind::TypeAlias(t) => {
@@ -3505,6 +3543,42 @@ impl InferenceEngine {
                     t.name.name.clone(),
                     TypeDef::Alias { type_params, target },
                 );
+            }
+            ItemKind::Trait(t) => {
+                let trait_name = t.name.name.clone();
+                let type_params = self.get_type_params(&t.generics);
+
+                let old_type_params = std::mem::take(&mut self.type_params);
+                self.type_params = self.setup_type_params(&t.generics);
+
+                let mut methods = Vec::new();
+                for trait_item in &t.items {
+                    if let crate::parser::TraitItem::Function(f) = trait_item {
+                        let param_types: Vec<Ty> = f.params.iter()
+                            .filter(|p| p.name.name != "self")
+                            .filter_map(|p| self.ast_type_to_ty(&p.ty).ok())
+                            .collect();
+
+                        let return_type = f.return_type.as_ref()
+                            .and_then(|ty| self.ast_type_to_ty(ty).ok())
+                            .unwrap_or(Ty::Unit);
+
+                        methods.push(TraitMethodInfo {
+                            name: f.name.name.clone(),
+                            params: param_types,
+                            return_type,
+                            has_default: f.body.is_some(),
+                        });
+                    }
+                }
+
+                self.env.insert_trait(trait_name.clone(), TraitInfo {
+                    name: trait_name,
+                    type_params,
+                    methods,
+                });
+
+                self.type_params = old_type_params;
             }
             _ => {}
         }
@@ -3544,6 +3618,10 @@ impl InferenceEngine {
                 };
 
                 self.env.insert(f.name.name.clone(), scheme);
+                self.symbol_locations.insert(
+                    f.name.name.clone(),
+                    (f.name.span, super::checker::DefinitionKind::Function),
+                );
 
                 // Track function info for default parameter handling
                 let required_params = f.params.iter().filter(|p| p.default.is_none()).count();
@@ -3671,6 +3749,61 @@ impl InferenceEngine {
                             self.check_item(&item)?;
                         }
                         crate::parser::ImplItem::TypeAlias(_) => {}
+                    }
+                }
+
+                // Validate trait implementation
+                if let Some(trait_type) = &i.trait_ {
+                    let trait_name = match &trait_type.kind {
+                        crate::parser::TypeKind::Path(p) => p.segments.last()
+                            .map(|s| s.name.name.clone())
+                            .unwrap_or_default(),
+                        _ => String::new(),
+                    };
+
+                    if let Some(trait_info) = self.env.get_trait(&trait_name) {
+                        let mut impl_methods: std::collections::HashSet<String> = std::collections::HashSet::new();
+                        for impl_item in &i.items {
+                            if let crate::parser::ImplItem::Function(f) = impl_item {
+                                impl_methods.insert(f.name.name.clone());
+                            }
+                        }
+
+                        // Check all required methods are implemented
+                        for method in &trait_info.methods {
+                            if !method.has_default && !impl_methods.contains(&method.name) {
+                                return Err(TypeError::new(
+                                    format!(
+                                        "missing method '{}' required by trait '{}'",
+                                        method.name, trait_name
+                                    ),
+                                    i.span,
+                                ));
+                            }
+                        }
+
+                        // Validate method signatures
+                        for impl_item in &i.items {
+                            if let crate::parser::ImplItem::Function(f) = impl_item {
+                                if let Some(trait_method) = trait_info.methods.iter()
+                                    .find(|m| m.name == f.name.name)
+                                {
+                                    let impl_params: Vec<_> = f.params.iter()
+                                        .filter(|p| p.name.name != "self")
+                                        .collect();
+
+                                    if impl_params.len() != trait_method.params.len() {
+                                        return Err(TypeError::new(
+                                            format!(
+                                                "method '{}' has {} parameter(s), trait requires {}",
+                                                f.name.name, impl_params.len(), trait_method.params.len()
+                                            ),
+                                            f.span,
+                                        ));
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -4411,68 +4544,127 @@ impl InferenceEngine {
                 // Look up the struct definition
                 let struct_def = self.env.get_type(&struct_name).cloned();
 
-                if let Some(TypeDef::Struct { type_params, fields: struct_fields }) = struct_def {
-                    // Unify expected type with struct type
-                    let struct_ty = if type_params.is_empty() {
-                        Ty::Named(TypeId::new(&struct_name), vec![])
-                    } else {
-                        // For generic structs, create fresh type variables
-                        let type_args: Vec<Ty> = type_params.iter()
-                            .map(|_| Ty::fresh_var())
-                            .collect();
-                        Ty::Named(TypeId::new(&struct_name), type_args)
-                    };
-                    self.unifier.unify(&struct_ty, ty, pattern.span)?;
-
-                    // Check each field pattern against actual field types
-                    let mut matched_fields = std::collections::HashSet::new();
-                    for field_pat in fields {
-                        // Find the field in the struct definition
-                        let field_def = struct_fields.iter()
-                            .find(|(name, _)| name == &field_pat.name.name);
-
-                        if let Some((_, field_ty)) = field_def {
-                            matched_fields.insert(field_pat.name.name.clone());
-
-                            // If there's a nested pattern, check it against the field type
-                            if let Some(nested_pat) = &field_pat.pattern {
-                                self.check_pattern(nested_pat, field_ty)?;
-                            }
+                match struct_def {
+                    Some(TypeDef::Struct { type_params, fields: struct_fields }) => {
+                        // Unify expected type with struct type
+                        let struct_ty = if type_params.is_empty() {
+                            Ty::Named(TypeId::new(&struct_name), vec![])
                         } else {
-                            // Field not found
-                            let available: Vec<_> = struct_fields.iter()
-                                .map(|(n, _)| n.as_str())
+                            // For generic structs, create fresh type variables
+                            let type_args: Vec<Ty> = type_params.iter()
+                                .map(|_| Ty::fresh_var())
                                 .collect();
-                            return Err(TypeError::new(
-                                format!("struct '{}' has no field '{}'. Available: {}",
-                                        struct_name, field_pat.name.name, available.join(", ")),
-                                field_pat.name.span
-                            ));
-                        }
-                    }
+                            Ty::Named(TypeId::new(&struct_name), type_args)
+                        };
+                        self.unifier.unify(&struct_ty, ty, pattern.span)?;
 
-                    // If no rest pattern (..), ensure all fields are covered
-                    if !rest {
-                        for (field_name, _) in &struct_fields {
-                            if !matched_fields.contains(field_name) {
+                        // Check each field pattern against actual field types
+                        let mut matched_fields = std::collections::HashSet::new();
+                        for field_pat in fields {
+                            // Find the field in the struct definition
+                            let field_def = struct_fields.iter()
+                                .find(|(name, _)| name == &field_pat.name.name);
+
+                            if let Some((_, field_ty)) = field_def {
+                                matched_fields.insert(field_pat.name.name.clone());
+
+                                // If there's a nested pattern, check it against the field type
+                                if let Some(nested_pat) = &field_pat.pattern {
+                                    self.check_pattern(nested_pat, field_ty)?;
+                                }
+                            } else {
+                                // Field not found
+                                let available: Vec<_> = struct_fields.iter()
+                                    .map(|(n, _)| n.as_str())
+                                    .collect();
                                 return Err(TypeError::new(
-                                    format!("pattern missing field '{}' (use .. to ignore remaining fields)",
-                                            field_name),
-                                    pattern.span
+                                    format!("struct '{}' has no field '{}'. Available: {}",
+                                            struct_name, field_pat.name.name, available.join(", ")),
+                                    field_pat.name.span
                                 ));
                             }
                         }
-                    }
 
-                    Ok(())
-                } else {
-                    // Not a known struct - use fallback behavior
-                    for field in fields {
-                        if let Some(p) = &field.pattern {
-                            self.check_pattern(p, &Ty::fresh_var())?;
+                        // If no rest pattern (..), ensure all fields are covered
+                        if !rest {
+                            for (field_name, _) in &struct_fields {
+                                if !matched_fields.contains(field_name) {
+                                    return Err(TypeError::new(
+                                        format!("pattern missing field '{}' (use .. to ignore remaining fields)",
+                                                field_name),
+                                        pattern.span
+                                    ));
+                                }
+                            }
+                        }
+
+                        Ok(())
+                    }
+                    Some(TypeDef::Enum { type_params, variants }) => {
+                        // This is an enum pattern like Some(x) or Color::Red
+                        let enum_ty = if type_params.is_empty() {
+                            Ty::Named(TypeId::new(&struct_name), vec![])
+                        } else {
+                            let type_args: Vec<Ty> = type_params.iter()
+                                .map(|_| Ty::fresh_var())
+                                .collect();
+                            Ty::Named(TypeId::new(&struct_name), type_args)
+                        };
+                        self.unifier.unify(&enum_ty, ty, pattern.span)?;
+
+                        // Get variant name from pattern
+                        let variant_name = if path.segments.len() >= 2 {
+                            path.segments.last().map(|s| s.name.name.clone()).unwrap_or_default()
+                        } else {
+                            fields.first().map(|f| f.name.name.clone()).unwrap_or_default()
+                        };
+
+                        // Find variant in enum definition
+                        let variant = variants.iter()
+                            .find(|(name, _)| name == &variant_name);
+
+                        if let Some((_, field_types)) = variant {
+                            // Validate field count
+                            let pattern_field_count = fields.len();
+                            if pattern_field_count != field_types.len() {
+                                return Err(TypeError::new(
+                                    format!(
+                                        "variant '{}::{}' has {} field(s), pattern has {}",
+                                        struct_name, variant_name, field_types.len(), pattern_field_count
+                                    ),
+                                    pattern.span,
+                                ));
+                            }
+
+                            // Validate field types
+                            for (field, expected_ty) in fields.iter().zip(field_types.iter()) {
+                                if let Some(nested_pat) = &field.pattern {
+                                    self.check_pattern(nested_pat, expected_ty)?;
+                                }
+                            }
+                            Ok(())
+                        } else {
+                            let available: Vec<_> = variants.iter()
+                                .map(|(name, _)| name.as_str())
+                                .collect();
+                            return Err(TypeError::new(
+                                format!(
+                                    "enum '{}' has no variant '{}'. Available: {}",
+                                    struct_name, variant_name, available.join(", ")
+                                ),
+                                pattern.span,
+                            ));
                         }
                     }
-                    Ok(())
+                    _ => {
+                        // Not a known struct - use fallback behavior
+                        for field in fields {
+                            if let Some(p) = &field.pattern {
+                                self.check_pattern(p, &Ty::fresh_var())?;
+                            }
+                        }
+                        Ok(())
+                    }
                 }
             }
             PatternKind::Or(ps) => {
@@ -4766,6 +4958,10 @@ impl InferenceEngine {
     /// Get the current environment.
     pub fn env(&self) -> &TypeEnv {
         &self.env
+    }
+
+    pub fn get_symbol_location(&self, name: &str) -> Option<(Span, super::checker::DefinitionKind)> {
+        self.symbol_locations.get(name).copied()
     }
 
     /// Find a similar variable name for typo suggestions.

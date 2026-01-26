@@ -11,6 +11,19 @@ use crate::parser::{Item, ItemKind, SourceFile};
 use super::inference::{InferenceEngine, TypeEnv, TypeError};
 use super::types::{Ty, TypeId, TypeScheme};
 
+/// Kinds of definitions that can be jumped to
+#[derive(Debug, Clone, Copy)]
+pub enum DefinitionKind {
+    Function,
+    Struct,
+    Enum,
+    Trait,
+    TypeAlias,
+    Variable,
+    Parameter,
+    EnumVariant,
+}
+
 /// Type checking context.
 pub struct TypeChecker {
     /// The inference engine
@@ -156,6 +169,10 @@ impl TypeChecker {
     /// Get the type environment.
     pub fn env(&self) -> &TypeEnv {
         self.engine.env()
+    }
+
+    pub fn get_definition_location(&self, name: &str) -> Option<(Span, DefinitionKind)> {
+        self.engine.get_symbol_location(name)
     }
 }
 

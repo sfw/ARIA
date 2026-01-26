@@ -155,8 +155,8 @@ impl ModuleLoader {
 
         // Parse
         let parser = Parser::new(&tokens);
-        let ast = parser.parse().map_err(|e| ModuleError {
-            message: format!("parse error: {}", e),
+        let ast = parser.parse().map_err(|errors| ModuleError {
+            message: format!("parse error: {}", errors.iter().map(|e| format!("{}", e)).collect::<Vec<_>>().join("; ")),
             path: Some(path.to_path_buf()),
         })?;
 

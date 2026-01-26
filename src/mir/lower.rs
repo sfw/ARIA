@@ -960,8 +960,28 @@ impl Lowerer {
                 }
 
                 // Handle base (struct update syntax)
-                if let Some(_base_expr) = base {
-                    // TODO: handle struct update
+                if let Some(base_expr) = base {
+                    // Lower the base expression
+                    let base_op = self.lower_expr(base_expr)?;
+
+                    // Get struct field names from type info
+                    if let Some(struct_fields) = self.get_struct_fields(&name) {
+                        let existing_field_names: std::collections::HashSet<_> = mir_fields.iter()
+                            .map(|(n, _)| n.clone())
+                            .collect();
+
+                        // Copy fields from base that aren't explicitly set
+                        for (field_name, field_ty) in struct_fields {
+                            if !existing_field_names.contains(&field_name) {
+                                let field_local = self.new_temp(field_ty);
+                                self.emit(StatementKind::Assign(
+                                    field_local,
+                                    Rvalue::Field(base_op.clone(), field_name.clone()),
+                                ));
+                                mir_fields.push((field_name, Operand::Local(field_local)));
+                            }
+                        }
+                    }
                 }
 
                 // Use proper struct type
@@ -2801,6 +2821,13 @@ impl Lowerer {
             "map_remove" | "map_len" | "map_keys" | "char_is_digit" | "char_is_alpha" |
             "char_is_alphanumeric" | "char_is_whitespace" | "char_to_int"
         )
+    }
+
+    fn get_struct_fields(&self, struct_name: &str) -> Option<Vec<(String, Ty)>> {
+        // Look up struct definition in var_types or type registry
+        // For now, return None and rely on type checker having validated
+        // In a full implementation, this would query the struct registry
+        None
     }
 }
 

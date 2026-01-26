@@ -11,22 +11,25 @@ use crate::parser::ast::*;
 pub struct Parser<'a> {
     tokens: &'a [Token],
     pos: usize,
+    errors: Vec<crate::errors::CompileError>,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(tokens: &'a [Token]) -> Self {
-        Self { tokens, pos: 0 }
+        Self {
+            tokens,
+            pos: 0,
+            errors: Vec::new(),
+        }
     }
 
     /// Parse a complete source file.
     /// Uses error recovery to continue parsing after errors and report multiple issues.
-    pub fn parse(mut self) -> Result<SourceFile> {
+    pub fn parse(mut self) -> std::result::Result<SourceFile, Vec<crate::errors::CompileError>> {
         let start = self.current_span();
         let mut items = Vec::new();
-        let mut first_error: Option<crate::errors::CompileError> = None;
 
         while !self.at_end() {
-            // Skip newlines at top level
             while self.check(TokenKind::Newline) {
                 self.advance();
             }
@@ -37,18 +40,14 @@ impl<'a> Parser<'a> {
             match self.parse_item() {
                 Ok(item) => items.push(item),
                 Err(e) => {
-                    // Store the first error but continue parsing to find more items
-                    if first_error.is_none() {
-                        first_error = Some(e);
-                    }
+                    self.errors.push(e);
                     self.synchronize();
                 }
             }
         }
 
-        // Return the first error if any occurred
-        if let Some(err) = first_error {
-            return Err(err);
+        if !self.errors.is_empty() {
+            return Err(self.errors);
         }
 
         let end = self.previous_span();

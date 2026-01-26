@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::process;
 
 /// Error format for output
-#[derive(Clone, Copy, Debug, Default, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, ValueEnum)]
 enum ErrorFormat {
     /// Human-readable error format (default)
     #[default]
@@ -298,25 +298,29 @@ fn run(file: &PathBuf, dump_mir: bool, _check_contracts: bool, error_format: Err
     let parser = FormaParser::new(&tokens);
     let parsed_ast = match parser.parse() {
         Ok(ast) => ast,
-        Err(e) => {
-            match error_format {
-                ErrorFormat::Human => ctx.error_with_help(
-                    e.span(),
-                    &format!("{}", e),
-                    e.help().unwrap_or("check syntax"),
-                ),
-                ErrorFormat::Json => {
-                    json_errors.push(span_to_json_error(
-                        &filename,
-                        e.span(),
-                        "PARSE",
-                        &format!("{}", e),
-                        e.help(),
-                    ));
-                    output_json_errors(json_errors, None);
+        Err(errors) => {
+            for error in &errors {
+                match error_format {
+                    ErrorFormat::Human => ctx.error_with_help(
+                        error.span(),
+                        &format!("{}", error),
+                        error.help().unwrap_or("check syntax"),
+                    ),
+                    ErrorFormat::Json => {
+                        json_errors.push(span_to_json_error(
+                            &filename,
+                            error.span(),
+                            "PARSE",
+                            &format!("{}", error),
+                            error.help(),
+                        ));
+                    }
                 }
             }
-            return Err("parse error".to_string());
+            if error_format == ErrorFormat::Json {
+                output_json_errors(json_errors, None);
+            }
+            return Err(format!("{} parse error(s)", errors.len()));
         }
     };
 
@@ -569,24 +573,29 @@ fn parse(file: &PathBuf, error_format: ErrorFormat) -> Result<(), String> {
             }
             Ok(())
         }
-        Err(e) => {
-            let span = e.span();
-            match error_format {
-                ErrorFormat::Human => {
-                    eprintln!("error[PARSE]: {}:{}: {}", span.line, span.column, e);
-                }
-                ErrorFormat::Json => {
-                    let json_errors = vec![span_to_json_error(
-                        &filename,
-                        span,
-                        "PARSE",
-                        &format!("{}", e),
-                        e.help(),
-                    )];
-                    output_json_errors(json_errors, None);
+        Err(errors) => {
+            let mut json_errors = vec![];
+            for error in &errors {
+                let span = error.span();
+                match error_format {
+                    ErrorFormat::Human => {
+                        eprintln!("error[PARSE]: {}:{}: {}", span.line, span.column, error);
+                    }
+                    ErrorFormat::Json => {
+                        json_errors.push(span_to_json_error(
+                            &filename,
+                            span,
+                            "PARSE",
+                            &format!("{}", error),
+                            error.help(),
+                        ));
+                    }
                 }
             }
-            Err("parse error".to_string())
+            if error_format == ErrorFormat::Json {
+                output_json_errors(json_errors, None);
+            }
+            Err(format!("{} parse error(s)", errors.len()))
         }
     }
 }
@@ -665,25 +674,29 @@ fn check(file: &PathBuf, partial: bool, error_format: ErrorFormat) -> Result<(),
     let parser = FormaParser::new(&tokens);
     let ast = match parser.parse() {
         Ok(ast) => ast,
-        Err(e) => {
-            match error_format {
-                ErrorFormat::Human => ctx.error_with_help(
-                    e.span(),
-                    &format!("{}", e),
-                    e.help().unwrap_or("check syntax"),
-                ),
-                ErrorFormat::Json => {
-                    json_errors.push(span_to_json_error(
-                        &filename,
-                        e.span(),
-                        "PARSE",
-                        &format!("{}", e),
-                        e.help(),
-                    ));
-                    output_json_errors(json_errors, None);
+        Err(errors) => {
+            for error in &errors {
+                match error_format {
+                    ErrorFormat::Human => ctx.error_with_help(
+                        error.span(),
+                        &format!("{}", error),
+                        error.help().unwrap_or("check syntax"),
+                    ),
+                    ErrorFormat::Json => {
+                        json_errors.push(span_to_json_error(
+                            &filename,
+                            error.span(),
+                            "PARSE",
+                            &format!("{}", error),
+                            error.help(),
+                        ));
+                    }
                 }
             }
-            return Err("parse error".to_string());
+            if error_format == ErrorFormat::Json {
+                output_json_errors(json_errors, None);
+            }
+            return Err(format!("{} parse error(s)", errors.len()));
         }
     };
 
@@ -900,9 +913,11 @@ fn typeof_at(file: &PathBuf, position: &str, error_format: ErrorFormat) -> Resul
     let parser = FormaParser::new(&tokens);
     let ast = match parser.parse() {
         Ok(ast) => ast,
-        Err(e) => {
-            ctx.error(e.span(), &format!("{}", e));
-            return Err("Parse error".into());
+        Err(errors) => {
+            for error in &errors {
+                ctx.error(error.span(), &format!("{}", error));
+            }
+            return Err(format!("{} parse error(s)", errors.len()));
         }
     };
 
@@ -1009,18 +1024,23 @@ fn build(file: &PathBuf, output: Option<&PathBuf>, _opt_level: u8, error_format:
     let parser = FormaParser::new(&tokens);
     let parsed_ast = match parser.parse() {
         Ok(ast) => ast,
-        Err(e) => {
-            match error_format {
-                ErrorFormat::Human => ctx.error(e.span(), &format!("{}", e)),
-                ErrorFormat::Json => json_errors.push(span_to_json_error(
-                    &filename,
-                    e.span(),
-                    "PARSE",
-                    &format!("{}", e),
-                    e.help(),
-                )),
+        Err(errors) => {
+            for error in &errors {
+                match error_format {
+                    ErrorFormat::Human => ctx.error(error.span(), &format!("{}", error)),
+                    ErrorFormat::Json => json_errors.push(span_to_json_error(
+                        &filename,
+                        error.span(),
+                        "PARSE",
+                        &format!("{}", error),
+                        error.help(),
+                    )),
+                }
             }
-            return Err("Parse error".into());
+            if error_format == ErrorFormat::Json {
+                output_json_errors(json_errors, None);
+            }
+            return Err(format!("{} parse error(s)", errors.len()));
         }
     };
 
@@ -1898,7 +1918,9 @@ fn repl_validate_code(code: &str) -> Result<(), String> {
     }
 
     let parser = FormaParser::new(&tokens);
-    parser.parse().map_err(|e| format!("{}", e))?;
+    parser.parse().map_err(|errors| {
+        errors.iter().map(|e| format!("{}", e)).collect::<Vec<_>>().join("; ")
+    })?;
     Ok(())
 }
 
@@ -1925,8 +1947,10 @@ fn repl_eval_expr(expr: &str, session_code: &str) {
     let parser = FormaParser::new(&tokens);
     let ast = match parser.parse() {
         Ok(ast) => ast,
-        Err(e) => {
-            println!("Parse error: {}", e);
+        Err(errors) => {
+            for error in &errors {
+                println!("Parse error: {}", error);
+            }
             return;
         }
     };
@@ -1995,8 +2019,10 @@ fn repl_type_of(expr: &str, session_code: &str) {
     let parser = FormaParser::new(&tokens);
     let ast = match parser.parse() {
         Ok(ast) => ast,
-        Err(e) => {
-            println!("Parse error: {}", e);
+        Err(errors) => {
+            for error in &errors {
+                println!("Parse error: {}", error);
+            }
             return;
         }
     };
@@ -2005,9 +2031,12 @@ fn repl_type_of(expr: &str, session_code: &str) {
     let mut type_checker = TypeChecker::new();
     match type_checker.check(&ast) {
         Ok(_) => {
-            // Successfully type-checked - expression is well-typed
-            // For a full implementation, we'd need to extract the inferred type from the inference engine
-            println!("Expression is well-typed");
+            if let Some(expr_type) = type_checker.type_of("__result__") {
+                let finalized = type_checker.finalize(&expr_type);
+                println!("{}", finalized);
+            } else {
+                println!("Expression is well-typed");
+            }
         }
         Err(errors) => {
             for error in errors.iter().take(1) {
@@ -2037,9 +2066,11 @@ fn fmt(file: &PathBuf, write: bool, check: bool) -> Result<(), String> {
     let parser = FormaParser::new(&tokens);
     let ast = match parser.parse() {
         Ok(ast) => ast,
-        Err(e) => {
-            eprintln!("error[PARSE]: {}", e);
-            return Err("parse error".to_string());
+        Err(errors) => {
+            for error in &errors {
+                eprintln!("error[PARSE]: {}", error);
+            }
+            return Err(format!("{} parse error(s)", errors.len()));
         }
     };
 

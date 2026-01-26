@@ -73,9 +73,10 @@ impl Formatter {
                 self.write(&t.name.name);
                 self.newline();
             }
-            ItemKind::Use(_) => {
+            ItemKind::Use(use_stmt) => {
                 self.write_indent();
-                self.write("us ...");
+                self.write("us ");
+                self.format_use_tree(&use_stmt.tree);
                 self.newline();
             }
             ItemKind::Module(m) => {
@@ -244,7 +245,40 @@ impl Formatter {
             }
             TypeKind::Infer => self.write("_"),
             TypeKind::Never => self.write("!"),
-            _ => self.write("..."),
+            TypeKind::Map(key_ty, val_ty) => {
+                self.write("{");
+                self.format_type(key_ty);
+                self.write(": ");
+                self.format_type(val_ty);
+                self.write("}");
+            }
+            TypeKind::Set(elem_ty) => {
+                self.write("{");
+                self.format_type(elem_ty);
+                self.write("}");
+            }
+            TypeKind::Array(elem_ty, size_expr) => {
+                self.write("[");
+                self.format_type(elem_ty);
+                self.write("; ");
+                self.format_expr(size_expr);
+                self.write("]");
+            }
+            TypeKind::Fn(params, ret) => {
+                self.write("(");
+                for (i, param) in params.iter().enumerate() {
+                    if i > 0 { self.write(", "); }
+                    self.format_type(param);
+                }
+                self.write(") -> ");
+                self.format_type(ret);
+            }
+            TypeKind::Ptr(inner, is_mut) => {
+                self.write("*");
+                if *is_mut { self.write("mut "); }
+                self.format_type(inner);
+            }
+            _ => self.write("?"),
         }
     }
 
@@ -366,7 +400,56 @@ impl Formatter {
                 }
                 self.format_expr(value);
             }
-            _ => self.write("..."),
+            ExprKind::Path(path) => {
+                for (i, seg) in path.segments.iter().enumerate() {
+                    if i > 0 { self.write("."); }
+                    self.write(&seg.name);
+                }
+            }
+            ExprKind::MethodCall(obj, method, args) => {
+                self.format_expr(obj);
+                self.write(".");
+                self.write(&method.name);
+                self.write("(");
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 { self.write(", "); }
+                    self.format_expr(&arg.value);
+                }
+                self.write(")");
+            }
+            ExprKind::Field(obj, field) => {
+                self.format_expr(obj);
+                self.write(".");
+                self.write(&field.name);
+            }
+            ExprKind::Index(obj, idx) => {
+                self.format_expr(obj);
+                self.write("[");
+                self.format_expr(idx);
+                self.write("]");
+            }
+            ExprKind::Closure(closure) => {
+                self.write("|");
+                for (i, param) in closure.params.iter().enumerate() {
+                    if i > 0 { self.write(", "); }
+                    self.write(&param.name.name);
+                }
+                self.write("| ");
+                self.format_expr(&closure.body);
+            }
+            ExprKind::Try(expr) => {
+                self.format_expr(expr);
+                self.write("?");
+            }
+            ExprKind::Await(expr) => {
+                self.format_expr(expr);
+                self.write(".await");
+            }
+            ExprKind::Spawn(expr) => {
+                self.write("sp ");
+                self.format_expr(expr);
+            }
+            _ => self.write("?"),
         }
     }
 
@@ -404,7 +487,11 @@ impl Formatter {
             BinOp::Le => "<=",
             BinOp::Gt => ">",
             BinOp::Ge => ">=",
-            _ => "?",
+            BinOp::BitAnd => "&",
+            BinOp::BitOr => "|",
+            BinOp::BitXor => "^",
+            BinOp::Shl => "<<",
+            BinOp::Shr => ">>",
         };
         self.write(s);
     }
@@ -440,7 +527,84 @@ impl Formatter {
                 }
                 self.write(")");
             }
-            _ => self.write("..."),
+            PatternKind::List(pats, rest) => {
+                self.write("[");
+                for (i, p) in pats.iter().enumerate() {
+                    if i > 0 { self.write(", "); }
+                    self.format_pattern(p);
+                }
+                if let Some(rest_pat) = rest {
+                    if !pats.is_empty() { self.write(", "); }
+                    self.write("..");
+                    self.format_pattern(rest_pat);
+                }
+                self.write("]");
+            }
+            PatternKind::Struct(path, fields, _) => {
+                for (i, seg) in path.segments.iter().enumerate() {
+                    if i > 0 { self.write("::"); }
+                    self.write(&seg.name.name);
+                }
+                self.write(" { ");
+                for (i, field) in fields.iter().enumerate() {
+                    if i > 0 { self.write(", "); }
+                    self.write(&field.name.name);
+                    if let Some(pat) = &field.pattern {
+                        self.write(": ");
+                        self.format_pattern(pat);
+                    }
+                }
+                self.write(" }");
+            }
+            PatternKind::Or(pats) => {
+                for (i, p) in pats.iter().enumerate() {
+                    if i > 0 { self.write(" | "); }
+                    self.format_pattern(p);
+                }
+            }
+            PatternKind::Range(start, end, inclusive) => {
+                if let Some(s) = start { self.format_pattern(s); }
+                self.write(if *inclusive { "..=" } else { ".." });
+                if let Some(e) = end { self.format_pattern(e); }
+            }
+            PatternKind::Ref(pat, is_mut) => {
+                self.write("&");
+                if *is_mut { self.write("mut "); }
+                self.format_pattern(pat);
+            }
+            PatternKind::Rest => self.write(".."),
+        }
+    }
+
+    fn format_use_tree(&mut self, tree: &UseTree) {
+        match tree {
+            UseTree::Path(segments, sub) => {
+                for (i, seg) in segments.iter().enumerate() {
+                    if i > 0 { self.write("."); }
+                    self.write(&seg.name);
+                }
+                if let Some(sub_tree) = sub {
+                    self.write(".");
+                    self.format_use_tree(sub_tree);
+                }
+            }
+            UseTree::Rename(segments, alias) => {
+                for (i, seg) in segments.iter().enumerate() {
+                    if i > 0 { self.write("."); }
+                    self.write(&seg.name);
+                }
+                self.write(" -> ");
+                self.write(&alias.name);
+            }
+            UseTree::Group(trees) => {
+                self.write("{");
+                for (i, t) in trees.iter().enumerate() {
+                    if i > 0 { self.write(", "); }
+                    self.format_use_tree(t);
+                }
+                self.write("}");
+            }
+            UseTree::Glob => self.write("*"),
         }
     }
 }
