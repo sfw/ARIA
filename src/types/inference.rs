@@ -1756,6 +1756,34 @@ impl TypeEnv {
         // HttpRequest type: Named struct { method: Str, path: Str, query: {Str: Str}, headers: {Str: Str}, body: Str }
         // HttpResponse type: Named struct { status: Int, headers: {Str: Str}, body: Str }
 
+        // Register HttpRequest struct type
+        env.types.insert(
+            "HttpRequest".to_string(),
+            TypeDef::Struct {
+                type_params: vec![],
+                fields: vec![
+                    ("method".to_string(), Ty::Str),
+                    ("path".to_string(), Ty::Str),
+                    ("query".to_string(), Ty::Map(Box::new(Ty::Str), Box::new(Ty::Str))),
+                    ("headers".to_string(), Ty::Map(Box::new(Ty::Str), Box::new(Ty::Str))),
+                    ("body".to_string(), Ty::Str),
+                ],
+            },
+        );
+
+        // Register HttpResponse struct type
+        env.types.insert(
+            "HttpResponse".to_string(),
+            TypeDef::Struct {
+                type_params: vec![],
+                fields: vec![
+                    ("status".to_string(), Ty::Int),
+                    ("headers".to_string(), Ty::Map(Box::new(Ty::Str), Box::new(Ty::Str))),
+                    ("body".to_string(), Ty::Str),
+                ],
+            },
+        );
+
         // http_response: (Int, Str) -> HttpResponse
         env.bindings.insert(
             "http_response".to_string(),
@@ -2363,6 +2391,23 @@ impl TypeEnv {
             "db_close".to_string(),
             TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Database], Box::new(Ty::Unit)) },
         );
+        // db_prepare: (Database, Str) -> Result[Statement, Str]
+        env.bindings.insert(
+            "db_prepare".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Database, Ty::Str], Box::new(Ty::Result(Box::new(Ty::Statement), Box::new(Ty::Str)))) },
+        );
+        // db_execute_prepared: (Statement, [T]) -> Result[Int, Str]
+        let exec_t = TypeVar::fresh();
+        env.bindings.insert(
+            "db_execute_prepared".to_string(),
+            TypeScheme { vars: vec![exec_t], ty: Ty::Fn(vec![Ty::Statement, Ty::List(Box::new(Ty::Var(exec_t)))], Box::new(Ty::Result(Box::new(Ty::Int), Box::new(Ty::Str)))) },
+        );
+        // db_query_prepared: (Statement, [T]) -> Result[[Row], Str]
+        let query_t = TypeVar::fresh();
+        env.bindings.insert(
+            "db_query_prepared".to_string(),
+            TypeScheme { vars: vec![query_t], ty: Ty::Fn(vec![Ty::Statement, Ty::List(Box::new(Ty::Var(query_t)))], Box::new(Ty::Result(Box::new(Ty::List(Box::new(Ty::DbRow))), Box::new(Ty::Str)))) },
+        );
         // row_get: (Row, Int) -> T? (generic)
         let row_get_t = TypeVar::fresh();
         env.bindings.insert(
@@ -2636,6 +2681,16 @@ impl Unifier {
                 self.unify(err1, err2, span)
             }
 
+            // Unify Ty::Result with Ty::Named("Result", [...])
+            // This allows T! to unify with Result[T, E]
+            (Ty::Result(ok, err), Ty::Named(id, args))
+            | (Ty::Named(id, args), Ty::Result(ok, err))
+                if id.name == "Result" && args.len() == 2 =>
+            {
+                self.unify(ok, &args[0], span)?;
+                self.unify(err, &args[1], span)
+            }
+
             // Function unification
             (Ty::Fn(p1, r1), Ty::Fn(p2, r2)) => {
                 if p1.len() != p2.len() {
@@ -2715,6 +2770,21 @@ impl Default for Unifier {
     }
 }
 
+/// Method signature for type checking method calls.
+#[derive(Debug, Clone)]
+pub struct MethodSignature {
+    /// Parameter types (NOT including self/receiver)
+    pub params: Vec<Ty>,
+    /// Return type
+    pub return_type: Ty,
+    /// Whether this method is generic (uses type from receiver)
+    pub uses_receiver_type: bool,
+}
+
+/// Key for looking up methods: (base type category, method name)
+/// Base type category is a string like "Vec", "Map", "Str", etc.
+type MethodKey = (String, String);
+
 /// Type inference engine.
 pub struct InferenceEngine {
     env: TypeEnv,
@@ -2724,24 +2794,438 @@ pub struct InferenceEngine {
     /// Current type parameters (for generic functions/structs)
     /// Maps type parameter names (e.g., "T") to their type variables
     type_params: HashMap<String, TypeVar>,
+    /// Built-in method signatures for Vec, Map, Str, etc.
+    builtin_methods: HashMap<MethodKey, MethodSignature>,
+    /// Current impl target type (for resolving `Self` in impl blocks)
+    impl_self_type: Option<Ty>,
 }
 
 impl InferenceEngine {
     pub fn new() -> Self {
-        Self {
+        let mut engine = Self {
             env: TypeEnv::with_builtins(),
             unifier: Unifier::new(),
             return_type: None,
             type_params: HashMap::new(),
-        }
+            builtin_methods: HashMap::new(),
+            impl_self_type: None,
+        };
+        engine.register_builtin_methods();
+        engine
     }
 
     pub fn with_env(env: TypeEnv) -> Self {
-        Self {
+        let mut engine = Self {
             env,
             unifier: Unifier::new(),
             return_type: None,
             type_params: HashMap::new(),
+            builtin_methods: HashMap::new(),
+            impl_self_type: None,
+        };
+        engine.register_builtin_methods();
+        engine
+    }
+
+    /// Register built-in method signatures for Vec, Map, Str, etc.
+    fn register_builtin_methods(&mut self) {
+        // Helper to create a method key
+        let mk = |type_name: &str, method: &str| -> MethodKey {
+            (type_name.to_string(), method.to_string())
+        };
+
+        // A placeholder type variable for generic element types
+        // At call time, we'll substitute this with the actual element type
+        let t_var = Ty::Var(TypeVar { id: 99999 }); // Sentinel value for "element type"
+
+        // ===== Vec/List methods =====
+        // len: [T] -> Int
+        self.builtin_methods.insert(mk("Vec", "len"), MethodSignature {
+            params: vec![],
+            return_type: Ty::Int,
+            uses_receiver_type: false,
+        });
+
+        // push: ([T], T) -> [T]
+        self.builtin_methods.insert(mk("Vec", "push"), MethodSignature {
+            params: vec![t_var.clone()],
+            return_type: Ty::List(Box::new(t_var.clone())),
+            uses_receiver_type: true,
+        });
+
+        // pop: [T] -> ([T], T?)
+        self.builtin_methods.insert(mk("Vec", "pop"), MethodSignature {
+            params: vec![],
+            return_type: Ty::Tuple(vec![
+                Ty::List(Box::new(t_var.clone())),
+                Ty::Option(Box::new(t_var.clone())),
+            ]),
+            uses_receiver_type: true,
+        });
+
+        // get: ([T], Int) -> T?
+        self.builtin_methods.insert(mk("Vec", "get"), MethodSignature {
+            params: vec![Ty::Int],
+            return_type: Ty::Option(Box::new(t_var.clone())),
+            uses_receiver_type: true,
+        });
+
+        // set: ([T], Int, T) -> [T]
+        self.builtin_methods.insert(mk("Vec", "set"), MethodSignature {
+            params: vec![Ty::Int, t_var.clone()],
+            return_type: Ty::List(Box::new(t_var.clone())),
+            uses_receiver_type: true,
+        });
+
+        // first: [T] -> T?
+        self.builtin_methods.insert(mk("Vec", "first"), MethodSignature {
+            params: vec![],
+            return_type: Ty::Option(Box::new(t_var.clone())),
+            uses_receiver_type: true,
+        });
+
+        // last: [T] -> T?
+        self.builtin_methods.insert(mk("Vec", "last"), MethodSignature {
+            params: vec![],
+            return_type: Ty::Option(Box::new(t_var.clone())),
+            uses_receiver_type: true,
+        });
+
+        // concat: ([T], [T]) -> [T]
+        self.builtin_methods.insert(mk("Vec", "concat"), MethodSignature {
+            params: vec![Ty::List(Box::new(t_var.clone()))],
+            return_type: Ty::List(Box::new(t_var.clone())),
+            uses_receiver_type: true,
+        });
+
+        // slice: ([T], Int, Int) -> [T]
+        self.builtin_methods.insert(mk("Vec", "slice"), MethodSignature {
+            params: vec![Ty::Int, Ty::Int],
+            return_type: Ty::List(Box::new(t_var.clone())),
+            uses_receiver_type: true,
+        });
+
+        // reverse: [T] -> [T]
+        self.builtin_methods.insert(mk("Vec", "reverse"), MethodSignature {
+            params: vec![],
+            return_type: Ty::List(Box::new(t_var.clone())),
+            uses_receiver_type: true,
+        });
+
+        // ===== String methods =====
+        // len: Str -> Int
+        self.builtin_methods.insert(mk("Str", "len"), MethodSignature {
+            params: vec![],
+            return_type: Ty::Int,
+            uses_receiver_type: false,
+        });
+
+        // char_at: (Str, Int) -> Char?
+        self.builtin_methods.insert(mk("Str", "char_at"), MethodSignature {
+            params: vec![Ty::Int],
+            return_type: Ty::Option(Box::new(Ty::Char)),
+            uses_receiver_type: false,
+        });
+
+        // contains: (Str, Str) -> Bool
+        self.builtin_methods.insert(mk("Str", "contains"), MethodSignature {
+            params: vec![Ty::Str],
+            return_type: Ty::Bool,
+            uses_receiver_type: false,
+        });
+
+        // starts_with: (Str, Str) -> Bool
+        self.builtin_methods.insert(mk("Str", "starts_with"), MethodSignature {
+            params: vec![Ty::Str],
+            return_type: Ty::Bool,
+            uses_receiver_type: false,
+        });
+
+        // ends_with: (Str, Str) -> Bool
+        self.builtin_methods.insert(mk("Str", "ends_with"), MethodSignature {
+            params: vec![Ty::Str],
+            return_type: Ty::Bool,
+            uses_receiver_type: false,
+        });
+
+        // split: (Str, Str) -> [Str]
+        self.builtin_methods.insert(mk("Str", "split"), MethodSignature {
+            params: vec![Ty::Str],
+            return_type: Ty::List(Box::new(Ty::Str)),
+            uses_receiver_type: false,
+        });
+
+        // trim: Str -> Str
+        self.builtin_methods.insert(mk("Str", "trim"), MethodSignature {
+            params: vec![],
+            return_type: Ty::Str,
+            uses_receiver_type: false,
+        });
+
+        // to_int: Str -> Int?
+        self.builtin_methods.insert(mk("Str", "to_int"), MethodSignature {
+            params: vec![],
+            return_type: Ty::Option(Box::new(Ty::Int)),
+            uses_receiver_type: false,
+        });
+
+        // ===== Map methods =====
+        let k_var = Ty::Var(TypeVar { id: 99998 }); // Key type
+        let v_var = Ty::Var(TypeVar { id: 99997 }); // Value type
+
+        // len: Map[K,V] -> Int
+        self.builtin_methods.insert(mk("Map", "len"), MethodSignature {
+            params: vec![],
+            return_type: Ty::Int,
+            uses_receiver_type: false,
+        });
+
+        // get: (Map[K,V], K) -> V?
+        self.builtin_methods.insert(mk("Map", "get"), MethodSignature {
+            params: vec![k_var.clone()],
+            return_type: Ty::Option(Box::new(v_var.clone())),
+            uses_receiver_type: true,
+        });
+
+        // insert: (Map[K,V], K, V) -> Map[K,V]
+        self.builtin_methods.insert(mk("Map", "insert"), MethodSignature {
+            params: vec![k_var.clone(), v_var.clone()],
+            return_type: Ty::Map(Box::new(k_var.clone()), Box::new(v_var.clone())),
+            uses_receiver_type: true,
+        });
+
+        // remove: (Map[K,V], K) -> (Map[K,V], V?)
+        self.builtin_methods.insert(mk("Map", "remove"), MethodSignature {
+            params: vec![k_var.clone()],
+            return_type: Ty::Tuple(vec![
+                Ty::Map(Box::new(k_var.clone()), Box::new(v_var.clone())),
+                Ty::Option(Box::new(v_var.clone())),
+            ]),
+            uses_receiver_type: true,
+        });
+
+        // contains: (Map[K,V], K) -> Bool
+        self.builtin_methods.insert(mk("Map", "contains"), MethodSignature {
+            params: vec![k_var.clone()],
+            return_type: Ty::Bool,
+            uses_receiver_type: true,
+        });
+
+        // keys: Map[K,V] -> [K]
+        self.builtin_methods.insert(mk("Map", "keys"), MethodSignature {
+            params: vec![],
+            return_type: Ty::List(Box::new(k_var.clone())),
+            uses_receiver_type: true,
+        });
+
+        // values: Map[K,V] -> [V]
+        self.builtin_methods.insert(mk("Map", "values"), MethodSignature {
+            params: vec![],
+            return_type: Ty::List(Box::new(v_var.clone())),
+            uses_receiver_type: true,
+        });
+
+        // ===== Char methods =====
+        // is_digit: Char -> Bool
+        self.builtin_methods.insert(mk("Char", "is_digit"), MethodSignature {
+            params: vec![],
+            return_type: Ty::Bool,
+            uses_receiver_type: false,
+        });
+
+        // is_alpha: Char -> Bool
+        self.builtin_methods.insert(mk("Char", "is_alpha"), MethodSignature {
+            params: vec![],
+            return_type: Ty::Bool,
+            uses_receiver_type: false,
+        });
+
+        // is_alphanumeric: Char -> Bool
+        self.builtin_methods.insert(mk("Char", "is_alphanumeric"), MethodSignature {
+            params: vec![],
+            return_type: Ty::Bool,
+            uses_receiver_type: false,
+        });
+
+        // is_whitespace: Char -> Bool
+        self.builtin_methods.insert(mk("Char", "is_whitespace"), MethodSignature {
+            params: vec![],
+            return_type: Ty::Bool,
+            uses_receiver_type: false,
+        });
+
+        // ===== Int methods =====
+        // to_str: Int -> Str
+        self.builtin_methods.insert(mk("Int", "to_str"), MethodSignature {
+            params: vec![],
+            return_type: Ty::Str,
+            uses_receiver_type: false,
+        });
+    }
+
+    /// Look up a method on a type, returning its signature and element types for substitution.
+    /// Returns (MethodSignature, element_types) where element_types contains:
+    /// - For Vec[T]: the element type T
+    /// - For Map[K,V]: the key and value types (K, V)
+    /// - For primitives: empty
+    fn lookup_method(&self, ty: &Ty, method_name: &str) -> Option<(MethodSignature, Vec<Ty>)> {
+        let (type_category, elem_types) = self.classify_type_for_method(ty);
+
+        // Look up in builtin methods
+        let key = (type_category, method_name.to_string());
+        if let Some(sig) = self.builtin_methods.get(&key) {
+            return Some((sig.clone(), elem_types));
+        }
+
+        // TODO: Also check user-defined impl blocks and trait implementations
+        None
+    }
+
+    /// Classify a type for method lookup, returning the category name and element types.
+    fn classify_type_for_method(&self, ty: &Ty) -> (String, Vec<Ty>) {
+        match ty {
+            Ty::List(elem) => ("Vec".to_string(), vec![*elem.clone()]),
+            Ty::Array(elem, _) => ("Vec".to_string(), vec![*elem.clone()]),
+            Ty::Map(key, val) => ("Map".to_string(), vec![*key.clone(), *val.clone()]),
+            Ty::Str => ("Str".to_string(), vec![]),
+            Ty::Char => ("Char".to_string(), vec![]),
+            Ty::Int => ("Int".to_string(), vec![]),
+            Ty::Float => ("Float".to_string(), vec![]),
+            Ty::Bool => ("Bool".to_string(), vec![]),
+            // Handle references by looking at the inner type
+            Ty::Ref(inner, _) => self.classify_type_for_method(inner),
+            // Handle Named types (user-defined structs)
+            Ty::Named(id, args) => (id.name.clone(), args.clone()),
+            // For type variables, try to resolve through substitution
+            Ty::Var(tv) => {
+                if let Some(resolved) = self.unifier.subst.get(*tv) {
+                    self.classify_type_for_method(resolved)
+                } else {
+                    ("Unknown".to_string(), vec![])
+                }
+            }
+            _ => ("Unknown".to_string(), vec![]),
+        }
+    }
+
+    /// Substitute sentinel type variables with actual element types.
+    /// Sentinel TypeVar ids: 99999 = T (element), 99998 = K (key), 99997 = V (value)
+    fn substitute_elem_types(&self, ty: &Ty, elem_types: &[Ty]) -> Ty {
+        match ty {
+            Ty::Var(tv) => {
+                match tv.id {
+                    99999 => elem_types.first().cloned().unwrap_or(Ty::Var(*tv)),
+                    99998 => elem_types.first().cloned().unwrap_or(Ty::Var(*tv)), // K for maps
+                    99997 => elem_types.get(1).cloned().unwrap_or(Ty::Var(*tv)),  // V for maps
+                    _ => Ty::Var(*tv),
+                }
+            }
+            Ty::List(elem) => Ty::List(Box::new(self.substitute_elem_types(elem, elem_types))),
+            Ty::Option(inner) => Ty::Option(Box::new(self.substitute_elem_types(inner, elem_types))),
+            Ty::Result(ok, err) => Ty::Result(
+                Box::new(self.substitute_elem_types(ok, elem_types)),
+                Box::new(self.substitute_elem_types(err, elem_types)),
+            ),
+            Ty::Tuple(elems) => Ty::Tuple(
+                elems.iter().map(|e| self.substitute_elem_types(e, elem_types)).collect()
+            ),
+            Ty::Map(k, v) => Ty::Map(
+                Box::new(self.substitute_elem_types(k, elem_types)),
+                Box::new(self.substitute_elem_types(v, elem_types)),
+            ),
+            Ty::Fn(params, ret) => Ty::Fn(
+                params.iter().map(|p| self.substitute_elem_types(p, elem_types)).collect(),
+                Box::new(self.substitute_elem_types(ret, elem_types)),
+            ),
+            // All other types remain unchanged
+            _ => ty.clone(),
+        }
+    }
+
+    /// Look up a field type on a struct or tuple type.
+    fn lookup_field(&self, ty: &Ty, field_name: &str, span: Span) -> Result<Ty, TypeError> {
+        match ty {
+            // Handle struct types (Named types)
+            Ty::Named(type_id, type_args) => {
+                // Handle Self type by resolving to the impl target type
+                if type_id.name == "Self" {
+                    if let Some(self_ty) = &self.impl_self_type {
+                        return self.lookup_field(self_ty, field_name, span);
+                    }
+                    return Err(TypeError::new(
+                        format!("'Self' used outside of impl block"),
+                        span
+                    ));
+                }
+
+                // Look up the struct definition in the type environment
+                if let Some(TypeDef::Struct { type_params, fields }) = self.env.get_type(&type_id.name) {
+                    // Find the field
+                    if let Some((_, field_ty)) = fields.iter().find(|(name, _)| name == field_name) {
+                        // If the struct is generic, substitute type parameters
+                        if !type_params.is_empty() && !type_args.is_empty() {
+                            let subst: HashMap<String, Ty> = type_params
+                                .iter()
+                                .zip(type_args.iter())
+                                .map(|(p, a)| (p.clone(), a.clone()))
+                                .collect();
+                            return Ok(self.substitute_type_params(field_ty, &subst));
+                        }
+                        return Ok(field_ty.clone());
+                    } else {
+                        // Field not found - list available fields
+                        let field_names: Vec<_> = fields.iter().map(|(n, _)| n.as_str()).collect();
+                        return Err(TypeError::new(
+                            format!("type '{}' has no field '{}'. Available fields: {}",
+                                    type_id.name, field_name, field_names.join(", ")),
+                            span
+                        ));
+                    }
+                }
+                Err(TypeError::new(
+                    format!("type '{}' has no field '{}'", type_id.name, field_name),
+                    span
+                ))
+            }
+
+            // Handle tuple types (numeric field access: tuple.0, tuple.1, etc.)
+            Ty::Tuple(elems) => {
+                if let Ok(index) = field_name.parse::<usize>() {
+                    if let Some(elem_ty) = elems.get(index) {
+                        return Ok(elem_ty.clone());
+                    } else {
+                        return Err(TypeError::new(
+                            format!("tuple index {} out of bounds (tuple has {} elements)",
+                                    index, elems.len()),
+                            span
+                        ));
+                    }
+                }
+                Err(TypeError::new(
+                    format!("cannot access field '{}' on tuple type (use numeric indices: .0, .1, etc.)",
+                            field_name),
+                    span
+                ))
+            }
+
+            // Handle references by looking through to the inner type
+            Ty::Ref(inner, _) => self.lookup_field(inner, field_name, span),
+
+            // Handle type variables by trying to resolve them
+            Ty::Var(tv) => {
+                if let Some(resolved) = self.unifier.subst.get(*tv) {
+                    self.lookup_field(resolved, field_name, span)
+                } else {
+                    // Can't determine type yet - return fresh var and hope for later resolution
+                    // This is a fallback for complex inference cases
+                    Ok(Ty::fresh_var())
+                }
+            }
+
+            _ => Err(TypeError::new(
+                format!("cannot access field '{}' on type {}", field_name, ty),
+                span
+            ))
         }
     }
 
@@ -2969,53 +3453,97 @@ impl InferenceEngine {
 
     /// Collect a function signature into the environment.
     fn collect_function_sig(&mut self, item: &Item) -> Result<(), TypeError> {
-        if let ItemKind::Function(f) = &item.kind {
-            // Set up type parameters for generic functions
-            let old_type_params = std::mem::take(&mut self.type_params);
-            self.type_params = self.setup_type_params(&f.generics);
+        match &item.kind {
+            ItemKind::Function(f) => {
+                // Set up type parameters for generic functions
+                let old_type_params = std::mem::take(&mut self.type_params);
+                self.type_params = self.setup_type_params(&f.generics);
 
-            let param_types: Vec<Ty> = f
-                .params
-                .iter()
-                .map(|p| self.ast_type_to_ty(&p.ty))
-                .collect::<Result<Vec<_>, _>>()?;
+                let param_types: Vec<Ty> = f
+                    .params
+                    .iter()
+                    .map(|p| self.ast_type_to_ty(&p.ty))
+                    .collect::<Result<Vec<_>, _>>()?;
 
-            let return_type = if let Some(ty) = &f.return_type {
-                self.ast_type_to_ty(ty)?
-            } else {
-                Ty::Unit
-            };
+                let return_type = if let Some(ty) = &f.return_type {
+                    self.ast_type_to_ty(ty)?
+                } else {
+                    Ty::Unit
+                };
 
-            let fn_type = Ty::Fn(param_types.clone(), Box::new(return_type));
+                let fn_type = Ty::Fn(param_types.clone(), Box::new(return_type));
 
-            // For generic functions, create a TypeScheme with the type variables
-            let scheme = if f.generics.is_some() {
-                let vars: Vec<TypeVar> = self.type_params.values().copied().collect();
-                TypeScheme { vars, ty: fn_type }
-            } else {
-                // Non-generic: generalize normally
-                let env_vars = self.env.free_vars();
-                TypeScheme::generalize(fn_type, &env_vars)
-            };
+                // For generic functions, create a TypeScheme with the type variables
+                let scheme = if f.generics.is_some() {
+                    let vars: Vec<TypeVar> = self.type_params.values().copied().collect();
+                    TypeScheme { vars, ty: fn_type }
+                } else {
+                    // Non-generic: generalize normally
+                    let env_vars = self.env.free_vars();
+                    TypeScheme::generalize(fn_type, &env_vars)
+                };
 
-            self.env.insert(f.name.name.clone(), scheme);
+                self.env.insert(f.name.name.clone(), scheme);
 
-            // Track function info for default parameter handling
-            let required_params = f.params.iter().filter(|p| p.default.is_none()).count();
-            let total_params = f.params.len();
-            self.env.insert_fn_info(
-                f.name.name.clone(),
-                FunctionInfo {
-                    required_params,
-                    total_params,
-                    param_types,
-                },
-            );
+                // Track function info for default parameter handling
+                let required_params = f.params.iter().filter(|p| p.default.is_none()).count();
+                let total_params = f.params.len();
+                self.env.insert_fn_info(
+                    f.name.name.clone(),
+                    FunctionInfo {
+                        required_params,
+                        total_params,
+                        param_types,
+                    },
+                );
 
-            // Restore old type params
-            self.type_params = old_type_params;
+                // Restore old type params
+                self.type_params = old_type_params;
+            }
+            ItemKind::Impl(i) => {
+                // Get the impl target type name
+                let type_name = self.get_type_name_from_ast_type(&i.self_type);
+
+                // Collect method signatures from impl block
+                for impl_item in &i.items {
+                    if let crate::parser::ImplItem::Function(f) = impl_item {
+                        // Skip the self parameter for method signature
+                        let param_types: Vec<Ty> = f
+                            .params
+                            .iter()
+                            .filter(|p| p.name.name != "self")
+                            .map(|p| self.ast_type_to_ty(&p.ty))
+                            .collect::<Result<Vec<_>, _>>()?;
+
+                        let return_type = if let Some(ty) = &f.return_type {
+                            self.ast_type_to_ty(ty)?
+                        } else {
+                            Ty::Unit
+                        };
+
+                        // Register method in builtin_methods for lookup
+                        let method_key = (type_name.clone(), f.name.name.clone());
+                        self.builtin_methods.insert(method_key, MethodSignature {
+                            params: param_types,
+                            return_type,
+                            uses_receiver_type: false,
+                        });
+                    }
+                }
+            }
+            _ => {}
         }
         Ok(())
+    }
+
+    /// Extract the type name from an AST type (for impl block targets).
+    fn get_type_name_from_ast_type(&self, ast_ty: &AstType) -> String {
+        match &ast_ty.kind {
+            AstTypeKind::Path(p) => {
+                p.segments.last().map(|s| s.name.name.clone()).unwrap_or_default()
+            }
+            _ => "Unknown".to_string(),
+        }
     }
 
     /// Type check an item.
@@ -3067,6 +3595,10 @@ impl InferenceEngine {
                 self.unifier.unify(&body_type, &return_type, item.span)?;
             }
             ItemKind::Impl(i) => {
+                // Convert the impl target type and set it for Self resolution
+                let self_ty = self.ast_type_to_ty(&i.self_type)?;
+                let old_self_type = self.impl_self_type.replace(self_ty);
+
                 // Type check impl items
                 for impl_item in &i.items {
                     match impl_item {
@@ -3081,6 +3613,9 @@ impl InferenceEngine {
                         crate::parser::ImplItem::TypeAlias(_) => {}
                     }
                 }
+
+                // Restore old self type (for nested impls, though unlikely)
+                self.impl_self_type = old_self_type;
             }
             _ => {}
         }
@@ -3269,21 +3804,52 @@ impl InferenceEngine {
                 Ok(result_ty)
             }
 
-            ExprKind::MethodCall(receiver, _method, args) => {
-                let _receiver_ty = self.infer_expr(receiver)?;
-                let _arg_types: Vec<Ty> = args
+            ExprKind::MethodCall(receiver, method, args) => {
+                let receiver_ty = self.infer_expr(receiver)?;
+
+                // Resolve the receiver type through substitutions
+                let resolved_ty = receiver_ty.apply(&self.unifier.subst);
+
+                // Look up the method based on receiver type
+                let (method_sig, elem_types) = self.lookup_method(&resolved_ty, &method.name)
+                    .ok_or_else(|| TypeError::new(
+                        format!("type {} has no method '{}'", resolved_ty, method.name),
+                        method.span
+                    ))?;
+
+                // Infer argument types
+                let arg_types: Vec<Ty> = args
                     .iter()
                     .map(|a| self.infer_expr(&a.value))
                     .collect::<Result<Vec<_>, _>>()?;
 
-                // Method resolution would require trait lookup
-                Ok(Ty::fresh_var())
+                // Check argument count
+                if arg_types.len() != method_sig.params.len() {
+                    return Err(TypeError::new(
+                        format!("method '{}' expects {} arguments, found {}",
+                                method.name, method_sig.params.len(), arg_types.len()),
+                        expr.span
+                    ));
+                }
+
+                // Unify argument types with parameter types
+                // For methods that use receiver type, substitute the sentinel values
+                for (arg_ty, param_ty) in arg_types.iter().zip(&method_sig.params) {
+                    let expected_ty = self.substitute_elem_types(param_ty, &elem_types);
+                    self.unifier.unify(arg_ty, &expected_ty, expr.span)?;
+                }
+
+                // Return the method's return type with substituted element types
+                let return_ty = self.substitute_elem_types(&method_sig.return_type, &elem_types);
+                Ok(return_ty)
             }
 
-            ExprKind::Field(base, _field) => {
-                let _base_ty = self.infer_expr(base)?;
-                // Field lookup would need struct info
-                Ok(Ty::fresh_var())
+            ExprKind::Field(base, field) => {
+                let base_ty = self.infer_expr(base)?;
+                let resolved_ty = base_ty.apply(&self.unifier.subst);
+
+                // Look up the field type based on the base type
+                self.lookup_field(&resolved_ty, &field.name, field.span)
             }
 
             ExprKind::TupleField(base, index) => {
@@ -3776,13 +4342,78 @@ impl InferenceEngine {
                 }
                 Ok(())
             }
-            PatternKind::Struct(_path, fields, _rest) => {
-                for field in fields {
-                    if let Some(p) = &field.pattern {
-                        self.check_pattern(p, &Ty::fresh_var())?;
+            PatternKind::Struct(path, fields, rest) => {
+                // Get the struct name from the path
+                let struct_name = path.segments.last()
+                    .map(|s| s.name.name.clone())
+                    .unwrap_or_default();
+
+                // Look up the struct definition
+                let struct_def = self.env.get_type(&struct_name).cloned();
+
+                if let Some(TypeDef::Struct { type_params, fields: struct_fields }) = struct_def {
+                    // Unify expected type with struct type
+                    let struct_ty = if type_params.is_empty() {
+                        Ty::Named(TypeId::new(&struct_name), vec![])
+                    } else {
+                        // For generic structs, create fresh type variables
+                        let type_args: Vec<Ty> = type_params.iter()
+                            .map(|_| Ty::fresh_var())
+                            .collect();
+                        Ty::Named(TypeId::new(&struct_name), type_args)
+                    };
+                    self.unifier.unify(&struct_ty, ty, pattern.span)?;
+
+                    // Check each field pattern against actual field types
+                    let mut matched_fields = std::collections::HashSet::new();
+                    for field_pat in fields {
+                        // Find the field in the struct definition
+                        let field_def = struct_fields.iter()
+                            .find(|(name, _)| name == &field_pat.name.name);
+
+                        if let Some((_, field_ty)) = field_def {
+                            matched_fields.insert(field_pat.name.name.clone());
+
+                            // If there's a nested pattern, check it against the field type
+                            if let Some(nested_pat) = &field_pat.pattern {
+                                self.check_pattern(nested_pat, field_ty)?;
+                            }
+                        } else {
+                            // Field not found
+                            let available: Vec<_> = struct_fields.iter()
+                                .map(|(n, _)| n.as_str())
+                                .collect();
+                            return Err(TypeError::new(
+                                format!("struct '{}' has no field '{}'. Available: {}",
+                                        struct_name, field_pat.name.name, available.join(", ")),
+                                field_pat.name.span
+                            ));
+                        }
                     }
+
+                    // If no rest pattern (..), ensure all fields are covered
+                    if !rest {
+                        for (field_name, _) in &struct_fields {
+                            if !matched_fields.contains(field_name) {
+                                return Err(TypeError::new(
+                                    format!("pattern missing field '{}' (use .. to ignore remaining fields)",
+                                            field_name),
+                                    pattern.span
+                                ));
+                            }
+                        }
+                    }
+
+                    Ok(())
+                } else {
+                    // Not a known struct - use fallback behavior
+                    for field in fields {
+                        if let Some(p) = &field.pattern {
+                            self.check_pattern(p, &Ty::fresh_var())?;
+                        }
+                    }
+                    Ok(())
                 }
-                Ok(())
             }
             PatternKind::Or(ps) => {
                 for p in ps {
@@ -3844,13 +4475,30 @@ impl InferenceEngine {
                 }
                 Ok(())
             }
-            PatternKind::Struct(_path, fields, _rest) => {
+            PatternKind::Struct(path, fields, _rest) => {
+                // Try to get field types from the struct definition
+                let struct_name = path.segments.last()
+                    .map(|s| s.name.name.clone())
+                    .unwrap_or_default();
+
+                let struct_fields = if let Some(TypeDef::Struct { fields: sf, .. }) = self.env.get_type(&struct_name) {
+                    sf.clone()
+                } else {
+                    vec![]
+                };
+
                 for field in fields {
+                    // Look up the field type from the struct definition
+                    let field_ty = struct_fields.iter()
+                        .find(|(name, _)| name == &field.name.name)
+                        .map(|(_, ty)| ty.clone())
+                        .unwrap_or_else(Ty::fresh_var);
+
                     if let Some(p) = &field.pattern {
-                        self.collect_pattern_bindings(p, &Ty::fresh_var(), env)?;
+                        self.collect_pattern_bindings(p, &field_ty, env)?;
                     } else {
                         // Shorthand: field name is also the binding
-                        env.insert(field.name.name.clone(), TypeScheme::mono(Ty::fresh_var()));
+                        env.insert(field.name.name.clone(), TypeScheme::mono(field_ty));
                     }
                 }
                 Ok(())

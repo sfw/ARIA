@@ -53,9 +53,13 @@ f main() -> Int
                                 "add" ->
                                     m vec_get(arguments, 2)
                                         Some(title) ->
-                                            m db_execute(db, "INSERT INTO todos (title) VALUES ('" + title + "')")
-                                                Ok(_) -> print("Added: " + title)
-                                                Err(e) -> print("Error: " + e)
+                                            # Use prepared statement for SQL injection protection
+                                            m db_prepare(db, "INSERT INTO todos (title) VALUES (?)")
+                                                Ok(stmt) ->
+                                                    m db_execute_prepared(stmt, [title])
+                                                        Ok(_) -> print("Added: " + title)
+                                                        Err(e) -> print("Error: " + e)
+                                                Err(e) -> print("Error preparing statement: " + e)
                                         None -> print("Usage: todo add <title>")
 
                                 "done" ->
@@ -63,9 +67,13 @@ f main() -> Int
                                         Some(id_str) ->
                                             m str_to_int(id_str)
                                                 Some(id) ->
-                                                    m db_execute(db, "UPDATE todos SET completed = 1 WHERE id = " + int_to_str(id))
-                                                        Ok(_) -> print("Completed todo " + int_to_str(id))
-                                                        Err(e) -> print("Error: " + e)
+                                                    # Use prepared statement for SQL injection protection
+                                                    m db_prepare(db, "UPDATE todos SET completed = 1 WHERE id = ?")
+                                                        Ok(stmt) ->
+                                                            m db_execute_prepared(stmt, [int_to_str(id)])
+                                                                Ok(_) -> print("Completed todo " + int_to_str(id))
+                                                                Err(e) -> print("Error: " + e)
+                                                        Err(e) -> print("Error preparing statement: " + e)
                                                 None -> print("Invalid id: " + id_str)
                                         None -> print("Usage: todo done <id>")
 
@@ -74,9 +82,13 @@ f main() -> Int
                                         Some(id_str) ->
                                             m str_to_int(id_str)
                                                 Some(id) ->
-                                                    m db_execute(db, "DELETE FROM todos WHERE id = " + int_to_str(id))
-                                                        Ok(_) -> print("Deleted todo " + int_to_str(id))
-                                                        Err(e) -> print("Error: " + e)
+                                                    # Use prepared statement for SQL injection protection
+                                                    m db_prepare(db, "DELETE FROM todos WHERE id = ?")
+                                                        Ok(stmt) ->
+                                                            m db_execute_prepared(stmt, [int_to_str(id)])
+                                                                Ok(_) -> print("Deleted todo " + int_to_str(id))
+                                                                Err(e) -> print("Error: " + e)
+                                                        Err(e) -> print("Error preparing statement: " + e)
                                                 None -> print("Invalid id: " + id_str)
                                         None -> print("Usage: todo delete <id>")
 

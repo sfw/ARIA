@@ -1,66 +1,178 @@
 # FORMA Standard Library - Map Module
-# Direct operations on built-in map type {Str: V}
+# Operations on built-in map type Map[V] (with Str keys)
 # Uses built-in map functions: map_new, map_get, map_insert, map_remove, etc.
 
 # ============================================================
-# Direct map operations
-# These work directly with the built-in {Str: V} type
+# Built-in Map Operations (provided by runtime)
 # ============================================================
-
-# The built-in map type {Str: V} can be used directly with:
-# - map_new() -> {Str: V}
+# The built-in map type Map[V] (Str keys) has these functions:
+# - map_new() -> Map[V]
 # - map_get(m, key) -> V?
-# - map_insert(m, key, val) -> {Str: V}
-# - map_remove(m, key) -> ({Str: V}, V?)
+# - map_insert(m, key, val) -> Map[V]
+# - map_remove(m, key) -> (Map[V], V?)
 # - map_contains(m, key) -> Bool
 # - map_len(m) -> Int
 # - map_keys(m) -> [Str]
 # - map_values(m) -> [V]
 
 # ============================================================
-# Int-specific helper operations on {Str: Int}
+# Extended Map Operations
 # ============================================================
 
-# Sum all values in an int array
-f int_sum_array(arr: [Int], idx: Int, acc: Int) -> Int
+# Get a value with a default fallback
+f map_get_or[V](mp: Map[V], key: Str, default: V) -> V
+    m map_get(mp, key)
+        Some(v) -> v
+        None -> default
+
+# Merge two maps (second map's values override first's)
+f map_merge[V](m1: Map[V], m2: Map[V]) -> Map[V]
+    keys := map_keys(m2)
+    map_merge_helper(m1, m2, keys, 0)
+
+f map_merge_helper[V](result: Map[V], source: Map[V], keys: [Str], idx: Int) -> Map[V]
+    if idx >= vec_len(keys) then result
+    else
+        m vec_get(keys, idx)
+            Some(key) ->
+                m map_get(source, key)
+                    Some(val) -> map_merge_helper(map_insert(result, key, val), source, keys, idx + 1)
+                    None -> map_merge_helper(result, source, keys, idx + 1)
+            None -> result
+
+# Get entries as key-value pairs
+f map_entries[V](mp: Map[V]) -> [(Str, V)]
+    keys := map_keys(mp)
+    map_entries_helper(mp, keys, 0, [])
+
+f map_entries_helper[V](mp: Map[V], keys: [Str], idx: Int, acc: [(Str, V)]) -> [(Str, V)]
+    if idx >= vec_len(keys) then acc
+    else
+        m vec_get(keys, idx)
+            Some(key) ->
+                m map_get(mp, key)
+                    Some(val) -> map_entries_helper(mp, keys, idx + 1, vec_push(acc, (key, val)))
+                    None -> map_entries_helper(mp, keys, idx + 1, acc)
+            None -> acc
+
+# Create map from key-value pairs
+f map_from_entries[V](entries: [(Str, V)]) -> Map[V]
+    map_from_entries_helper(entries, 0, map_new())
+
+f map_from_entries_helper[V](entries: [(Str, V)], idx: Int, acc: Map[V]) -> Map[V]
+    if idx >= vec_len(entries) then acc
+    else
+        m vec_get(entries, idx)
+            Some(entry) ->
+                key := entry.0
+                val := entry.1
+                map_from_entries_helper(entries, idx + 1, map_insert(acc, key, val))
+            None -> acc
+
+# Check if any entry satisfies predicate (on value)
+f map_any_value[V](mp: Map[V], pred: (V) -> Bool) -> Bool
+    values := map_values(mp)
+    map_any_value_helper(values, pred, 0)
+
+f map_any_value_helper[V](values: [V], pred: (V) -> Bool, idx: Int) -> Bool
+    if idx >= vec_len(values) then false
+    else
+        m vec_get(values, idx)
+            Some(v) -> if pred(v) then true else map_any_value_helper(values, pred, idx + 1)
+            None -> false
+
+# Check if all entries satisfy predicate (on value)
+f map_all_values[V](mp: Map[V], pred: (V) -> Bool) -> Bool
+    values := map_values(mp)
+    map_all_values_helper(values, pred, 0)
+
+f map_all_values_helper[V](values: [V], pred: (V) -> Bool, idx: Int) -> Bool
+    if idx >= vec_len(values) then true
+    else
+        m vec_get(values, idx)
+            Some(v) -> if pred(v) then map_all_values_helper(values, pred, idx + 1) else false
+            None -> true
+
+# ============================================================
+# Int-specific Map Operations (Map[Int])
+# ============================================================
+
+# Sum all values in an int map
+f int_map_sum_values(mp: Map[Int]) -> Int
+    values := map_values(mp)
+    int_array_sum(values, 0, 0)
+
+f int_array_sum(arr: [Int], idx: Int, acc: Int) -> Int
     if idx >= vec_len(arr) then acc
     else
         m vec_get(arr, idx)
-            Some(x) -> int_sum_array(arr, idx + 1, acc + x)
+            Some(x) -> int_array_sum(arr, idx + 1, acc + x)
             None -> acc
 
-# Find max in array
-f int_max_in_array(arr: [Int], idx: Int, current: Int) -> Int
+# Find max value in int map
+f int_map_max_value(mp: Map[Int]) -> Int?
+    values := map_values(mp)
+    if vec_len(values) == 0 then None
+    else
+        m vec_get(values, 0)
+            Some(first) -> Some(int_array_max(values, 1, first))
+            None -> None
+
+f int_array_max(arr: [Int], idx: Int, current: Int) -> Int
     if idx >= vec_len(arr) then current
     else
         m vec_get(arr, idx)
             Some(x) ->
                 new_max := if x > current then x else current
-                int_max_in_array(arr, idx + 1, new_max)
+                int_array_max(arr, idx + 1, new_max)
             None -> current
 
-# Find min in array
-f int_min_in_array(arr: [Int], idx: Int, current: Int) -> Int
+# Find min value in int map
+f int_map_min_value(mp: Map[Int]) -> Int?
+    values := map_values(mp)
+    if vec_len(values) == 0 then None
+    else
+        m vec_get(values, 0)
+            Some(first) -> Some(int_array_min(values, 1, first))
+            None -> None
+
+f int_array_min(arr: [Int], idx: Int, current: Int) -> Int
     if idx >= vec_len(arr) then current
     else
         m vec_get(arr, idx)
             Some(x) ->
                 new_min := if x < current then x else current
-                int_min_in_array(arr, idx + 1, new_min)
+                int_array_min(arr, idx + 1, new_min)
             None -> current
 
+# Count entries matching a value
+f int_map_count_value(mp: Map[Int], target: Int) -> Int
+    values := map_values(mp)
+    int_array_count(values, target, 0, 0)
+
+f int_array_count(arr: [Int], target: Int, idx: Int, count: Int) -> Int
+    if idx >= vec_len(arr) then count
+    else
+        m vec_get(arr, idx)
+            Some(x) ->
+                new_count := if x == target then count + 1 else count
+                int_array_count(arr, target, idx + 1, new_count)
+            None -> count
+
 # ============================================================
-# TODO: Generic Map[K,V] wrapper
+# String-specific Map Operations (Map[Str])
 # ============================================================
-# The following functions require a Map[K,V] wrapper struct which has
-# type inference limitations. They are commented out for now.
-# Use the built-in {Str: V} map type directly instead.
-#
-# Wrapper pattern would be:
-# s Map[K, V] { data: {Str: V} }
-#
-# With functions like:
-# f map_empty[V]() -> Map[Str, V]
-# f map_lookup[V](m: Map[Str, V], key: Str) -> V?
-# f map_put[V](m: Map[Str, V], key: Str, value: V) -> Map[Str, V]
-# etc.
+
+# Concatenate all values with a separator
+f str_map_join_values(mp: Map[Str], sep: Str) -> Str
+    values := map_values(mp)
+    str_array_join(values, sep, 0, "")
+
+f str_array_join(arr: [Str], sep: Str, idx: Int, acc: Str) -> Str
+    if idx >= vec_len(arr) then acc
+    else
+        m vec_get(arr, idx)
+            Some(s) ->
+                new_acc := if acc == "" then s else acc + sep + s
+                str_array_join(arr, sep, idx + 1, new_acc)
+            None -> acc

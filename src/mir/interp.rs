@@ -313,11 +313,8 @@ pub struct Interpreter {
     /// Next database ID
     next_db_id: u64,
     /// SQLite prepared statements: maps stmt ID to (db_id, SQL)
-    /// Reserved for future use with prepared statement API
-    #[allow(dead_code)]
     statements: std::collections::HashMap<u64, (u64, String)>,
     /// Next statement ID
-    #[allow(dead_code)]
     next_stmt_id: u64,
     /// Logging level: 0=debug, 1=info, 2=warn, 3=error
     log_level: u8,
@@ -5338,6 +5335,194 @@ impl Interpreter {
                 self.databases.remove(&id);
                 Ok(Some(Value::Unit))
             }
+            "db_prepare" => {
+                // db_prepare(db: Database, sql: Str) -> Result[Statement, Str]
+                let db_id = match &args[0] { Value::Database(id) => *id, _ => return Err(InterpError { message: "db_prepare: expected Database".to_string() }) };
+                let sql = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "db_prepare: expected Str sql".to_string() }) };
+
+                // Verify the database exists
+                if !self.databases.contains_key(&db_id) {
+                    return Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str("invalid database handle".to_string())],
+                    }));
+                }
+
+                // Validate the SQL syntax by preparing it
+                let conn = self.databases.get(&db_id).unwrap();
+                match conn.prepare(&sql) {
+                    Ok(_) => {
+                        // Store the prepared statement info
+                        let stmt_id = self.next_stmt_id;
+                        self.next_stmt_id += 1;
+                        self.statements.insert(stmt_id, (db_id, sql));
+                        Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Ok".to_string(),
+                            fields: vec![Value::Statement(stmt_id)],
+                        }))
+                    }
+                    Err(e) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    }))
+                }
+            }
+            "db_execute_prepared" => {
+                // db_execute_prepared(stmt: Statement, params: [Any]) -> Result[Int, Str]
+                let stmt_id = match &args[0] { Value::Statement(id) => *id, _ => return Err(InterpError { message: "db_execute_prepared: expected Statement".to_string() }) };
+                let params = match &args[1] { Value::Array(arr) => arr.clone(), _ => return Err(InterpError { message: "db_execute_prepared: expected array of parameters".to_string() }) };
+
+                let (db_id, sql) = match self.statements.get(&stmt_id) {
+                    Some((db_id, sql)) => (*db_id, sql.clone()),
+                    None => return Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str("invalid statement handle".to_string())],
+                    }))
+                };
+
+                let conn = match self.databases.get(&db_id) {
+                    Some(c) => c,
+                    None => return Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str("database connection closed".to_string())],
+                    }))
+                };
+
+                // Prepare the statement
+                let mut stmt = match conn.prepare(&sql) {
+                    Ok(s) => s,
+                    Err(e) => return Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    }))
+                };
+
+                // Convert Value params to rusqlite params
+                let sqlite_params: Vec<Box<dyn rusqlite::ToSql>> = params.iter().map(|v| {
+                    let boxed: Box<dyn rusqlite::ToSql> = match v {
+                        Value::Int(n) => Box::new(*n),
+                        Value::Float(f) => Box::new(*f),
+                        Value::Str(s) => Box::new(s.clone()),
+                        Value::Bool(b) => Box::new(*b),
+                        Value::Unit => Box::new(rusqlite::types::Null),
+                        _ => Box::new(format!("{}", v)),
+                    };
+                    boxed
+                }).collect();
+
+                let param_refs: Vec<&dyn rusqlite::ToSql> = sqlite_params.iter().map(|b| b.as_ref()).collect();
+
+                match stmt.execute(param_refs.as_slice()) {
+                    Ok(n) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Ok".to_string(),
+                        fields: vec![Value::Int(n as i64)],
+                    })),
+                    Err(e) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    }))
+                }
+            }
+            "db_query_prepared" => {
+                // db_query_prepared(stmt: Statement, params: [Any]) -> Result[[Row], Str]
+                let stmt_id = match &args[0] { Value::Statement(id) => *id, _ => return Err(InterpError { message: "db_query_prepared: expected Statement".to_string() }) };
+                let params = match &args[1] { Value::Array(arr) => arr.clone(), _ => return Err(InterpError { message: "db_query_prepared: expected array of parameters".to_string() }) };
+
+                let (db_id, sql) = match self.statements.get(&stmt_id) {
+                    Some((db_id, sql)) => (*db_id, sql.clone()),
+                    None => return Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str("invalid statement handle".to_string())],
+                    }))
+                };
+
+                let conn = match self.databases.get(&db_id) {
+                    Some(c) => c,
+                    None => return Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str("database connection closed".to_string())],
+                    }))
+                };
+
+                // Prepare the statement
+                let mut stmt = match conn.prepare(&sql) {
+                    Ok(s) => s,
+                    Err(e) => return Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    }))
+                };
+
+                // Convert Value params to rusqlite params
+                let sqlite_params: Vec<Box<dyn rusqlite::ToSql>> = params.iter().map(|v| {
+                    let boxed: Box<dyn rusqlite::ToSql> = match v {
+                        Value::Int(n) => Box::new(*n),
+                        Value::Float(f) => Box::new(*f),
+                        Value::Str(s) => Box::new(s.clone()),
+                        Value::Bool(b) => Box::new(*b),
+                        Value::Unit => Box::new(rusqlite::types::Null),
+                        _ => Box::new(format!("{}", v)),
+                    };
+                    boxed
+                }).collect();
+
+                let param_refs: Vec<&dyn rusqlite::ToSql> = sqlite_params.iter().map(|b| b.as_ref()).collect();
+
+                let col_count = stmt.column_count();
+                let rows_result = stmt.query(param_refs.as_slice());
+
+                match rows_result {
+                    Ok(mut rows) => {
+                        let mut result_rows = Vec::new();
+                        loop {
+                            match rows.next() {
+                                Ok(Some(row)) => {
+                                    let mut cols = Vec::with_capacity(col_count);
+                                    for i in 0..col_count {
+                                        let val: rusqlite::types::Value = row.get(i).unwrap_or(rusqlite::types::Value::Null);
+                                        let forma_val = match val {
+                                            rusqlite::types::Value::Null => Value::Unit,
+                                            rusqlite::types::Value::Integer(n) => Value::Int(n),
+                                            rusqlite::types::Value::Real(n) => Value::Float(n),
+                                            rusqlite::types::Value::Text(s) => Value::Str(s),
+                                            rusqlite::types::Value::Blob(b) => Value::Array(b.into_iter().map(|byte| Value::Int(byte as i64)).collect()),
+                                        };
+                                        cols.push(forma_val);
+                                    }
+                                    result_rows.push(Value::DbRow(cols));
+                                }
+                                Ok(None) => break,
+                                Err(e) => return Ok(Some(Value::Enum {
+                                    type_name: "Result".to_string(),
+                                    variant: "Err".to_string(),
+                                    fields: vec![Value::Str(e.to_string())],
+                                }))
+                            }
+                        }
+                        Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Ok".to_string(),
+                            fields: vec![Value::Array(result_rows)],
+                        }))
+                    }
+                    Err(e) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    }))
+                }
+            }
             "row_get" => {
                 // row_get(row: Row, index: Int) -> Value?
                 let row = match &args[0] { Value::DbRow(cols) => cols, _ => return Err(InterpError { message: "row_get: expected Row".to_string() }) };
@@ -5499,16 +5684,37 @@ impl Interpreter {
                 let frame = self.call_stack.last().unwrap();
                 let val = frame.locals.get(local).cloned().unwrap_or(Value::Unit);
                 match val {
-                    Value::Enum { variant, .. } => {
-                        let disc = match variant.as_str() {
-                            "None" => 0,
-                            "Some" => 1,
-                            "Ok" => 0,
-                            "Err" => 1,
-                            // For user-defined enums, use a simple hash-based discriminant
+                    Value::Enum { type_name, variant, .. } => {
+                        let disc = match (type_name.as_str(), variant.as_str()) {
+                            // Built-in Option type
+                            ("Option", "None") => 0,
+                            ("Option", "Some") => 1,
+                            // Built-in Result type
+                            ("Result", "Ok") => 0,
+                            ("Result", "Err") => 1,
+                            // Built-in Bool (used in some match lowering)
+                            ("Bool", "true") => 1,
+                            ("Bool", "false") => 0,
+                            // For user-defined enums, use order-dependent hash
+                            // that includes both enum name and variant name
                             _ => {
-                                // Simple hash: sum of character codes
-                                variant.bytes().fold(0i64, |acc, b| acc + b as i64)
+                                // FNV-1a inspired hash for order-dependent hashing
+                                let mut hash: u64 = 14695981039346656037;
+                                // Include enum name in hash
+                                for b in type_name.bytes() {
+                                    hash ^= b as u64;
+                                    hash = hash.wrapping_mul(1099511628211);
+                                }
+                                // Add separator
+                                hash ^= 0xFF;
+                                hash = hash.wrapping_mul(1099511628211);
+                                // Include variant name
+                                for b in variant.bytes() {
+                                    hash ^= b as u64;
+                                    hash = hash.wrapping_mul(1099511628211);
+                                }
+                                // Convert to i64, preserving uniqueness
+                                (hash as i64).abs()
                             }
                         };
                         Ok(Value::Int(disc))
