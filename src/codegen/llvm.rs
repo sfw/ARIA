@@ -961,8 +961,11 @@ impl<'ctx> LLVMCodegen<'ctx> {
             "sqrt" | "pow" | "sin" | "cos" | "tan" | "log" | "log10" | "exp" |
             "floor" | "ceil" | "round" | "abs_float" |
             "vec_new" | "vec_len" | "vec_push" | "vec_pop" | "vec_get" |
-            "vec_set" | "vec_first" | "vec_last" | "vec_concat" |
-            "time_now" | "time_now_ms" | "time_sleep" |
+            "vec_set" | "vec_first" | "vec_last" | "vec_concat" | "vec_free" |
+            "map_new" | "map_len" | "map_get" | "map_set" | "map_insert" | "map_contains" |
+            "map_remove" | "map_free" |
+            "time_now" | "time_now_ms" | "time_sleep" | "sleep_ms" |
+            "args_count" | "args_get" | "env_get" | "env_set" |
             "random" | "random_int" | "random_bool" |
             "args" |
             "alloc" | "alloc_zeroed" | "dealloc" | "mem_copy" | "mem_set" |
@@ -1037,6 +1040,33 @@ impl<'ctx> LLVMCodegen<'ctx> {
             "forma_memset" => {
                 void_type.fn_type(&[ptr_type.into(), self.context.i32_type().into(), i64_type.into()], false)
             }
+
+            // Vector operations
+            "forma_vec_new" => ptr_type.fn_type(&[i64_type.into()], false),
+            "forma_vec_len" => i64_type.fn_type(&[ptr_type.into()], false),
+            "forma_vec_push" => void_type.fn_type(&[ptr_type.into(), ptr_type.into()], false),
+            "forma_vec_get" => ptr_type.fn_type(&[ptr_type.into(), i64_type.into()], false),
+            "forma_vec_set" => void_type.fn_type(&[ptr_type.into(), i64_type.into(), ptr_type.into()], false),
+            "forma_vec_free" => void_type.fn_type(&[ptr_type.into()], false),
+
+            // Map operations
+            "forma_map_new" => ptr_type.fn_type(&[], false),
+            "forma_map_len" => i64_type.fn_type(&[ptr_type.into()], false),
+            "forma_map_get" => ptr_type.fn_type(&[ptr_type.into(), ptr_type.into()], false),
+            "forma_map_set" => void_type.fn_type(&[ptr_type.into(), ptr_type.into(), ptr_type.into()], false),
+            "forma_map_contains" => bool_type.fn_type(&[ptr_type.into(), ptr_type.into()], false),
+            "forma_map_remove" => bool_type.fn_type(&[ptr_type.into(), ptr_type.into()], false),
+            "forma_map_free" => void_type.fn_type(&[ptr_type.into()], false),
+
+            // Time
+            "forma_time_now_ms" => i64_type.fn_type(&[], false),
+            "forma_sleep_ms" => void_type.fn_type(&[i64_type.into()], false),
+
+            // Environment / args
+            "forma_args_count" => i64_type.fn_type(&[], false),
+            "forma_args_get" => ptr_type.fn_type(&[i64_type.into()], false),
+            "forma_env_get" => ptr_type.fn_type(&[ptr_type.into()], false),
+            "forma_env_set" => void_type.fn_type(&[ptr_type.into(), ptr_type.into()], false),
 
             // Panic / error handling
             "forma_panic" => void_type.fn_type(&[ptr_type.into()], false),
@@ -1279,6 +1309,107 @@ impl<'ctx> LLVMCodegen<'ctx> {
                 self.builder.build_call(f, &[ptr.into()], "")
                     .map_err(|e| CodegenError { message: format!("call failed: {:?}", e) })?;
             }
+            // Vector operations
+            "vec_new" => {
+                let elem_size = self.compile_operand(&args[0])?;
+                self.call_runtime_and_store("forma_vec_new", &[elem_size], "vec_new", dest)?;
+            }
+            "vec_len" => {
+                let v = self.compile_operand(&args[0])?;
+                self.call_runtime_and_store("forma_vec_len", &[v], "vec_len", dest)?;
+            }
+            "vec_push" => {
+                let v = self.compile_operand(&args[0])?;
+                let elem = self.compile_operand(&args[1])?;
+                let f = self.get_or_declare_runtime_function("forma_vec_push")?;
+                self.builder.build_call(f, &[v.into(), elem.into()], "")
+                    .map_err(|e| CodegenError { message: format!("call failed: {:?}", e) })?;
+            }
+            "vec_get" => {
+                let v = self.compile_operand(&args[0])?;
+                let idx = self.compile_operand(&args[1])?;
+                self.call_runtime_and_store("forma_vec_get", &[v, idx], "vec_get", dest)?;
+            }
+            "vec_set" => {
+                let v = self.compile_operand(&args[0])?;
+                let idx = self.compile_operand(&args[1])?;
+                let elem = self.compile_operand(&args[2])?;
+                let f = self.get_or_declare_runtime_function("forma_vec_set")?;
+                self.builder.build_call(f, &[v.into(), idx.into(), elem.into()], "")
+                    .map_err(|e| CodegenError { message: format!("call failed: {:?}", e) })?;
+            }
+            "vec_free" => {
+                let v = self.compile_operand(&args[0])?;
+                let f = self.get_or_declare_runtime_function("forma_vec_free")?;
+                self.builder.build_call(f, &[v.into()], "")
+                    .map_err(|e| CodegenError { message: format!("call failed: {:?}", e) })?;
+            }
+            // Map operations
+            "map_new" => {
+                self.call_runtime_and_store("forma_map_new", &[], "map_new", dest)?;
+            }
+            "map_len" => {
+                let m = self.compile_operand(&args[0])?;
+                self.call_runtime_and_store("forma_map_len", &[m], "map_len", dest)?;
+            }
+            "map_get" => {
+                let m = self.compile_operand(&args[0])?;
+                let key = self.compile_operand(&args[1])?;
+                self.call_runtime_and_store("forma_map_get", &[m, key], "map_get", dest)?;
+            }
+            "map_set" | "map_insert" => {
+                let m = self.compile_operand(&args[0])?;
+                let key = self.compile_operand(&args[1])?;
+                let val = self.compile_operand(&args[2])?;
+                let f = self.get_or_declare_runtime_function("forma_map_set")?;
+                self.builder.build_call(f, &[m.into(), key.into(), val.into()], "")
+                    .map_err(|e| CodegenError { message: format!("call failed: {:?}", e) })?;
+            }
+            "map_contains" => {
+                let m = self.compile_operand(&args[0])?;
+                let key = self.compile_operand(&args[1])?;
+                self.call_runtime_and_store("forma_map_contains", &[m, key], "map_contains", dest)?;
+            }
+            "map_remove" => {
+                let m = self.compile_operand(&args[0])?;
+                let key = self.compile_operand(&args[1])?;
+                self.call_runtime_and_store("forma_map_remove", &[m, key], "map_remove", dest)?;
+            }
+            "map_free" => {
+                let m = self.compile_operand(&args[0])?;
+                let f = self.get_or_declare_runtime_function("forma_map_free")?;
+                self.builder.build_call(f, &[m.into()], "")
+                    .map_err(|e| CodegenError { message: format!("call failed: {:?}", e) })?;
+            }
+            // Time
+            "time_now_ms" | "time_now" => {
+                self.call_runtime_and_store("forma_time_now_ms", &[], "time_now_ms", dest)?;
+            }
+            "sleep_ms" | "time_sleep" => {
+                let ms = self.compile_operand(&args[0])?;
+                let f = self.get_or_declare_runtime_function("forma_sleep_ms")?;
+                self.builder.build_call(f, &[ms.into()], "")
+                    .map_err(|e| CodegenError { message: format!("call failed: {:?}", e) })?;
+            }
+            // Environment / args
+            "args_count" => {
+                self.call_runtime_and_store("forma_args_count", &[], "args_count", dest)?;
+            }
+            "args_get" => {
+                let idx = self.compile_operand(&args[0])?;
+                self.call_runtime_and_store("forma_args_get", &[idx], "args_get", dest)?;
+            }
+            "env_get" => {
+                let name = self.compile_operand(&args[0])?;
+                self.call_runtime_and_store("forma_env_get", &[name], "env_get", dest)?;
+            }
+            "env_set" => {
+                let name = self.compile_operand(&args[0])?;
+                let val = self.compile_operand(&args[1])?;
+                let f = self.get_or_declare_runtime_function("forma_env_set")?;
+                self.builder.build_call(f, &[name.into(), val.into()], "")
+                    .map_err(|e| CodegenError { message: format!("call failed: {:?}", e) })?;
+            }
             _ => {
                 return Err(CodegenError {
                     message: format!("Builtin '{}' not yet implemented in LLVM codegen", func_name),
@@ -1387,13 +1518,8 @@ impl<'ctx> LLVMCodegen<'ctx> {
                     .map_err(|e| CodegenError { message: format!("call failed: {:?}", e) })?;
 
                 // Store result if there's a destination
-                if let Some(local) = dest {
-                    if let Some(result) = call.try_as_basic_value().left() {
-                        if let Some(alloca) = self.locals.get(&(local.0 as usize)) {
-                            self.builder.build_store(*alloca, result)
-                                .map_err(|e| CodegenError { message: format!("store failed: {:?}", e) })?;
-                        }
-                    }
+                if let Some(result) = call.try_as_basic_value().left() {
+                    self.store_builtin_result(result, dest)?;
                 }
 
                 // Jump to next block

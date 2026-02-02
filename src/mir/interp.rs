@@ -4,7 +4,7 @@
 //! for testing and validation purposes.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex as StdMutex};
+use std::sync::{Arc, LazyLock, Mutex as StdMutex, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
 use std::thread;
 use rand::Rng;
@@ -15,6 +15,16 @@ use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use sha2::{Sha256, Digest};
 use uuid::Uuid;
 use regex::Regex;
+
+/// Global shared Tokio runtime. All interpreter instances share this runtime
+/// instead of each creating their own, avoiding resource waste and enabling
+/// proper cross-task communication.
+static GLOBAL_RUNTIME: LazyLock<Arc<tokio::runtime::Runtime>> = LazyLock::new(|| {
+    Arc::new(
+        tokio::runtime::Runtime::new()
+            .expect("Failed to create global Tokio runtime")
+    )
+});
 
 use super::mir::{
     BinOp, BlockId, Constant, Function, Local, Operand, Program, Rvalue,
@@ -334,15 +344,12 @@ pub struct Interpreter {
     spawned_tasks: Arc<StdMutex<std::collections::HashMap<u64, JoinHandle<Value>>>>,
     /// Next task ID
     next_task_id: u64,
+    /// Thread-safe environment variable overlay. Checked before std::env::var().
+    env_vars: Arc<RwLock<HashMap<String, String>>>,
 }
 
 impl Interpreter {
     pub fn new(program: Program) -> Result<Self, InterpError> {
-        let runtime = Arc::new(
-            tokio::runtime::Runtime::new()
-                .map_err(|e| InterpError { message: format!("Failed to create Tokio runtime: {}", e) })?
-        );
-
         Ok(Self {
             program: Arc::new(program),
             call_stack: Vec::new(),
@@ -365,9 +372,10 @@ impl Interpreter {
             next_stmt_id: 0,
             log_level: 1, // Default to info level
             log_format: "text".to_string(),
-            runtime,
+            runtime: GLOBAL_RUNTIME.clone(),
             spawned_tasks: Arc::new(StdMutex::new(std::collections::HashMap::new())),
             next_task_id: 0,
+            env_vars: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -378,13 +386,8 @@ impl Interpreter {
     }
 
     /// Create a minimal interpreter for running spawned tasks.
-    /// This shares the program via Arc but has its own call stack and state.
+    /// This shares the program and global runtime via Arc but has its own call stack and state.
     pub fn new_for_task(program: Arc<Program>) -> Result<Self, InterpError> {
-        let runtime = Arc::new(
-            tokio::runtime::Runtime::new()
-                .map_err(|e| InterpError { message: format!("Failed to create task runtime: {}", e) })?
-        );
-
         Ok(Self {
             program,
             call_stack: Vec::new(),
@@ -407,9 +410,10 @@ impl Interpreter {
             next_stmt_id: 0,
             log_level: 1,
             log_format: "text".to_string(),
-            runtime,
+            runtime: GLOBAL_RUNTIME.clone(),
             spawned_tasks: Arc::new(StdMutex::new(std::collections::HashMap::new())),
             next_task_id: 0,
+            env_vars: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -1040,7 +1044,11 @@ impl Interpreter {
                                             }
                                         }
                                     }
-                                }).await.unwrap_or(Value::Unit)
+                                }).await.unwrap_or_else(|e| Value::Enum {
+                                    type_name: "Result".to_string(),
+                                    variant: "Err".to_string(),
+                                    fields: vec![Value::Str(format!("Task join error: {:?}", e))],
+                                })
                             })
                         }
                         // For non-closure values, spawn immediately with the value
@@ -2261,17 +2269,22 @@ impl Interpreter {
             "env_get" => {
                 validate_args!(args, 1, "env_get");
                 // env_get(name: Str) -> Option[Str]
+                // Check thread-safe overlay first, then fall back to std::env::var
                 let name = match &args[0] {
                     Value::Str(s) => s.clone(),
                     _ => return Err(InterpError { message: "env_get: expected Str".to_string() })
                 };
-                match std::env::var(&name) {
-                    Ok(val) => Ok(Some(Value::Enum {
+                let overlay_val = self.env_vars.read()
+                    .map_err(|_| InterpError { message: "env_vars lock poisoned".to_string() })?
+                    .get(&name)
+                    .cloned();
+                match overlay_val.or_else(|| std::env::var(&name).ok()) {
+                    Some(val) => Ok(Some(Value::Enum {
                         type_name: "Option".to_string(),
                         variant: "Some".to_string(),
                         fields: vec![Value::Str(val)],
                     })),
-                    Err(_) => Ok(Some(Value::Enum {
+                    None => Ok(Some(Value::Enum {
                         type_name: "Option".to_string(),
                         variant: "None".to_string(),
                         fields: vec![],
@@ -2640,7 +2653,11 @@ impl Interpreter {
                 let results: Vec<Value> = self.runtime.block_on(async {
                     let futures: Vec<_> = handles.into_iter().collect();
                     let results = futures::future::join_all(futures).await;
-                    results.into_iter().map(|r| r.unwrap_or(Value::Unit)).collect()
+                    results.into_iter().map(|r| r.unwrap_or_else(|e| Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(format!("Task join error: {:?}", e))],
+                    })).collect()
                 });
 
                 Ok(Some(Value::Array(results)))
@@ -2679,9 +2696,14 @@ impl Interpreter {
                 }
 
                 // Race all tasks using select_all
-                let (result, _completed_idx, _remaining) = self.runtime.block_on(async {
+                let (result, _completed_idx, remaining) = self.runtime.block_on(async {
                     futures::future::select_all(handles).await
                 });
+
+                // Abort remaining tasks to avoid resource leaks
+                for handle in remaining {
+                    handle.abort();
+                }
 
                 // Return the first completed result
                 let value = result.map_err(|e| InterpError {
@@ -3426,24 +3448,25 @@ impl Interpreter {
                     })),
                 }
             }
-            // WARNING: Environment variable modifications are not thread-safe.
-            // Using env_set/env_remove with spawned tasks may cause data races.
-            // Prefer passing configuration through function arguments instead.
             "env_set" => {
                 validate_args!(args, 2, "env_set");
                 // env_set(name: Str, value: Str) -> ()
+                // Uses thread-safe overlay instead of std::env::set_var
                 let name = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "env_set: name must be Str".to_string() }) };
                 let value = match &args[1] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "env_set: value must be Str".to_string() }) };
-                // SAFETY: std::env::set_var is unsafe in multi-threaded contexts
-                unsafe { std::env::set_var(&name, &value); }
+                self.env_vars.write()
+                    .map_err(|_| InterpError { message: "env_vars lock poisoned".to_string() })?
+                    .insert(name, value);
                 Ok(Some(Value::Unit))
             }
             "env_remove" => {
                 validate_args!(args, 1, "env_remove");
                 // env_remove(name: Str) -> ()
+                // Removes from thread-safe overlay
                 let name = match &args[0] { Value::Str(s) => s.clone(), _ => return Err(InterpError { message: "env_remove: name must be Str".to_string() }) };
-                // SAFETY: std::env::remove_var is unsafe in multi-threaded contexts
-                unsafe { std::env::remove_var(&name); }
+                self.env_vars.write()
+                    .map_err(|_| InterpError { message: "env_vars lock poisoned".to_string() })?
+                    .remove(&name);
                 Ok(Some(Value::Unit))
             }
             "env_vars" => {

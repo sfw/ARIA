@@ -564,6 +564,45 @@ impl TypeEnv {
             },
         );
 
+        // map_set: (Map, Str, V) -> () (mutating alias for map_insert used by LLVM backend)
+        let map_set_v = TypeVar::fresh();
+        env.bindings.insert(
+            "map_set".to_string(),
+            TypeScheme {
+                vars: vec![map_set_v],
+                ty: Ty::Fn(
+                    vec![Ty::Named(TypeId::new("Map"), vec![Ty::Var(map_set_v)]), Ty::Str, Ty::Var(map_set_v)],
+                    Box::new(Ty::Unit)
+                )
+            },
+        );
+
+        // map_free: Map -> ()
+        let map_free_v = TypeVar::fresh();
+        env.bindings.insert(
+            "map_free".to_string(),
+            TypeScheme {
+                vars: vec![map_free_v],
+                ty: Ty::Fn(
+                    vec![Ty::Named(TypeId::new("Map"), vec![Ty::Var(map_free_v)])],
+                    Box::new(Ty::Unit)
+                )
+            },
+        );
+
+        // vec_free: [T] -> ()
+        let vec_free_v = TypeVar::fresh();
+        env.bindings.insert(
+            "vec_free".to_string(),
+            TypeScheme {
+                vars: vec![vec_free_v],
+                ty: Ty::Fn(
+                    vec![Ty::List(Box::new(Ty::Var(vec_free_v)))],
+                    Box::new(Ty::Unit)
+                )
+            },
+        );
+
         // Debug/Utility operations
         // type_of: T -> Str
         let type_of_t = TypeVar::fresh();
@@ -870,6 +909,30 @@ impl TypeEnv {
         env.bindings.insert(
             "time_sleep".to_string(),
             TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Int], Box::new(Ty::Unit)) },
+        );
+
+        // sleep_ms(Int) -> () (alias for time_sleep)
+        env.bindings.insert(
+            "sleep_ms".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Int], Box::new(Ty::Unit)) },
+        );
+
+        // args_count() -> Int
+        env.bindings.insert(
+            "args_count".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![], Box::new(Ty::Int)) },
+        );
+
+        // args_get(Int) -> Str
+        env.bindings.insert(
+            "args_get".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Int], Box::new(Ty::Str)) },
+        );
+
+        // env_set(Str, Str) -> ()
+        env.bindings.insert(
+            "env_set".to_string(),
+            TypeScheme { vars: vec![], ty: Ty::Fn(vec![Ty::Str, Ty::Str], Box::new(Ty::Unit)) },
         );
 
         // ===== Duration functions =====
