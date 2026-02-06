@@ -72,14 +72,18 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Compile a FORMA source file
+    /// Compile a FORMA source file (alias for 'build')
     Compile {
         /// Input file
         file: PathBuf,
 
-        /// Output file (default: input with .o extension)
+        /// Output file (default: input without extension)
         #[arg(short, long)]
         output: Option<PathBuf>,
+
+        /// Optimization level (0-3)
+        #[arg(short = 'O', long, default_value = "0")]
+        opt_level: u8,
     },
 
     /// Run a FORMA program
@@ -197,8 +201,8 @@ fn main() {
     let error_format = cli.error_format;
 
     let result = match cli.command {
-        Commands::Compile { file, output: _ } => compile(&file, error_format),
-        Commands::Run { file, args: _, dump_mir, check_contracts } => run(&file, dump_mir, check_contracts, error_format),
+        Commands::Compile { file, output, opt_level } => build(&file, output.as_ref(), opt_level, error_format),
+        Commands::Run { file, args, dump_mir, check_contracts } => run(&file, &args, dump_mir, check_contracts, error_format),
         Commands::Lex { file } => lex(&file, error_format),
         Commands::Parse { file } => parse(&file, error_format),
         Commands::Check { file, partial } => check(&file, partial, error_format),
@@ -263,17 +267,7 @@ fn output_json_errors(errors: Vec<JsonError>, items_count: Option<usize>) {
     print_json(&output);
 }
 
-fn compile(file: &PathBuf, error_format: ErrorFormat) -> Result<(), String> {
-    let _source = read_file(file)?;
-    // TODO: Implement full compilation
-    match error_format {
-        ErrorFormat::Human => println!("Compilation not yet implemented"),
-        ErrorFormat::Json => output_json_errors(vec![], None),
-    }
-    Ok(())
-}
-
-fn run(file: &PathBuf, dump_mir: bool, _check_contracts: bool, error_format: ErrorFormat) -> Result<(), String> {
+fn run(file: &PathBuf, program_args: &[String], dump_mir: bool, _check_contracts: bool, error_format: ErrorFormat) -> Result<(), String> {
     let source = read_file(file)?;
     let filename = file.to_string_lossy().to_string();
     let ctx = ErrorContext::new(&filename, &source);
@@ -465,6 +459,15 @@ fn run(file: &PathBuf, dump_mir: bool, _check_contracts: bool, error_format: Err
     // Run the interpreter
     let mut interp = Interpreter::new(program)
         .map_err(|e| format!("Failed to create interpreter: {}", e))?;
+
+    // Pass program arguments as ARGV/ARGC environment variables
+    interp.set_env("ARGC", &program_args.len().to_string());
+    interp.set_env("ARGV", &program_args.join(" "));
+    // Also set individual ARGV_0, ARGV_1, etc.
+    for (i, arg) in program_args.iter().enumerate() {
+        interp.set_env(&format!("ARGV_{}", i), arg);
+    }
+
     match interp.run("main", &[]) {
         Ok(result) => {
             println!("{}", result);
@@ -1919,6 +1922,89 @@ fn print_grammar_json() {
     print_json(&grammar);
 }
 
+/// Check if input is complete (no unmatched delimiters, no continuation indicators)
+fn is_complete_input(input: &str) -> bool {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return true;
+    }
+
+    // Line ending with backslash means continuation
+    if trimmed.ends_with('\\') {
+        return false;
+    }
+
+    // Count unmatched delimiters
+    let mut parens = 0i32;
+    let mut brackets = 0i32;
+    let mut braces = 0i32;
+    let mut in_string = false;
+    let mut in_char = false;
+    let mut escape = false;
+
+    for ch in trimmed.chars() {
+        if escape {
+            escape = false;
+            continue;
+        }
+        if ch == '\\' && (in_string || in_char) {
+            escape = true;
+            continue;
+        }
+        if ch == '"' && !in_char {
+            in_string = !in_string;
+            continue;
+        }
+        if ch == '\'' && !in_string {
+            in_char = !in_char;
+            continue;
+        }
+        if in_string || in_char {
+            continue;
+        }
+        match ch {
+            '(' => parens += 1,
+            ')' => parens -= 1,
+            '[' => brackets += 1,
+            ']' => brackets -= 1,
+            '{' => braces += 1,
+            '}' => braces -= 1,
+            _ => {}
+        }
+    }
+
+    if parens > 0 || brackets > 0 || braces > 0 {
+        return false;
+    }
+
+    // Unclosed string or char literal
+    if in_string || in_char {
+        return false;
+    }
+
+    true
+}
+
+/// Check if a line looks like a definition start
+fn is_definition(line: &str) -> bool {
+    let line = line.trim();
+    line.starts_with("f ")
+        || line.starts_with("s ")
+        || line.starts_with("e ")
+        || line.starts_with("t ")
+        || line.starts_with("impl ")
+        || line.starts_with("type ")
+        || line.starts_with("const ")
+        || line.starts_with("mod ")
+        || line.starts_with("use ")
+        || line.starts_with("pub f ")
+        || line.starts_with("pub s ")
+        || line.starts_with("pub e ")
+        || line.starts_with("pub t ")
+        || line.starts_with("async f ")
+        || line.starts_with("pub async f ")
+}
+
 /// Start an interactive REPL
 fn repl() -> Result<(), String> {
     use rustyline::error::ReadlineError;
@@ -1932,37 +2018,42 @@ fn repl() -> Result<(), String> {
 
     // Keep track of defined functions for the session
     let mut session_code = String::new();
+    // Track loaded files for :reload
+    let mut loaded_files: Vec<PathBuf> = Vec::new();
 
     loop {
-        let readline = rl.readline("forma> ");
+        let readline = rl.readline(">>> ");
         match readline {
-            Ok(line) => {
-                let line = line.trim();
-                if line.is_empty() {
+            Ok(first_line) => {
+                let first_line = first_line.trim().to_string();
+                if first_line.is_empty() {
                     continue;
                 }
 
                 // Add to history
-                let _ = rl.add_history_entry(line);
+                let _ = rl.add_history_entry(&first_line);
 
-                // Handle REPL commands
-                if line.starts_with(':') {
-                    match line {
+                // Handle REPL commands (only on single-line, not continuations)
+                if first_line.starts_with(':') {
+                    match first_line.as_str() {
                         ":quit" | ":q" | ":exit" => {
                             println!("Goodbye!");
                             break;
                         }
                         ":help" | ":h" => {
                             println!("REPL Commands:");
-                            println!("  :help, :h     - Show this help");
-                            println!("  :quit, :q     - Exit the REPL");
-                            println!("  :clear        - Clear session definitions");
-                            println!("  :type <expr>  - Show the type of an expression");
-                            println!("  :defs         - Show current definitions");
+                            println!("  :help, :h       - Show this help");
+                            println!("  :quit, :q       - Exit the REPL");
+                            println!("  :clear          - Clear session definitions");
+                            println!("  :type <expr>    - Show the type of an expression");
+                            println!("  :defs           - Show current definitions");
+                            println!("  :load <file>    - Load a FORMA source file");
+                            println!("  :reload         - Reload all loaded files");
                             println!();
                             println!("Enter FORMA expressions or definitions.");
                             println!("Expressions are evaluated immediately.");
-                            println!("Function definitions are saved for the session.");
+                            println!("Definitions are saved for the session.");
+                            println!("Multi-line input continues with \"... \" prompt.");
                             continue;
                         }
                         ":clear" => {
@@ -1979,34 +2070,122 @@ fn repl() -> Result<(), String> {
                             }
                             continue;
                         }
+                        ":reload" => {
+                            if loaded_files.is_empty() {
+                                println!("No files loaded.");
+                            } else {
+                                let mut new_session = String::new();
+                                let mut ok = true;
+                                for path in &loaded_files {
+                                    match fs::read_to_string(path) {
+                                        Ok(contents) => {
+                                            new_session.push_str(&contents);
+                                            if !contents.ends_with('\n') {
+                                                new_session.push('\n');
+                                            }
+                                        }
+                                        Err(e) => {
+                                            println!("Error reloading '{}': {}", path.display(), e);
+                                            ok = false;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if ok {
+                                    session_code = new_session;
+                                    println!("Reloaded {} file(s).", loaded_files.len());
+                                }
+                            }
+                            continue;
+                        }
+                        cmd if cmd.starts_with(":load ") => {
+                            let file_path = cmd[6..].trim();
+                            let path = PathBuf::from(file_path);
+                            match fs::read_to_string(&path) {
+                                Ok(contents) => {
+                                    session_code.push_str(&contents);
+                                    if !contents.ends_with('\n') {
+                                        session_code.push('\n');
+                                    }
+                                    if !loaded_files.contains(&path) {
+                                        loaded_files.push(path);
+                                    }
+                                    println!("Loaded '{}'.", file_path);
+                                }
+                                Err(e) => {
+                                    println!("Error: cannot read '{}': {}", file_path, e);
+                                }
+                            }
+                            continue;
+                        }
                         cmd if cmd.starts_with(":type ") => {
                             let expr = &cmd[6..];
                             repl_type_of(expr, &session_code);
                             continue;
                         }
                         _ => {
-                            println!("Unknown command: {}", line);
+                            println!("Unknown command: {}", first_line);
                             println!("Type :help for available commands.");
                             continue;
                         }
                     }
                 }
 
-                // Check if this is a definition (starts with f, s, e, t, etc.)
-                let is_definition = line.starts_with("f ") || line.starts_with("s ")
-                    || line.starts_with("e ") || line.starts_with("t ")
-                    || line.starts_with("impl ") || line.starts_with("type ");
+                // Accumulate multi-line input
+                let mut input = first_line.clone();
 
-                if is_definition {
+                // For definitions, always try continuation
+                // For expressions, check completeness
+                let is_def = is_definition(&first_line);
+
+                if !is_complete_input(&input) || (is_def && !input.contains('\n')) {
+                    // Read continuation lines
+                    loop {
+                        match rl.readline("... ") {
+                            Ok(cont_line) => {
+                                let cont = cont_line.trim_end().to_string();
+                                // Empty line terminates multi-line input
+                                if cont.is_empty() {
+                                    break;
+                                }
+                                input.push('\n');
+                                input.push_str(&cont);
+                                if is_complete_input(&input) && !is_def {
+                                    break;
+                                }
+                                // For definitions, keep reading until empty line
+                            }
+                            Err(ReadlineError::Interrupted) => {
+                                println!("^C (input cancelled)");
+                                input.clear();
+                                break;
+                            }
+                            Err(ReadlineError::Eof) => {
+                                break;
+                            }
+                            Err(_) => {
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if input.is_empty() {
+                    continue;
+                }
+
+                if is_definition(&input) {
                     // Add to session definitions
-                    session_code.push_str(line);
+                    session_code.push_str(&input);
                     session_code.push('\n');
 
                     // Try to parse to validate
                     if let Err(e) = repl_validate_code(&session_code) {
                         // Remove the bad definition
-                        let lines: Vec<&str> = session_code.lines().collect();
-                        session_code = lines[..lines.len().saturating_sub(1)].join("\n");
+                        // Count lines we just added
+                        let added_lines = input.lines().count();
+                        let all_lines: Vec<&str> = session_code.lines().collect();
+                        session_code = all_lines[..all_lines.len().saturating_sub(added_lines)].join("\n");
                         if !session_code.is_empty() {
                             session_code.push('\n');
                         }
@@ -2016,7 +2195,7 @@ fn repl() -> Result<(), String> {
                     }
                 } else {
                     // Evaluate as expression
-                    repl_eval_expr(line, &session_code);
+                    repl_eval_expr(&input, &session_code);
                 }
             }
             Err(ReadlineError::Interrupted) => {

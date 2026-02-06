@@ -385,6 +385,13 @@ impl Interpreter {
         self
     }
 
+    /// Set an environment variable in the interpreter's overlay.
+    pub fn set_env(&self, key: &str, value: &str) {
+        if let Ok(mut env) = self.env_vars.write() {
+            env.insert(key.to_string(), value.to_string());
+        }
+    }
+
     /// Create a minimal interpreter for running spawned tasks.
     /// This shares the program and global runtime via Arc but has its own call stack and state.
     pub fn new_for_task(program: Arc<Program>) -> Result<Self, InterpError> {
