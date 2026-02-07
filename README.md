@@ -94,14 +94,14 @@ Errors are structured JSON that AI can parse and fix automatically:
 ```
 
 ```bash
-forma check --format json myfile.forma
+forma check --error-format json myfile.forma
 ```
 
 ## Quick Start
 
 ```bash
 # Clone and build
-git clone https://github.com/forma-lang/forma
+git clone <repo-url>
 cd forma
 cargo build --release
 
@@ -112,7 +112,26 @@ echo 'f main() -> Int
 ./target/release/forma run hello.forma
 ```
 
+See [INSTALL.md](INSTALL.md) for detailed build instructions and dependencies.
+
 ## Feature Highlights
+
+### Pattern Matching
+
+```forma
+e Shape
+    Circle(Float)
+    Rectangle(Float, Float)
+    Triangle(Float, Float, Float)
+
+f area(shape: Shape) -> Float
+    m shape
+        Circle(r) -> 3.14159 * r * r
+        Rectangle(w, h) -> w * h
+        Triangle(a, b, c) ->
+            s := (a + b + c) / 2.0
+            sqrt(s * (s - a) * (s - b) * (s - c))
+```
 
 ### Async/Await
 
@@ -144,11 +163,6 @@ f handle_request(req: HttpRequest) -> HttpResponse
             m name
                 Some(n) -> http_response(200, "Hello, " + n + "!")
                 None -> http_response(200, "Hello, World!")
-        "/api/data" ->
-            json := json_parse("{\"status\": \"ok\"}")
-            m json
-                Ok(j) -> http_json_response(200, j)
-                Err(_) -> http_response(500, "Error")
         _ -> http_response(404, "Not Found")
 
 f main() -> Int
@@ -180,57 +194,52 @@ f main() -> Int
     0
 ```
 
-### Pattern Matching
-
-```forma
-e Shape
-    Circle(Float)
-    Rectangle(Float, Float)
-    Triangle(Float, Float, Float)
-
-f area(shape: Shape) -> Float
-    m shape
-        Circle(r) -> 3.14159 * r * r
-        Rectangle(w, h) -> w * h
-        Triangle(a, b, c) ->
-            s := (a + b + c) / 2.0
-            sqrt(s * (s - a) * (s - b) * (s - c))
-```
-
 ## Language Features
 
 - **Type inference**: Hindley-Milner style, rarely need type annotations
 - **Generics**: Full parametric polymorphism with monomorphization
 - **Pattern matching**: Exhaustive, with guards
 - **Result types**: No exceptions, explicit error handling with `?` and `!`
+- **Linear types**: Affine and linear ownership tracking
+- **Capability system**: Fine-grained permissions for file, network, and FFI access
 - **Modules**: Simple `us std.collections` imports
 - **Async/await**: Native coroutines with spawn
-- **HTTP client & server**: Built-in networking primitives
-- **SQLite**: Embedded database support
-- **Native compilation**: LLVM backend for C-level performance
-- **FFI**: C interop with `extern` functions
+- **HTTP client & server**: Built-in networking primitives (reqwest, hyper)
+- **TCP/UDP sockets**: Full networking stack with TLS support
+- **SQLite**: Embedded database support (rusqlite)
+- **Compression**: gzip and zlib built-in
+- **Standard library**: 298+ builtin functions
+- **FFI**: C interop with `extern` functions and safety layer
+- **LLVM backend**: Native compilation (optional, requires LLVM 18)
+- **Formatter**: `forma fmt` for consistent code style
+- **LSP server**: IDE support with diagnostics, completions, hover, goto definition
+- **REPL**: Interactive development with `forma repl`
+- **Grammar export**: EBNF and JSON for constrained AI decoding
 
 ## Status
 
-FORMA is in **beta**. The core language and ecosystem are feature-complete:
+FORMA is in **active development**. The core language and standard library are functional:
 
 - [x] Lexer, parser, type checker
 - [x] Borrow checker (second-class references)
 - [x] MIR interpreter
 - [x] Generics with monomorphization
+- [x] Linear types and capability system
 - [x] Module system
-- [x] Standard library (175+ builtins)
+- [x] Standard library (298+ builtins)
 - [x] Grammar export (EBNF, JSON)
-- [x] LLVM native compilation
-- [x] Package manager (basic)
+- [x] LLVM native compilation (optional feature)
+- [x] Package manager (basic, path-based dependencies)
 - [x] Async/await with spawn
 - [x] HTTP client & server
-- [x] TCP/UDP sockets
-- [x] TLS support
+- [x] TCP/UDP sockets and TLS
 - [x] SQLite database
 - [x] Compression (gzip, zlib)
-- [x] LSP server (basic)
-- [ ] Full LSP (diagnostics, refactoring)
+- [x] LSP server (diagnostics, completions, hover, goto definition)
+- [x] Code formatter
+- [x] REPL
+- [x] 16 showcase examples passing (hello world through game of life)
+- [ ] Full LSP (refactoring, rename, references)
 - [ ] Package registry
 
 ## For AI Developers
@@ -243,27 +252,19 @@ forma grammar --format ebnf
 forma grammar --format json
 
 # Structured errors for self-correction
-forma check --format json myfile.forma
+forma check --error-format json myfile.forma
 
-# Export grammar for constrained decoding
-forma grammar --format json | jq '.productions'
+# Type queries for constrained decoding
+forma typeof myfile.forma --line 5 --column 10
 ```
 
 ## Documentation
 
-- [Getting Started](docs/getting-started.md)
-- [Language Tour](docs/tour.md)
-- [Language Reference](docs/reference.md)
-- [Standard Library](docs/stdlib.md)
-- [AI Integration Guide](docs/ai-integration.md)
-
-## Contributing
-
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md).
+- [Why FORMA?](docs/WHY_FORMA.md) — Design rationale and AI failure analysis
 
 ## License
 
-MIT OR Apache-2.0 (same as Rust)
+MIT OR Apache-2.0
 
 ---
 

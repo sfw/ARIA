@@ -1,2 +1,31 @@
+# Build artifacts
 /target
+*.o
+*.so
+*.dylib
+*.a
+*.rlib
+
+# Rust development
+Cargo.lock
+**/*.rs.bk
+*.pdb
+
+# Claude Code
+.claude/
+
+# OS files
 .DS_Store
+Thumbs.db
+
+# Editor / IDE files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.iml
+.fleet/
+
+# FORMA project artifacts
+*.forma.out

@@ -1,0 +1,78 @@
+# Installing FORMA
+
+## Prerequisites
+
+- **Rust** 1.85+ (edition 2024) — [rustup.rs](https://rustup.rs)
+
+For native compilation (optional):
+- **LLVM 18** — required only for `forma build` (the `llvm` feature flag)
+
+## Build from Source
+
+```bash
+git clone <repo-url>
+cd forma
+cargo build --release
+```
+
+The binary will be at `./target/release/forma`.
+
+### With LLVM Backend (Optional)
+
+To enable native compilation via `forma build`:
+
+```bash
+# macOS (Homebrew)
+brew install llvm@18
+
+# Ubuntu/Debian
+sudo apt install llvm-18-dev
+
+# Build with LLVM support
+cargo build --release --features llvm
+```
+
+## Verify Installation
+
+```bash
+# Check version
+./target/release/forma --version
+
+# Run a program
+echo 'f main() -> Int
+    print("Hello, FORMA!")
+    0' > hello.forma
+./target/release/forma run hello.forma
+
+# Run the showcase examples
+for f in examples/showcase/*.forma; do
+    echo "=== $(basename $f) ==="
+    ./target/release/forma run "$f"
+done
+```
+
+## Add to PATH
+
+```bash
+# Option 1: Symlink
+sudo ln -s $(pwd)/target/release/forma /usr/local/bin/forma
+
+# Option 2: Add to shell profile
+echo 'export PATH="$PATH:/path/to/forma/target/release"' >> ~/.zshrc
+```
+
+## IDE Support
+
+FORMA includes a built-in LSP server for editor integration:
+
+```bash
+forma lsp
+```
+
+Configure your editor's LSP client to use `forma lsp` as the language server command.
+
+## Running Tests
+
+```bash
+cargo test
+```
