@@ -1240,7 +1240,7 @@ impl TypeEnv {
         );
 
         // ===== Duration functions =====
-        // duration_seconds(Int) -> Int (returns milliseconds)
+        // duration_seconds(Int) -> Int (returns seconds)
         env.bindings.insert(
             "duration_seconds".to_string(),
             TypeScheme {
@@ -1248,7 +1248,7 @@ impl TypeEnv {
                 ty: Ty::Fn(vec![Ty::Int], Box::new(Ty::Int)),
             },
         );
-        // duration_minutes(Int) -> Int (returns milliseconds)
+        // duration_minutes(Int) -> Int (returns seconds)
         env.bindings.insert(
             "duration_minutes".to_string(),
             TypeScheme {
@@ -1256,7 +1256,7 @@ impl TypeEnv {
                 ty: Ty::Fn(vec![Ty::Int], Box::new(Ty::Int)),
             },
         );
-        // duration_hours(Int) -> Int (returns milliseconds)
+        // duration_hours(Int) -> Int (returns seconds)
         env.bindings.insert(
             "duration_hours".to_string(),
             TypeScheme {
@@ -1264,7 +1264,7 @@ impl TypeEnv {
                 ty: Ty::Fn(vec![Ty::Int], Box::new(Ty::Int)),
             },
         );
-        // duration_days(Int) -> Int (returns milliseconds)
+        // duration_days(Int) -> Int (returns seconds)
         env.bindings.insert(
             "duration_days".to_string(),
             TypeScheme {

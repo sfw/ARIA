@@ -29,6 +29,47 @@ use super::mir::{
 };
 use crate::types::Ty;
 
+/// Maximum buffer size for network read operations (64 MB).
+const MAX_BUFFER_SIZE: usize = 64 * 1024 * 1024;
+
+/// Maximum allocation size for memory operations (1 GB).
+const MAX_ALLOC_SIZE: usize = 1024 * 1024 * 1024;
+
+/// Maximum valid TCP/UDP port number.
+const MAX_PORT: i64 = 65535;
+
+/// Maximum HTTP request body size (10 MB).
+const MAX_HTTP_BODY_SIZE: usize = 10 * 1024 * 1024;
+
+/// Default maximum number of HTTP requests before server exits.
+const DEFAULT_MAX_HTTP_REQUESTS: usize = 10_000;
+
+/// Validate that a size value is non-negative and within the given limit.
+fn validate_size(n: i64, name: &str, max: usize) -> Result<usize, InterpError> {
+    if n < 0 {
+        return Err(InterpError {
+            message: format!("{}: size must be non-negative, got {}", name, n),
+        });
+    }
+    let size = n as usize;
+    if size > max {
+        return Err(InterpError {
+            message: format!("{}: size {} exceeds maximum allowed ({})", name, size, max),
+        });
+    }
+    Ok(size)
+}
+
+/// Validate that a port number is in the valid range (0-65535).
+fn validate_port(n: i64, name: &str) -> Result<u16, InterpError> {
+    if !(0..=MAX_PORT).contains(&n) {
+        return Err(InterpError {
+            message: format!("{}: port must be 0-{}, got {}", name, MAX_PORT, n),
+        });
+    }
+    Ok(n as u16)
+}
+
 /// Runtime value.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -436,6 +477,8 @@ pub struct Interpreter {
     env_vars: Arc<RwLock<HashMap<String, String>>>,
     /// Granted capabilities for FFI operations
     capabilities: HashSet<String>,
+    /// Whether to check @pre/@post contracts at runtime (default: true)
+    check_contracts: bool,
 }
 
 impl Interpreter {
@@ -467,6 +510,7 @@ impl Interpreter {
             next_task_id: 0,
             env_vars: Arc::new(RwLock::new(HashMap::new())),
             capabilities: HashSet::new(),
+            check_contracts: true,
         })
     }
 
@@ -488,6 +532,11 @@ impl Interpreter {
         self.capabilities.insert(capability.to_string());
     }
 
+    /// Enable or disable @pre/@post contract checking.
+    pub fn set_check_contracts(&mut self, check: bool) {
+        self.check_contracts = check;
+    }
+
     /// Check if a capability is granted, returning an error if not.
     ///
     /// Capability mapping (keep in sync when adding builtins):
@@ -498,6 +547,10 @@ impl Interpreter {
     ///   "network" — http_get, http_post, http_post_json, http_put, http_delete,
     ///               http_serve, tcp_connect, tcp_listen, udp_bind, tls_connect
     ///   "exec"    — exec
+    ///   "env"     — env_get, env_set, env_remove, env_vars
+    ///   "unsafe"  — ptr_null, ptr_is_null, ptr_offset, ptr_addr, ptr_from_addr,
+    ///               str_to_cstr, cstr_to_str, cstr_to_str_len, cstr_free,
+    ///               alloc, alloc_zeroed, dealloc, mem_copy, mem_set
     pub fn require_capability(&self, capability: &str, operation: &str) -> Result<(), InterpError> {
         if self.capabilities.contains(capability) || self.capabilities.contains("all") {
             Ok(())
@@ -541,6 +594,7 @@ impl Interpreter {
             next_task_id: 0,
             env_vars: Arc::new(RwLock::new(HashMap::new())),
             capabilities: HashSet::new(),
+            check_contracts: true,
         })
     }
 
@@ -621,29 +675,34 @@ impl Interpreter {
         self.call_stack.push(frame);
 
         // Check preconditions
-        for contract in &func.preconditions {
-            if let Some(ref condition) = contract.condition {
-                match self.eval_contract_expr(condition) {
-                    Ok(Value::Bool(true)) => {}
-                    Ok(Value::Bool(false)) => {
-                        self.call_stack.pop();
-                        let msg = contract.message.as_deref().unwrap_or("precondition failed");
-                        return Err(InterpError {
-                            message: format!(
-                                "Contract violation in '{}': {} (condition: {})",
-                                func.name, msg, contract.expr_string
-                            ),
-                        });
-                    }
-                    Ok(other) => {
-                        self.call_stack.pop();
-                        return Err(InterpError {
-                            message: format!("Precondition must evaluate to Bool, got {:?}", other),
-                        });
-                    }
-                    Err(e) => {
-                        self.call_stack.pop();
-                        return Err(e);
+        if self.check_contracts {
+            for contract in &func.preconditions {
+                if let Some(ref condition) = contract.condition {
+                    match self.eval_contract_expr(condition) {
+                        Ok(Value::Bool(true)) => {}
+                        Ok(Value::Bool(false)) => {
+                            self.call_stack.pop();
+                            let msg = contract.message.as_deref().unwrap_or("precondition failed");
+                            return Err(InterpError {
+                                message: format!(
+                                    "Contract violation in '{}': {} (condition: {})",
+                                    func.name, msg, contract.expr_string
+                                ),
+                            });
+                        }
+                        Ok(other) => {
+                            self.call_stack.pop();
+                            return Err(InterpError {
+                                message: format!(
+                                    "Precondition must evaluate to Bool, got {:?}",
+                                    other
+                                ),
+                            });
+                        }
+                        Err(e) => {
+                            self.call_stack.pop();
+                            return Err(e);
+                        }
                     }
                 }
             }
@@ -652,40 +711,42 @@ impl Interpreter {
         let result = self.execute(func)?;
 
         // Check postconditions (with 'result' available)
-        {
-            let frame = self.current_frame_mut()?;
-            frame.contract_result = Some(result.clone());
-        }
+        if self.check_contracts {
+            {
+                let frame = self.current_frame_mut()?;
+                frame.contract_result = Some(result.clone());
+            }
 
-        for contract in &func.postconditions {
-            if let Some(ref condition) = contract.condition {
-                match self.eval_contract_expr(condition) {
-                    Ok(Value::Bool(true)) => {}
-                    Ok(Value::Bool(false)) => {
-                        self.call_stack.pop();
-                        let msg = contract
-                            .message
-                            .as_deref()
-                            .unwrap_or("postcondition failed");
-                        return Err(InterpError {
-                            message: format!(
-                                "Contract violation in '{}': {} (condition: {})",
-                                func.name, msg, contract.expr_string
-                            ),
-                        });
-                    }
-                    Ok(other) => {
-                        self.call_stack.pop();
-                        return Err(InterpError {
-                            message: format!(
-                                "Postcondition must evaluate to Bool, got {:?}",
-                                other
-                            ),
-                        });
-                    }
-                    Err(e) => {
-                        self.call_stack.pop();
-                        return Err(e);
+            for contract in &func.postconditions {
+                if let Some(ref condition) = contract.condition {
+                    match self.eval_contract_expr(condition) {
+                        Ok(Value::Bool(true)) => {}
+                        Ok(Value::Bool(false)) => {
+                            self.call_stack.pop();
+                            let msg = contract
+                                .message
+                                .as_deref()
+                                .unwrap_or("postcondition failed");
+                            return Err(InterpError {
+                                message: format!(
+                                    "Contract violation in '{}': {} (condition: {})",
+                                    func.name, msg, contract.expr_string
+                                ),
+                            });
+                        }
+                        Ok(other) => {
+                            self.call_stack.pop();
+                            return Err(InterpError {
+                                message: format!(
+                                    "Postcondition must evaluate to Bool, got {:?}",
+                                    other
+                                ),
+                            });
+                        }
+                        Err(e) => {
+                            self.call_stack.pop();
+                            return Err(e);
+                        }
                     }
                 }
             }
@@ -2988,6 +3049,7 @@ impl Interpreter {
             }
             "env_get" => {
                 validate_args!(args, 1, "env_get");
+                self.require_capability("env", "env_get")?;
                 // env_get(name: Str) -> Option[Str]
                 // Check thread-safe overlay first, then fall back to std::env::var
                 let name = match &args[0] {
@@ -4785,6 +4847,7 @@ impl Interpreter {
             }
             "env_set" => {
                 validate_args!(args, 2, "env_set");
+                self.require_capability("env", "env_set")?;
                 // env_set(name: Str, value: Str) -> ()
                 // Uses thread-safe overlay instead of std::env::set_var
                 let name = match &args[0] {
@@ -4813,6 +4876,7 @@ impl Interpreter {
             }
             "env_remove" => {
                 validate_args!(args, 1, "env_remove");
+                self.require_capability("env", "env_remove")?;
                 // env_remove(name: Str) -> ()
                 // Removes from thread-safe overlay
                 let name = match &args[0] {
@@ -4832,6 +4896,7 @@ impl Interpreter {
                 Ok(Some(Value::Unit))
             }
             "env_vars" => {
+                self.require_capability("env", "env_vars")?;
                 // env_vars() -> {Str: Str}
                 let mut map = HashMap::new();
                 for (key, value) in std::env::vars() {
@@ -5919,7 +5984,7 @@ impl Interpreter {
                 use std::io::{BufRead, BufReader, Read, Write};
 
                 let port = match &args[0] {
-                    Value::Int(n) => *n as u16,
+                    Value::Int(n) => validate_port(*n, "http_serve")?,
                     _ => {
                         return Err(InterpError {
                             message: "http_serve: port must be Int".to_string(),
@@ -5955,7 +6020,9 @@ impl Interpreter {
 
                 println!("FORMA HTTP server listening on http://{}", addr);
 
-                // Server loop - runs until error or Ctrl+C
+                let mut request_count: usize = 0;
+
+                // Server loop - runs until error, Ctrl+C, or request limit
                 loop {
                     // Accept connection (non-blocking)
                     let (mut stream, _addr) = match listener.accept() {
@@ -6008,6 +6075,18 @@ impl Interpreter {
                             }
                             headers_map.insert(key, Value::Str(value));
                         }
+                    }
+
+                    // Reject oversized request bodies
+                    if content_length > MAX_HTTP_BODY_SIZE {
+                        let response_413 = "HTTP/1.1 413 Payload Too Large\r\n\
+                            Content-Type: text/plain\r\n\
+                            Content-Length: 24\r\n\
+                            Connection: close\r\n\r\n\
+                            Request body too large.\n";
+                        let _ = stream.write_all(response_413.as_bytes());
+                        let _ = stream.flush();
+                        continue;
                     }
 
                     // Read body if present
@@ -6151,6 +6230,20 @@ impl Interpreter {
 
                     // Log request
                     println!("{} {} -> {}", method, path, status);
+
+                    // Check request limit
+                    request_count += 1;
+                    if request_count >= DEFAULT_MAX_HTTP_REQUESTS {
+                        println!(
+                            "FORMA HTTP server: reached request limit ({}), shutting down",
+                            DEFAULT_MAX_HTTP_REQUESTS
+                        );
+                        return Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Ok".to_string(),
+                            fields: vec![Value::Unit],
+                        }));
+                    }
                 }
             }
             "http_request_new" => {
@@ -6260,7 +6353,7 @@ impl Interpreter {
                     }
                 };
                 let max_bytes = match &args[1] {
-                    Value::Int(n) => *n as usize,
+                    Value::Int(n) => validate_size(*n, "tcp_read", MAX_BUFFER_SIZE)?,
                     _ => {
                         return Err(InterpError {
                             message: "tcp_read: max_bytes must be Int".to_string(),
@@ -6305,7 +6398,7 @@ impl Interpreter {
                     }
                 };
                 let bytes = match &args[1] {
-                    Value::Int(n) => *n as usize,
+                    Value::Int(n) => validate_size(*n, "tcp_read_exact", MAX_BUFFER_SIZE)?,
                     _ => {
                         return Err(InterpError {
                             message: "tcp_read_exact: bytes must be Int".to_string(),
@@ -6749,7 +6842,7 @@ impl Interpreter {
                     }
                 };
                 let max_bytes = match &args[1] {
-                    Value::Int(n) => *n as usize,
+                    Value::Int(n) => validate_size(*n, "udp_recv_from", MAX_BUFFER_SIZE)?,
                     _ => {
                         return Err(InterpError {
                             message: "udp_recv_from: max_bytes must be Int".to_string(),
@@ -6902,7 +6995,7 @@ impl Interpreter {
                     }
                 };
                 let max_bytes = match &args[1] {
-                    Value::Int(n) => *n as usize,
+                    Value::Int(n) => validate_size(*n, "udp_recv", MAX_BUFFER_SIZE)?,
                     _ => {
                         return Err(InterpError {
                             message: "udp_recv: max_bytes must be Int".to_string(),
@@ -6996,11 +7089,13 @@ impl Interpreter {
 
             // ===== C FFI builtins =====
             "ptr_null" => {
+                self.require_capability("unsafe", "ptr_null")?;
                 // ptr_null() -> *T
                 Ok(Some(Value::RawPtr(0)))
             }
             "ptr_is_null" => {
                 validate_args!(args, 1, "ptr_is_null");
+                self.require_capability("unsafe", "ptr_is_null")?;
                 // ptr_is_null(p: *T) -> Bool
                 let addr = match &args[0] {
                     Value::RawPtr(a) => *a,
@@ -7014,6 +7109,7 @@ impl Interpreter {
             }
             "ptr_offset" => {
                 validate_args!(args, 2, "ptr_offset");
+                self.require_capability("unsafe", "ptr_offset")?;
                 // ptr_offset(p: *T, offset: Int) -> *T
                 let addr = match &args[0] {
                     Value::RawPtr(a) => *a,
@@ -7040,6 +7136,7 @@ impl Interpreter {
             }
             "ptr_addr" => {
                 validate_args!(args, 1, "ptr_addr");
+                self.require_capability("unsafe", "ptr_addr")?;
                 // ptr_addr(p: *T) -> Int - get the numeric address of a pointer
                 let addr = match &args[0] {
                     Value::RawPtr(a) => *a,
@@ -7053,6 +7150,7 @@ impl Interpreter {
             }
             "ptr_from_addr" => {
                 validate_args!(args, 1, "ptr_from_addr");
+                self.require_capability("unsafe", "ptr_from_addr")?;
                 // ptr_from_addr(addr: Int) -> *Void - create a pointer from an address
                 let addr = match &args[0] {
                     Value::Int(n) => *n as usize,
@@ -7074,6 +7172,7 @@ impl Interpreter {
             // String conversion
             "str_to_cstr" => {
                 validate_args!(args, 1, "str_to_cstr");
+                self.require_capability("unsafe", "str_to_cstr")?;
                 // str_to_cstr(s: Str) -> *Char
                 // Allocate a null-terminated C string and return pointer to it
                 let s = match &args[0] {
@@ -7092,6 +7191,7 @@ impl Interpreter {
             }
             "cstr_to_str" => {
                 validate_args!(args, 1, "cstr_to_str");
+                self.require_capability("unsafe", "cstr_to_str")?;
                 // cstr_to_str(p: *Char) -> Str
                 let addr = match &args[0] {
                     Value::RawPtr(a) => *a,
@@ -7111,6 +7211,7 @@ impl Interpreter {
             }
             "cstr_to_str_len" => {
                 validate_args!(args, 2, "cstr_to_str_len");
+                self.require_capability("unsafe", "cstr_to_str_len")?;
                 // cstr_to_str_len(p: *Char, len: Int) -> Str
                 let addr = match &args[0] {
                     Value::RawPtr(a) => *a,
@@ -7121,7 +7222,7 @@ impl Interpreter {
                     }
                 };
                 let len = match &args[1] {
-                    Value::Int(n) => *n as usize,
+                    Value::Int(n) => validate_size(*n, "cstr_to_str_len", MAX_ALLOC_SIZE)?,
                     _ => {
                         return Err(InterpError {
                             message: "cstr_to_str_len: len must be Int".to_string(),
@@ -7140,6 +7241,7 @@ impl Interpreter {
             }
             "cstr_free" => {
                 validate_args!(args, 1, "cstr_free");
+                self.require_capability("unsafe", "cstr_free")?;
                 // cstr_free(p: *Char) -> () - free a C string allocated by str_to_cstr
                 let addr = match &args[0] {
                     Value::RawPtr(a) => *a,
@@ -7160,9 +7262,10 @@ impl Interpreter {
             // Memory allocation
             "alloc" => {
                 validate_args!(args, 1, "alloc");
+                self.require_capability("unsafe", "alloc")?;
                 // alloc(size: Int) -> *Void
                 let size = match &args[0] {
-                    Value::Int(n) => *n as usize,
+                    Value::Int(n) => validate_size(*n, "alloc", MAX_ALLOC_SIZE)?,
                     _ => {
                         return Err(InterpError {
                             message: "alloc: size must be Int".to_string(),
@@ -7185,9 +7288,10 @@ impl Interpreter {
             }
             "alloc_zeroed" => {
                 validate_args!(args, 1, "alloc_zeroed");
+                self.require_capability("unsafe", "alloc_zeroed")?;
                 // alloc_zeroed(size: Int) -> *Void
                 let size = match &args[0] {
-                    Value::Int(n) => *n as usize,
+                    Value::Int(n) => validate_size(*n, "alloc_zeroed", MAX_ALLOC_SIZE)?,
                     _ => {
                         return Err(InterpError {
                             message: "alloc_zeroed: size must be Int".to_string(),
@@ -7210,6 +7314,7 @@ impl Interpreter {
             }
             "dealloc" => {
                 validate_args!(args, 2, "dealloc");
+                self.require_capability("unsafe", "dealloc")?;
                 // dealloc(ptr: *Void, size: Int) -> ()
                 let addr = match &args[0] {
                     Value::RawPtr(a) => *a,
@@ -7220,7 +7325,7 @@ impl Interpreter {
                     }
                 };
                 let size = match &args[1] {
-                    Value::Int(n) => *n as usize,
+                    Value::Int(n) => validate_size(*n, "dealloc", MAX_ALLOC_SIZE)?,
                     _ => {
                         return Err(InterpError {
                             message: "dealloc: size must be Int".to_string(),
@@ -7238,6 +7343,7 @@ impl Interpreter {
             }
             "mem_copy" => {
                 validate_args!(args, 3, "mem_copy");
+                self.require_capability("unsafe", "mem_copy")?;
                 // mem_copy(dst: *Void, src: *Void, size: Int) -> ()
                 let dst = match &args[0] {
                     Value::RawPtr(a) => *a,
@@ -7256,7 +7362,7 @@ impl Interpreter {
                     }
                 };
                 let size = match &args[2] {
-                    Value::Int(n) => *n as usize,
+                    Value::Int(n) => validate_size(*n, "mem_copy", MAX_ALLOC_SIZE)?,
                     _ => {
                         return Err(InterpError {
                             message: "mem_copy: size must be Int".to_string(),
@@ -7272,6 +7378,7 @@ impl Interpreter {
             }
             "mem_set" => {
                 validate_args!(args, 3, "mem_set");
+                self.require_capability("unsafe", "mem_set")?;
                 // mem_set(ptr: *Void, value: Int, size: Int) -> ()
                 let ptr = match &args[0] {
                     Value::RawPtr(a) => *a,
@@ -7290,7 +7397,7 @@ impl Interpreter {
                     }
                 };
                 let size = match &args[2] {
-                    Value::Int(n) => *n as usize,
+                    Value::Int(n) => validate_size(*n, "mem_set", MAX_ALLOC_SIZE)?,
                     _ => {
                         return Err(InterpError {
                             message: "mem_set: size must be Int".to_string(),
@@ -8518,7 +8625,7 @@ impl Interpreter {
                     }
                 };
                 let max_bytes = match &args[1] {
-                    Value::Int(n) => *n as usize,
+                    Value::Int(n) => validate_size(*n, "tls_read", MAX_BUFFER_SIZE)?,
                     _ => {
                         return Err(InterpError {
                             message: "tls_read: max_bytes must be Int".to_string(),
@@ -10653,5 +10760,189 @@ f main() -> Str
             result.unwrap_err().contains("is_ok: expected Result"),
             "expected 'is_ok: expected Result'"
         );
+    }
+
+    // =========================================================================
+    // Sprint 41 — Capability boundary hardening (env + unsafe)
+    // =========================================================================
+
+    #[test]
+    fn test_capability_denial_env_get() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        let result = interp.call_builtin("env_get", &[Value::Str("PATH".to_string())]);
+        assert!(
+            result.is_err(),
+            "env_get should be denied without 'env' capability"
+        );
+        assert!(result.unwrap_err().message.contains("capability"));
+    }
+
+    #[test]
+    fn test_capability_denial_env_set() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        let result = interp.call_builtin(
+            "env_set",
+            &[Value::Str("FOO".to_string()), Value::Str("bar".to_string())],
+        );
+        assert!(
+            result.is_err(),
+            "env_set should be denied without 'env' capability"
+        );
+        assert!(result.unwrap_err().message.contains("capability"));
+    }
+
+    #[test]
+    fn test_capability_denial_ptr_null() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        let result = interp.call_builtin("ptr_null", &[]);
+        assert!(
+            result.is_err(),
+            "ptr_null should be denied without 'unsafe' capability"
+        );
+        assert!(result.unwrap_err().message.contains("capability"));
+    }
+
+    #[test]
+    fn test_capability_denial_alloc() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        let result = interp.call_builtin("alloc", &[Value::Int(64)]);
+        assert!(
+            result.is_err(),
+            "alloc should be denied without 'unsafe' capability"
+        );
+        assert!(result.unwrap_err().message.contains("capability"));
+    }
+
+    #[test]
+    fn test_capability_env_granted() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        interp.grant_capability("env");
+        let result = interp.call_builtin("env_get", &[Value::Str("PATH".to_string())]);
+        assert!(
+            result.is_ok(),
+            "env_get should succeed with 'env' capability"
+        );
+    }
+
+    #[test]
+    fn test_capability_unsafe_granted() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        interp.grant_capability("unsafe");
+        let result = interp.call_builtin("ptr_null", &[]);
+        assert!(
+            result.is_ok(),
+            "ptr_null should succeed with 'unsafe' capability"
+        );
+        assert_eq!(result.unwrap(), Some(Value::RawPtr(0)));
+    }
+
+    #[test]
+    fn test_capability_all_grants_env_and_unsafe() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        interp.grant_capability("all");
+        let result_env = interp.call_builtin("env_get", &[Value::Str("PATH".to_string())]);
+        assert!(
+            result_env.is_ok(),
+            "env_get should succeed with 'all' capability"
+        );
+        let result_unsafe = interp.call_builtin("ptr_null", &[]);
+        assert!(
+            result_unsafe.is_ok(),
+            "ptr_null should succeed with 'all' capability"
+        );
+    }
+
+    // =========================================================================
+    // Sprint 41 — Size validation and allocation guardrails
+    // =========================================================================
+
+    #[test]
+    fn test_validate_size_negative() {
+        let result = validate_size(-1, "test_op", 1024);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().message.contains("non-negative"));
+    }
+
+    #[test]
+    fn test_validate_size_oversized() {
+        let result = validate_size(2_000_000_000, "test_op", 1024);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().message.contains("exceeds maximum"));
+    }
+
+    #[test]
+    fn test_validate_size_valid() {
+        let result = validate_size(1024, "test_op", 4096);
+        assert_eq!(result.unwrap(), 1024);
+    }
+
+    #[test]
+    fn test_validate_port_negative() {
+        let result = validate_port(-1, "test_op");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().message.contains("port"));
+    }
+
+    #[test]
+    fn test_validate_port_too_large() {
+        let result = validate_port(70000, "test_op");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().message.contains("port"));
+    }
+
+    #[test]
+    fn test_validate_port_valid() {
+        let result = validate_port(8080, "test_op");
+        assert_eq!(result.unwrap(), 8080);
+    }
+
+    // =========================================================================
+    // Sprint 41 — Contract flag semantics
+    // =========================================================================
+
+    #[test]
+    fn test_contracts_enabled_by_default() {
+        let source = r#"
+@pre(x > 0)
+f checked(x: Int) -> Int = x
+
+f main() -> Int = checked(-1)
+"#;
+        let result = run_source(source);
+        assert!(
+            result.is_err(),
+            "contract violation should be caught by default"
+        );
+        assert!(
+            result.unwrap_err().contains("Contract violation"),
+            "error should mention contract violation"
+        );
+    }
+
+    #[test]
+    fn test_contracts_disabled() {
+        let source = r#"
+@pre(x > 0)
+f checked(x: Int) -> Int = x
+
+f main() -> Int = checked(-1)
+"#;
+        let scanner = Scanner::new(source);
+        let (tokens, _) = scanner.scan_all();
+        let parser = Parser::new(&tokens);
+        let ast = parser.parse().unwrap();
+        let program = Lowerer::new().lower(&ast).unwrap();
+        let mut interp = Interpreter::new(program).unwrap();
+        interp.set_check_contracts(false);
+        let result = interp.run("main", &[]);
+        assert!(result.is_ok(), "with contracts disabled, should succeed");
+        assert_eq!(result.unwrap(), Value::Int(-1));
     }
 }

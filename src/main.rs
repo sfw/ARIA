@@ -98,9 +98,9 @@ enum Commands {
         #[arg(long)]
         dump_mir: bool,
 
-        /// Check @pre/@post contracts at runtime
+        /// Disable @pre/@post contract checking
         #[arg(long)]
-        check_contracts: bool,
+        no_check_contracts: bool,
 
         /// Allow file read access
         #[arg(long)]
@@ -117,6 +117,14 @@ enum Commands {
         /// Allow process execution
         #[arg(long)]
         allow_exec: bool,
+
+        /// Allow environment variable access
+        #[arg(long)]
+        allow_env: bool,
+
+        /// Allow unsafe/FFI operations (pointers, memory allocation)
+        #[arg(long)]
+        allow_unsafe: bool,
 
         /// Allow all capabilities
         #[arg(long)]
@@ -230,11 +238,13 @@ fn main() {
             file,
             args,
             dump_mir,
-            check_contracts,
+            no_check_contracts,
             allow_read,
             allow_write,
             allow_network,
             allow_exec,
+            allow_env,
+            allow_unsafe,
             allow_all,
         } => {
             let caps = CapabilityConfig {
@@ -242,9 +252,18 @@ fn main() {
                 allow_write,
                 allow_network,
                 allow_exec,
+                allow_env,
+                allow_unsafe,
                 allow_all,
             };
-            run(&file, &args, dump_mir, check_contracts, &caps, error_format)
+            run(
+                &file,
+                &args,
+                dump_mir,
+                !no_check_contracts,
+                &caps,
+                error_format,
+            )
         }
         Commands::Lex { file } => lex(&file, error_format),
         Commands::Parse { file } => parse(&file, error_format),
@@ -289,6 +308,8 @@ struct CapabilityConfig {
     allow_write: bool,
     allow_network: bool,
     allow_exec: bool,
+    allow_env: bool,
+    allow_unsafe: bool,
     allow_all: bool,
 }
 
@@ -309,6 +330,12 @@ impl CapabilityConfig {
             }
             if self.allow_exec {
                 interp.grant_capability("exec");
+            }
+            if self.allow_env {
+                interp.grant_capability("env");
+            }
+            if self.allow_unsafe {
+                interp.grant_capability("unsafe");
             }
         }
     }
@@ -349,7 +376,7 @@ fn run(
     file: &PathBuf,
     program_args: &[String],
     dump_mir: bool,
-    _check_contracts: bool,
+    check_contracts: bool,
     caps: &CapabilityConfig,
     error_format: ErrorFormat,
 ) -> Result<(), String> {
@@ -424,30 +451,24 @@ fn run(
             }
         }
         Err(e) => {
+            let error_span = e.span.unwrap_or(forma::lexer::Span {
+                start: 0,
+                end: 0,
+                line: 1,
+                column: 1,
+            });
             match error_format {
                 ErrorFormat::Human => {
-                    ctx.error(
-                        forma::lexer::Span {
-                            start: 0,
-                            end: 0,
-                            line: 1,
-                            column: 1,
-                        },
-                        &format!("module error: {}", e),
-                    );
+                    ctx.error(error_span, &format!("module error: {}", e));
                 }
                 ErrorFormat::Json => {
-                    json_errors.push(JsonError {
-                        file: filename.clone(),
-                        line: 1,
-                        column: 1,
-                        end_line: 1,
-                        end_column: 1,
-                        severity: "error".to_string(),
-                        code: "MODULE".to_string(),
-                        message: format!("{}", e),
-                        help: None,
-                    });
+                    json_errors.push(span_to_json_error(
+                        &filename,
+                        error_span,
+                        "MODULE",
+                        &format!("{}", e),
+                        None,
+                    ));
                     output_json_errors(json_errors, None);
                 }
             }
@@ -551,6 +572,9 @@ fn run(
 
     // Apply capability grants
     caps.apply(&mut interp);
+
+    // Apply contract checking setting
+    interp.set_check_contracts(check_contracts);
 
     // Pass program arguments as ARGV/ARGC environment variables
     interp.set_env("ARGC", &program_args.len().to_string());

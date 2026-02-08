@@ -16,6 +16,8 @@ use crate::parser::{Item, ItemKind, Parser, SourceFile, UseTree};
 pub struct ModuleError {
     pub message: String,
     pub path: Option<PathBuf>,
+    /// Span of the `us` statement that triggered this error.
+    pub span: Option<Span>,
 }
 
 impl std::fmt::Display for ModuleError {
@@ -128,6 +130,7 @@ impl ModuleLoader {
             return Err(ModuleError {
                 message: "circular module dependency detected".to_string(),
                 path: Some(path.to_path_buf()),
+                span: None,
             });
         }
 
@@ -146,6 +149,7 @@ impl ModuleLoader {
         let source = std::fs::read_to_string(path).map_err(|e| ModuleError {
             message: format!("failed to read file: {}", e),
             path: Some(path.to_path_buf()),
+            span: None,
         })?;
 
         // Lex
@@ -162,6 +166,7 @@ impl ModuleLoader {
                         .join(", ")
                 ),
                 path: Some(path.to_path_buf()),
+                span: None,
             });
         }
 
@@ -177,6 +182,7 @@ impl ModuleLoader {
                     .join("; ")
             ),
             path: Some(path.to_path_buf()),
+            span: None,
         })?;
 
         let module = LoadedModule {
@@ -233,6 +239,7 @@ impl ModuleLoader {
                 tried
             ),
             path: None,
+            span: None,
         })
     }
 
@@ -243,12 +250,22 @@ impl ModuleLoader {
 
         for item in &ast.items {
             if let ItemKind::Use(use_item) = &item.kind {
+                let import_span = item.span;
                 let mut paths = Vec::new();
                 Self::extract_use_paths(&use_item.tree, &[], &mut paths);
 
                 for module_path in paths {
-                    let file_path = self.find_module_file(&module_path)?;
-                    self.load_module_recursive(&file_path, &mut all_imported_items)?;
+                    let file_path = self.find_module_file(&module_path).map_err(|mut e| {
+                        e.span = Some(import_span);
+                        e
+                    })?;
+                    self.load_module_recursive(&file_path, &mut all_imported_items)
+                        .map_err(|mut e| {
+                            if e.span.is_none() {
+                                e.span = Some(import_span);
+                            }
+                            e
+                        })?;
                 }
             }
         }
@@ -270,6 +287,7 @@ impl ModuleLoader {
             return Err(ModuleError {
                 message: "circular module dependency detected".to_string(),
                 path: Some(path_buf),
+                span: None,
             });
         }
 
@@ -447,6 +465,25 @@ mod tests {
             err.message.contains("circular"),
             "error should mention circular: {}",
             err.message
+        );
+    }
+
+    #[test]
+    fn test_import_nonexistent_module_has_span() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path();
+
+        // main.forma imports a module that doesn't exist
+        write_temp_file(base, "main.forma", "us nonexistent\nf main() -> Int = 0\n");
+
+        let main_path = base.join("main.forma");
+        let mut loader = ModuleLoader::from_source_file(&main_path);
+        let result = loader.load_with_dependencies(&main_path);
+        assert!(result.is_err(), "import of nonexistent module should fail");
+        let err = result.unwrap_err();
+        assert!(
+            err.span.is_some(),
+            "module error should have a span pointing to the us statement"
         );
     }
 

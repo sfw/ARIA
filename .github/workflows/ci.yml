@@ -96,7 +96,7 @@ jobs:
                 continue
                 ;;
             esac
-            if ./target/release/forma run "$f" > /dev/null 2>&1; then
+            if ./target/release/forma run --allow-all "$f" > /dev/null 2>&1; then
               echo "PASS: $name"
               PASS=$((PASS + 1))
             else
@@ -123,7 +123,7 @@ jobs:
           FAIL=0
           for f in examples/showcase/*.forma; do
             name=$(basename "$f")
-            if ./target/release/forma run "$f" > /dev/null 2>&1; then
+            if ./target/release/forma run --allow-all "$f" > /dev/null 2>&1; then
               echo "PASS: $name"
               PASS=$((PASS + 1))
             else
