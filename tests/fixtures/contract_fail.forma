@@ -1,0 +1,6 @@
+@pre(x > 0)
+f checked(x: Int) -> Int = x
+
+f main() -> Int
+    _ := checked(-1)
+    0

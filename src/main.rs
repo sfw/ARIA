@@ -279,7 +279,7 @@ fn main() {
         Commands::New { name } => new_project(&name),
         Commands::Init => init_project(),
         Commands::Repl => repl(),
-        Commands::Fmt { file, write, check } => fmt(&file, write, check),
+        Commands::Fmt { file, write, check } => fmt(&file, write, check, error_format),
         Commands::Lsp => lsp(),
     };
 
@@ -2549,7 +2549,7 @@ fn repl_type_of(expr: &str, session_code: &str) {
 }
 
 /// Format a FORMA source file
-fn fmt(file: &PathBuf, write: bool, check: bool) -> Result<(), String> {
+fn fmt(file: &PathBuf, write: bool, check: bool, error_format: ErrorFormat) -> Result<(), String> {
     let source = read_file(file)?;
     let filename = file.to_string_lossy().to_string();
 
@@ -2558,11 +2558,22 @@ fn fmt(file: &PathBuf, write: bool, check: bool) -> Result<(), String> {
     let (tokens, lex_errors) = scanner.scan_all();
 
     if !lex_errors.is_empty() {
-        for error in &lex_errors {
-            eprintln!(
-                "error[LEX]: {}:{}: {}",
-                error.span.line, error.span.column, error.message
-            );
+        match error_format {
+            ErrorFormat::Human => {
+                for error in &lex_errors {
+                    eprintln!(
+                        "error[LEX]: {}:{}: {}",
+                        error.span.line, error.span.column, error.message
+                    );
+                }
+            }
+            ErrorFormat::Json => {
+                let json_errors: Vec<JsonError> = lex_errors
+                    .iter()
+                    .map(|e| span_to_json_error(&filename, e.span, "LEX", &e.message, None))
+                    .collect();
+                output_json_errors(json_errors, None);
+            }
         }
         return Err(format!("{} lexer error(s)", lex_errors.len()));
     }
@@ -2572,8 +2583,27 @@ fn fmt(file: &PathBuf, write: bool, check: bool) -> Result<(), String> {
     let ast = match parser.parse() {
         Ok(ast) => ast,
         Err(errors) => {
-            for error in &errors {
-                eprintln!("error[PARSE]: {}", error);
+            match error_format {
+                ErrorFormat::Human => {
+                    for error in &errors {
+                        eprintln!("error[PARSE]: {}", error);
+                    }
+                }
+                ErrorFormat::Json => {
+                    let json_errors: Vec<JsonError> = errors
+                        .iter()
+                        .map(|e| {
+                            span_to_json_error(
+                                &filename,
+                                e.span(),
+                                "PARSE",
+                                &format!("{}", e),
+                                None,
+                            )
+                        })
+                        .collect();
+                    output_json_errors(json_errors, None);
+                }
             }
             return Err(format!("{} parse error(s)", errors.len()));
         }
