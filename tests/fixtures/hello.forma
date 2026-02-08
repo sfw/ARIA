@@ -1,3 +1,2 @@
-f main() -> Int
+f main()
     print("hello")
-    0

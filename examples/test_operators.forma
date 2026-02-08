@@ -53,7 +53,7 @@ f test_coalesce()
     print("test_coalesce: ALL PASSED")
 
 # Main
-f main() -> Int
+f main()
     print("=== Sprint 20 Operator Tests ===")
     print("")
     test_if_expr_types()
@@ -61,4 +61,3 @@ f main() -> Int
     test_coalesce()
     print("")
     print("=== All Sprint 20 tests complete ===")
-    0

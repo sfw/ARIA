@@ -15,7 +15,7 @@ f show_usage()
     print("  done <id>         - Mark todo as complete")
     print("  delete <id>       - Delete a todo")
 
-f main() -> Int
+f main()
     # Open or create database
     m db_open("todos.db")
         Ok(db) ->
@@ -98,7 +98,5 @@ f main() -> Int
                         None -> show_usage()
 
             db_close(db)
-            0
         Err(e) ->
             print("Failed to open database: " + e)
-            1

@@ -27,7 +27,7 @@ f handle_request(req: HttpRequest) -> HttpResponse
             http_response(200, "Server is running!")
         _ -> http_response(404, "Not Found")
 
-f main() -> Int
+f main()
     print("Starting FORMA web server...")
     print("Endpoints:")
     print("  GET  /        - Welcome message")
@@ -39,7 +39,5 @@ f main() -> Int
 
     result := http_serve(8080, handle_request)
     m result
-        Ok(_) -> 0
-        Err(e) ->
-            print("Server error: " + e)
-            1
+        Ok(_) -> print("Server stopped.")
+        Err(e) -> print("Server error: " + e)

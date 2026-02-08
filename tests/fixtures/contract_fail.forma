@@ -1,6 +1,5 @@
 @pre(x > 0)
 f checked(x: Int) -> Int = x
 
-f main() -> Int
+f main()
     _ := checked(-1)
-    0

@@ -8,7 +8,7 @@ f fib(n: Int) -> Int
         fib(n - 1) + fib(n - 2)
 
 # Test parallel execution
-f main() -> Int
+f main()
     start := time_now_ms()
 
     # Spawn three parallel computations
@@ -24,4 +24,3 @@ f main() -> Int
     for r in results
         print(f"Result: {r}")
     print("If truly parallel, elapsed should be ~1x single fib(30) time, not 3x")
-    0

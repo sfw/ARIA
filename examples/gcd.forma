@@ -2,4 +2,5 @@
 f gcd(a: Int, b: Int) -> Int
     if b == 0 then a else gcd(b, a % b)
 
-f main() -> Int = gcd(48, 18)
+f main()
+    print(gcd(48, 18))

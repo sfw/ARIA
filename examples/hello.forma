@@ -10,7 +10,7 @@ f add(a: Int, b: Int) -> Int
 
 f double(n: Int) -> Int = n * 2
 
-f main() -> Int
+f main()
     x = 42
     name = "Alice"
 
@@ -40,5 +40,3 @@ f main() -> Int
         42 -> "the answer"
         _ -> "other"
     print(msg)
-
-    result

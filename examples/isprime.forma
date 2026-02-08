@@ -5,4 +5,5 @@ f is_prime_helper(num: Int, divisor: Int) -> Bool
 f is_prime(num: Int) -> Bool
     if num < 2 then false else is_prime_helper(num, 2)
 
-f main() -> Bool = is_prime(17)
+f main()
+    print(is_prime(17))
