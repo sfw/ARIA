@@ -845,6 +845,43 @@ fn check(file: &PathBuf, partial: bool, error_format: ErrorFormat) -> Result<(),
         }
     };
 
+    // Load imports (module system)
+    let mut module_loader = ModuleLoader::from_source_file(file);
+    let ast = match module_loader.load_imports(&ast) {
+        Ok(imported_items) => {
+            let mut combined_items = imported_items;
+            combined_items.extend(ast.items);
+            forma::parser::SourceFile {
+                items: combined_items,
+                span: ast.span,
+            }
+        }
+        Err(e) => {
+            let error_span = e.span.unwrap_or(forma::lexer::Span {
+                start: 0,
+                end: 0,
+                line: 1,
+                column: 1,
+            });
+            match error_format {
+                ErrorFormat::Human => {
+                    ctx.error(error_span, &format!("module error: {}", e));
+                }
+                ErrorFormat::Json => {
+                    json_errors.push(span_to_json_error(
+                        &filename,
+                        error_span,
+                        "MODULE",
+                        &format!("{}", e),
+                        None,
+                    ));
+                    output_json_errors(json_errors, None);
+                }
+            }
+            return Err(format!("module error: {}", e));
+        }
+    };
+
     let mut error_count = 0;
 
     // Type check
@@ -1256,6 +1293,9 @@ fn build(
                 )),
             }
         }
+        if matches!(error_format, ErrorFormat::Json) {
+            output_json_errors(json_errors, None);
+        }
         return Err("Lexer errors".into());
     }
 
@@ -1294,7 +1334,30 @@ fn build(
                 span: parsed_ast.span,
             }
         }
-        Err(e) => return Err(format!("Module error: {}", e)),
+        Err(e) => {
+            let error_span = e.span.unwrap_or(forma::lexer::Span {
+                start: 0,
+                end: 0,
+                line: 1,
+                column: 1,
+            });
+            match error_format {
+                ErrorFormat::Human => {
+                    ctx.error(error_span, &format!("module error: {}", e));
+                }
+                ErrorFormat::Json => {
+                    json_errors.push(span_to_json_error(
+                        &filename,
+                        error_span,
+                        "MODULE",
+                        &format!("{}", e),
+                        None,
+                    ));
+                    output_json_errors(json_errors, None);
+                }
+            }
+            return Err(format!("Module error: {}", e));
+        }
     };
 
     // Type check
@@ -1311,6 +1374,9 @@ fn build(
                     None,
                 )),
             }
+        }
+        if matches!(error_format, ErrorFormat::Json) {
+            output_json_errors(json_errors, None);
         }
         return Err("Type errors".into());
     }

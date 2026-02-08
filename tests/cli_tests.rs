@@ -240,3 +240,98 @@ fn test_cli_run_contract_violation() {
         "forma run contract_fail.forma should exit nonzero (contract violation)"
     );
 }
+
+#[test]
+fn test_cli_check_missing_import() {
+    let output = Command::new(forma_bin())
+        .args(["check"])
+        .arg(fixture("missing_import.forma"))
+        .output()
+        .expect("failed to execute forma");
+    assert!(
+        !output.status.success(),
+        "forma check missing_import.forma should exit nonzero"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let combined = format!("{}{}", stdout, stderr);
+    assert!(
+        combined.contains("module") || combined.contains("Module"),
+        "error should mention module, got stdout: {}, stderr: {}",
+        stdout,
+        stderr
+    );
+}
+
+#[test]
+fn test_cli_check_missing_import_json() {
+    let output = Command::new(forma_bin())
+        .args(["--error-format", "json", "check"])
+        .arg(fixture("missing_import.forma"))
+        .output()
+        .expect("failed to execute forma");
+    assert!(
+        !output.status.success(),
+        "forma --error-format json check missing_import.forma should exit nonzero"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("\"MODULE\""),
+        "JSON output should contain MODULE error category, got: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("\"errors\""),
+        "JSON output should contain errors key, got: {}",
+        stdout
+    );
+}
+
+#[test]
+fn test_cli_build_missing_import_json() {
+    // Module error happens before LLVM codegen, so this test works regardless of llvm feature
+    let output = Command::new(forma_bin())
+        .args(["--error-format", "json", "build"])
+        .arg(fixture("missing_import.forma"))
+        .output()
+        .expect("failed to execute forma");
+    assert!(
+        !output.status.success(),
+        "forma --error-format json build missing_import.forma should exit nonzero"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("\"MODULE\""),
+        "JSON output should contain MODULE error category, got: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("\"errors\""),
+        "JSON output should contain errors key, got: {}",
+        stdout
+    );
+}
+
+#[test]
+fn test_cli_run_missing_import_json() {
+    let output = Command::new(forma_bin())
+        .args(["--error-format", "json", "run", "--allow-all"])
+        .arg(fixture("missing_import.forma"))
+        .output()
+        .expect("failed to execute forma");
+    assert!(
+        !output.status.success(),
+        "forma --error-format json run --allow-all missing_import.forma should exit nonzero"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("\"MODULE\""),
+        "JSON output should contain MODULE error category, got: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("\"errors\""),
+        "JSON output should contain errors key, got: {}",
+        stdout
+    );
+}
