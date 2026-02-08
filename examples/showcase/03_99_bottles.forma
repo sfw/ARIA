@@ -15,9 +15,8 @@ f verse(n: Int) -> Unit
         print(f"Take one down and pass it around, {bottles(n - 1)} of beer on the wall.")
         print("")
 
-f main() -> Int
+f main()
     n := 99
     wh n >= 0
         verse(n)
         n := n - 1
-    0

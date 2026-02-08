@@ -50,7 +50,7 @@ f print_array(arr: [Int], label: String) -> Unit
     s := s + "]"
     print(s)
 
-f main() -> Int
+f main()
     # Test 1: Random array
     arr1 := [64, 34, 25, 12, 22, 11, 90]
     print_array(arr1, "Before")
@@ -80,5 +80,3 @@ f main() -> Int
     print_array(arr4, "Duplicates before")
     sort(ref mut arr4)
     print_array(arr4, "Duplicates after ")
-
-    0

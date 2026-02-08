@@ -49,9 +49,8 @@ The compiler binary is at `./target/release/forma`.
 Create `hello.forma`:
 
 ```forma
-f main() -> Int
+f main()
     print("Hello, World!")
-    0
 ```
 
 Run it:
@@ -60,7 +59,7 @@ Run it:
 forma run hello.forma
 ```
 
-Every FORMA program starts at `main`. The return type `Int` is the exit code — `0` means success.
+Every FORMA program starts at `main`. By default, `main` returns nothing (unit). If you need an explicit exit code, you can declare `f main() -> Int` and return an integer (e.g., `0` for success).
 
 ### Key Design Choices
 
@@ -84,13 +83,12 @@ Every FORMA program starts at `main`. The return type `Int` is the exit code —
 ### Printing
 
 ```forma
-f main() -> Int
+f main()
     print("Hello!")           # Print any value
     print(42)                 # Integers
     print(3.14)               # Floats
     print(true)               # Booleans
     eprintln("error message") # Print to stderr
-    0
 ```
 
 ### String Interpolation
@@ -98,13 +96,12 @@ f main() -> Int
 FORMA supports f-strings for embedding expressions in strings:
 
 ```forma
-f main() -> Int
+f main()
     name := "World"
     age := 25
     print(f"Hello, {name}!")
     print(f"{name} is {age} years old")
     print(f"2 + 3 = {2 + 3}")
-    0
 ```
 
 ---
@@ -114,7 +111,7 @@ f main() -> Int
 Variables are declared with `:=` (walrus operator). All variables are mutable by default:
 
 ```forma
-f main() -> Int
+f main()
     x := 42          # Type inferred as Int
     name := "Alice"   # Type inferred as Str
     pi := 3.14159     # Type inferred as Float
@@ -122,16 +119,14 @@ f main() -> Int
     # Reassignment uses :=
     x := x + 1
     print(x)          # 43
-    0
 ```
 
 You can add explicit type annotations:
 
 ```forma
-f main() -> Int
+f main()
     x: Int = 42
     name: Str = "Alice"
-    0
 ```
 
 ---
@@ -295,7 +290,7 @@ f is_prime(n: Int) -> Bool
 Lists are dynamically-sized sequences:
 
 ```forma
-f main() -> Int
+f main()
     numbers := [1, 2, 3, 4, 5]
     print(len(numbers))        # 5
     print(numbers[0])          # 1 (zero-indexed)
@@ -304,7 +299,6 @@ f main() -> Int
     numbers[0] := 10
     vec_push(numbers, 6)
     print(numbers)             # [10, 2, 3, 4, 5, 6]
-    0
 ```
 
 ### Tuples
@@ -317,10 +311,9 @@ f divide(a: Int, b: Int) -> (Int, Int)
     remainder := a % b
     (quotient, remainder)
 
-f main() -> Int
+f main()
     result := divide(17, 5)
     print(f"{result.0} remainder {result.1}")  # 3 remainder 2
-    0
 ```
 
 ### Maps
@@ -328,12 +321,11 @@ f main() -> Int
 Maps are key-value collections created with `map_new()`:
 
 ```forma
-f main() -> Int
+f main()
     scores := map_new()
     map_insert(scores, "Alice", 95)
     map_insert(scores, "Bob", 87)
     print(map_keys(scores))
-    0
 ```
 
 ### Strings
@@ -341,7 +333,7 @@ f main() -> Int
 Strings support many builtin operations:
 
 ```forma
-f main() -> Int
+f main()
     s := "Hello, World!"
     print(str_len(s))              # 13
     print(str_contains(s, "World")) # true
@@ -349,7 +341,6 @@ f main() -> Int
 
     parts := str_split("a,b,c", ",")
     print(parts)                    # ["a", "b", "c"]
-    0
 ```
 
 ---
@@ -363,10 +354,9 @@ s Point
     x: Float
     y: Float
 
-f main() -> Int
+f main()
     p := Point { x: 3.0, y: 4.0 }
     print(f"({p.x}, {p.y})")
-    0
 ```
 
 ### Tuple Structs
@@ -374,10 +364,9 @@ f main() -> Int
 ```forma
 s Color(u8, u8, u8)
 
-f main() -> Int
+f main()
     red := Color(255, 0, 0)
     print(red.0)  # 255
-    0
 ```
 
 ### Methods
@@ -396,10 +385,9 @@ i Point
     f translate(&self, dx: Float, dy: Float) -> Point
         Point { x: self.x + dx, y: self.y + dy }
 
-f main() -> Int
+f main()
     p := Point { x: 3.0, y: 4.0 }
     print(p.distance())  # 5.0
-    0
 ```
 
 ### Generics on Structs
@@ -409,10 +397,9 @@ s Pair[T]
     first: T
     second: T
 
-f main() -> Int
+f main()
     pair := Pair { first: 1, second: 2 }
     print(pair.first)
-    0
 ```
 
 ---
@@ -447,7 +434,7 @@ e Color = Red | Green | Blue
 Enum variants with data are primarily used through pattern matching. The built-in constructors `Some()`, `Ok()`, and `Err()` can be called directly:
 
 ```forma
-f main() -> Int
+f main()
     opt := Some(42)
     m opt
         Some(v) -> print(f"Got: {v}")
@@ -457,7 +444,6 @@ f main() -> Int
     m result
         Ok(msg) -> print(msg)
         Err(e) -> print(f"Error: {e}")
-    0
 ```
 
 User-defined enums with unit variants are constructed by name:
@@ -469,10 +455,9 @@ e Direction
     East
     West
 
-f main() -> Int
+f main()
     # Unit variants are referenced by name
     dir := North
-    0
 ```
 
 ---
@@ -523,10 +508,9 @@ f handle(result: Int!Str) -> Int
             print(f"Error: {msg}")
             0
 
-f main() -> Int
+f main()
     print(handle(Ok(42)))    # 42
     print(handle(Err("no"))) # 0
-    0
 ```
 
 ### Matching with Structs
@@ -589,10 +573,9 @@ f read_config(path: Str) -> Str!Str
 The `!` operator unwraps a `Result`, panicking on error:
 
 ```forma
-f main() -> Int
+f main()
     db := db_open("app.db")!  # Panic if database can't be opened
     print("Database opened")
-    0
 ```
 
 ### Null Coalescing with `??`
@@ -600,10 +583,9 @@ f main() -> Int
 The `??` operator provides a default value for `None`/`Err`:
 
 ```forma
-f main() -> Int
+f main()
     name := env_get("USER") ?? "unknown"
     print(f"Hello, {name}")
-    0
 ```
 
 ### Option/Result Utilities
@@ -628,13 +610,12 @@ expect(value, "msg")    # Panics with message on None/Err
 Closures are anonymous functions enclosed in `|...|`. Parameters require type annotations:
 
 ```forma
-f main() -> Int
+f main()
     add := |a: Int, b: Int| a + b
     print(add(3, 4))          # 7
 
     square := |x: Int| -> Int x * x
     print(square(5))          # 25
-    0
 ```
 
 ### As Function Arguments
@@ -643,10 +624,9 @@ f main() -> Int
 f apply(x: Int, func: (Int) -> Int) -> Int
     func(x)
 
-f main() -> Int
+f main()
     result := apply(5, |x: Int| x * 2)
     print(result)  # 10
-    0
 ```
 
 ---
@@ -735,11 +715,10 @@ f sort(ref mut arr: [Int]) -> Unit
 Pass arguments with the matching `ref` or `ref mut`:
 
 ```forma
-f main() -> Int
+f main()
     data := [3, 1, 2]
     swap(ref mut data, 0, 2)
     print(data)                     # [2, 1, 3]
-    0
 ```
 
 ### Borrow Rules

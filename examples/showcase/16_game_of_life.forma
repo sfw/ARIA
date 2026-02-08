@@ -90,7 +90,7 @@ f count_alive(grid: [Int], size: Int) -> Int
         i := i + 1
     count
 
-f main() -> Int
+f main()
     size := 10
 
     # Initialize grids (10x10 = 100 cells)
@@ -141,5 +141,3 @@ f main() -> Int
         copy_grid(grid2, ref mut grid1, size * size)
 
         gen := gen + 1
-
-    0

@@ -284,19 +284,20 @@ f safe_div(a: Int, b: Int) -> Int?
     if b == 0 then None
     else Some(a / b)
 
-f main() -> Int
+f main()
     m safe_div(10, 3)
         Some(v) -> print(v)
         None -> print("div by zero")
-    0
 ```
 
 ### Main function
 ```forma
-f main() -> Int
+f main()
     # program logic
-    0
 ```
+
+> `main` can optionally return `-> Int` for an explicit exit code (e.g., `f main() -> Int`).
+> When no return type is specified, the process exits with code 0.
 
 ### HTTP server
 ```forma
@@ -305,21 +306,19 @@ f handler(req: HttpRequest) -> HttpResponse
         "/" -> http_response(200, "OK")
         _ -> http_response(404, "Not Found")
 
-f main() -> Int
+f main()
     http_serve(8080, handler)!
-    0
 ```
 
 ### Database
 ```forma
-f main() -> Int
+f main()
     db := db_open("app.db")!
     db_execute(db, "CREATE TABLE t (id INTEGER, name TEXT)")!
     rows := db_query(db, "SELECT * FROM t")!
     for row in rows
         print(row_get_str(row, 1))
     db_close(db)
-    0
 ```
 
 ## Key Builtins (by category)

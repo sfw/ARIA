@@ -71,7 +71,7 @@ f solve_and_print(n: Int, row: Int, ref mut queens: [Int]) -> Bool
             col := col + 1
         false
 
-f main() -> Int
+f main()
     print("N-Queens Solutions Count:")
     print(f"4-Queens: {nqueens_count(4)} solutions")   # 2
     print(f"5-Queens: {nqueens_count(5)} solutions")   # 10
@@ -83,4 +83,3 @@ f main() -> Int
     print("First 8-Queens solution:")
     queens := [0, 0, 0, 0, 0, 0, 0, 0]
     result := solve_and_print(8, 0, ref mut queens)
-    0

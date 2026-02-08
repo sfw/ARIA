@@ -82,7 +82,7 @@ f list_reverse(ref mut next: [Int], head: Int) -> Int
         current := next_node
     prev
 
-f main() -> Int
+f main()
     # Allocate node pool (max 100 nodes)
     values := [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     next := [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -131,5 +131,3 @@ f main() -> Int
     print("Reversing list:")
     head := list_reverse(ref mut next, head)
     list_print(values, next, head)
-
-    0

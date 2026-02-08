@@ -59,7 +59,7 @@ f mat_is_identity(mat: [Int], n: Int) -> Bool
         i := i + 1
     true
 
-f main() -> Int
+f main()
     # Example 1: 2x3 * 3x2 = 2x2
     print("Example 1: 2x3 * 3x2 = 2x2")
     print("")
@@ -113,5 +113,3 @@ f main() -> Int
     mat_print(identity, 3, 3, "I")
     print("")
     mat_print(result, 3, 3, "A * I")
-
-    0

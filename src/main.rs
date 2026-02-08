@@ -4,7 +4,7 @@
 
 use forma::errors::ErrorContext;
 use forma::lexer::Span;
-use forma::mir::{Interpreter, Lowerer};
+use forma::mir::{Interpreter, Lowerer, Value};
 use forma::module::ModuleLoader;
 use forma::{BorrowChecker, Parser as FormaParser, Scanner, TypeChecker};
 use clap::{Parser, Subcommand, ValueEnum};
@@ -502,7 +502,7 @@ fn run(file: &PathBuf, program_args: &[String], dump_mir: bool, _check_contracts
                     severity: "error".to_string(),
                     code: "MAIN".to_string(),
                     message: "no 'main' function found".to_string(),
-                    help: Some("add a main function: f main() -> Int = 0".to_string()),
+                    help: Some("add a main function: f main()".to_string()),
                 });
                 output_json_errors(json_errors, None);
             }
@@ -527,7 +527,13 @@ fn run(file: &PathBuf, program_args: &[String], dump_mir: bool, _check_contracts
 
     match interp.run("main", &[]) {
         Ok(result) => {
-            println!("{}", result);
+            let exit_code = match &result {
+                Value::Int(n) => *n as i32,
+                _ => 0,
+            };
+            if exit_code != 0 {
+                process::exit(exit_code);
+            }
             Ok(())
         }
         Err(e) => {

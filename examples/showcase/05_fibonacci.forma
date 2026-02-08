@@ -33,7 +33,7 @@ f print_fibs(n: Int) -> Unit
         print(f"F({i}) = {fib_iter(i)}")
         i := i + 1
 
-f main() -> Int
+f main()
     print("First 20 Fibonacci numbers:")
     print_fibs(20)
 
@@ -42,4 +42,3 @@ f main() -> Int
     print(f"F(30) = {fib_iter(30)}")    # 832040
     print(f"F(40) = {fib_iter(40)}")    # 102334155
     print(f"F(50) = {fib_iter(50)}")    # 12586269025
-    0

@@ -47,7 +47,7 @@ f nth_prime(n: Int) -> Int
         candidate := candidate + 1
     0
 
-f main() -> Int
+f main()
     print_primes(50)
 
     print("")
@@ -57,4 +57,3 @@ f main() -> Int
     print("")
     print(f"The 10th prime is: {nth_prime(10)}")   # 29
     print(f"The 100th prime is: {nth_prime(100)}") # 541
-    0

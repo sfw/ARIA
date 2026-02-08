@@ -28,7 +28,7 @@ f hanoi_moves(n: Int) -> Int
             i := i + 1
         result - 1
 
-f main() -> Int
+f main()
     print("Tower of Hanoi with 3 disks:")
     print("============================")
     hanoi(3, "A", "C", "B")
@@ -44,4 +44,3 @@ f main() -> Int
     print("Tower of Hanoi with 4 disks:")
     print("============================")
     hanoi(4, "A", "C", "B")
-    0

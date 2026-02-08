@@ -19,6 +19,5 @@ f fizzbuzz(n: Int) -> Unit
             print(i)
         i := i + 1
 
-f main() -> Int
+f main()
     fizzbuzz(100)
-    0

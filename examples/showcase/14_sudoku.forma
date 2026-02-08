@@ -94,7 +94,7 @@ f print_grid(grid: [Int]) -> Unit
         print(line)
         r := r + 1
 
-f main() -> Int
+f main()
     # Example puzzle (0 = empty)
     # A medium difficulty puzzle
     grid := [
@@ -123,5 +123,3 @@ f main() -> Int
         print_grid(grid)
     else
         print("No solution exists!")
-
-    0

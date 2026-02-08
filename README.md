@@ -103,9 +103,8 @@ cd forma
 cargo build --release
 
 # Hello World
-echo 'f main() -> Int
-    print("Hello, FORMA!")
-    0' > hello.forma
+echo 'f main()
+    print("Hello, FORMA!")' > hello.forma
 ./target/release/forma run hello.forma
 ```
 
@@ -162,7 +161,7 @@ f handle_request(req: HttpRequest) -> HttpResponse
                 None -> http_response(200, "Hello, World!")
         _ -> http_response(404, "Not Found")
 
-f main() -> Int
+f main()
     print("Server starting on http://localhost:8080")
     result := http_serve(8080, handle_request)
     m result
@@ -175,7 +174,7 @@ f main() -> Int
 ### SQLite Database
 
 ```forma
-f main() -> Int
+f main()
     db := db_open("app.db")!
 
     db_execute(db, "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)")!
@@ -188,7 +187,6 @@ f main() -> Int
         print("User " + int_to_str(id) + ": " + name)
 
     db_close(db)
-    0
 ```
 
 ## Language Features

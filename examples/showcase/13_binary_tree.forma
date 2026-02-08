@@ -90,7 +90,7 @@ f bst_count(left: [Int], right: [Int], node: Int) -> Int
     else
         1 + bst_count(left, right, left[node]) + bst_count(left, right, right[node])
 
-f main() -> Int
+f main()
     # Allocate node pool
     values := [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     left := [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -145,5 +145,3 @@ f main() -> Int
     print(f"Search 40: {bst_search(values, left, right, root, 40)}")  # true
     print(f"Search 25: {bst_search(values, left, right, root, 25)}")  # false
     print(f"Search 70: {bst_search(values, left, right, root, 70)}")  # true
-
-    0
