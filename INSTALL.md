@@ -26,7 +26,7 @@ To enable native compilation via `forma build`, you need LLVM 18 and its link-ti
 ```bash
 brew install llvm@18 zstd
 export LLVM_SYS_180_PREFIX="$(brew --prefix llvm@18)"
-export LIBRARY_PATH="/opt/homebrew/lib:$LIBRARY_PATH"
+export LIBRARY_PATH="$(brew --prefix)/lib:$LIBRARY_PATH"
 cargo build --release --features llvm
 ```
 
@@ -61,9 +61,8 @@ cargo check --features llvm
 ./target/release/forma --version
 
 # Run a program
-echo 'f main() -> Int
-    print("Hello, FORMA!")
-    0' > hello.forma
+echo 'f main()
+    print("Hello, FORMA!")' > hello.forma
 ./target/release/forma run hello.forma
 
 # Run the showcase examples

@@ -1089,18 +1089,18 @@ fn find_runtime_lib() -> Option<PathBuf> {
     }
 
     // Get the executable path
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
-            // <exe_dir>/../runtime/target/release/
-            let candidate = exe_dir.join("../runtime/target/release");
-            if candidate.join(lib_name).exists() {
-                return Some(candidate);
-            }
-            // <exe_dir>/runtime/target/release/
-            let candidate = exe_dir.join("runtime/target/release");
-            if candidate.join(lib_name).exists() {
-                return Some(candidate);
-            }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(exe_dir) = exe.parent()
+    {
+        // <exe_dir>/../runtime/target/release/
+        let candidate = exe_dir.join("../runtime/target/release");
+        if candidate.join(lib_name).exists() {
+            return Some(candidate);
+        }
+        // <exe_dir>/runtime/target/release/
+        let candidate = exe_dir.join("runtime/target/release");
+        if candidate.join(lib_name).exists() {
+            return Some(candidate);
         }
     }
 

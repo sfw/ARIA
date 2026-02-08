@@ -133,12 +133,12 @@ impl<'ctx> LLVMCodegen<'ctx> {
     /// Compile a MIR program to LLVM IR.
     pub fn compile(&mut self, program: &Program) -> Result<(), CodegenError> {
         // First pass: declare all functions
-        for (_name, func) in &program.functions {
+        for func in program.functions.values() {
             self.declare_function(func)?;
         }
 
         // Second pass: compile function bodies
-        for (_name, func) in &program.functions {
+        for func in program.functions.values() {
             self.compile_function(func)?;
         }
 
@@ -264,7 +264,7 @@ impl<'ctx> LLVMCodegen<'ctx> {
                 if let Some(alloca) = alloca {
                     // Check if we need to re-type the local (e.g., MIR said Unit/Int but
                     // we actually got a pointer or float from a runtime call result)
-                    let needs_retype = target_ty.map_or(false, |t| {
+                    let needs_retype = target_ty.is_some_and(|t| {
                         value.get_type() != t && !matches!(
                             (value, t),
                             // Allow int width coercion (handled by coerce_value)
@@ -370,7 +370,6 @@ impl<'ctx> LLVMCodegen<'ctx> {
                 let struct_val = self.as_struct_value(base_val)?;
                 self.builder.build_extract_value(struct_val, *idx as u32, "tuple_field")
                     .map_err(|e| CodegenError { message: format!("Failed to extract tuple field: {:?}", e) })
-                    .map(|v| v.into())
             }
             // Struct construction
             Rvalue::Struct(_name, fields) => {
@@ -470,12 +469,12 @@ impl<'ctx> LLVMCodegen<'ctx> {
                         let disc = self.builder.build_extract_value(sv, 0, "disc")
                             .map_err(|e| CodegenError { message: format!("extract discriminant failed: {:?}", e) })?;
                         // Extend i32 to i64 for consistency
-                        if let BasicValueEnum::IntValue(iv) = disc.into() {
+                        if let BasicValueEnum::IntValue(iv) = disc {
                             let extended = self.builder.build_int_z_extend(iv, self.context.i64_type(), "disc_ext")
                                 .map_err(|e| CodegenError { message: format!("extend discriminant failed: {:?}", e) })?;
                             Ok(extended.into())
                         } else {
-                            Ok(disc.into())
+                            Ok(disc)
                         }
                     } else {
                         // Not a struct - return 0 as discriminant
@@ -501,7 +500,7 @@ impl<'ctx> LLVMCodegen<'ctx> {
                         // Field 0 is discriminant, so add 1 to field_idx
                         let field = self.builder.build_extract_value(sv, (*field_idx + 1) as u32, "enum_field")
                             .map_err(|e| CodegenError { message: format!("extract enum field failed: {:?}", e) })?;
-                        Ok(field.into())
+                        Ok(field)
                     } else {
                         Err(CodegenError {
                             message: "EnumField on non-struct value".to_string(),
@@ -728,7 +727,7 @@ impl<'ctx> LLVMCodegen<'ctx> {
 
         // 2. Create environment struct type
         let env_struct_type = self.context.struct_type(
-            &env_field_types.iter().map(|t| (*t).into()).collect::<Vec<_>>(),
+            &env_field_types,
             false
         );
 
@@ -1091,7 +1090,7 @@ impl<'ctx> LLVMCodegen<'ctx> {
         let target_ty = self.local_types.get(&idx).copied();
 
         // Check if the result type matches the local's declared type
-        let needs_realloc = target_ty.map_or(false, |t| result.get_type() != t);
+        let needs_realloc = target_ty.is_some_and(|t| result.get_type() != t);
 
         if needs_realloc {
             // Re-create the alloca with the actual result type
@@ -1533,11 +1532,11 @@ impl<'ctx> LLVMCodegen<'ctx> {
                 let fn_ptr_raw = self.builder
                     .build_extract_value(closure_struct, 0, "fn_ptr_raw")
                     .map_err(|e| CodegenError { message: format!("extract fn_ptr failed: {:?}", e) })?;
-                let fn_ptr_i8 = self.as_pointer_value(fn_ptr_raw.into())?;
+                let fn_ptr_i8 = self.as_pointer_value(fn_ptr_raw)?;
                 let env_ptr_raw = self.builder
                     .build_extract_value(closure_struct, 1, "env_ptr")
                     .map_err(|e| CodegenError { message: format!("extract env_ptr failed: {:?}", e) })?;
-                let env_ptr = self.as_pointer_value(env_ptr_raw.into())?;
+                let env_ptr = self.as_pointer_value(env_ptr_raw)?;
 
                 // 3. Compile arguments (environment pointer is implicit first arg)
                 let mut compiled_args: Vec<BasicMetadataValueEnum> = vec![env_ptr.into()];
@@ -1569,13 +1568,12 @@ impl<'ctx> LLVMCodegen<'ctx> {
                     .map_err(|e| CodegenError { message: format!("indirect call failed: {:?}", e) })?;
 
                 // 7. Store result if there's a destination
-                if let Some(local) = dest {
-                    if let Some(result) = call.try_as_basic_value().left() {
-                        if let Some(alloca) = self.locals.get(&(local.0 as usize)) {
-                            self.builder.build_store(*alloca, result)
-                                .map_err(|e| CodegenError { message: format!("store failed: {:?}", e) })?;
-                        }
-                    }
+                if let Some(local) = dest
+                    && let Some(result) = call.try_as_basic_value().left()
+                    && let Some(alloca) = self.locals.get(&(local.0 as usize))
+                {
+                    self.builder.build_store(*alloca, result)
+                        .map_err(|e| CodegenError { message: format!("store failed: {:?}", e) })?;
                 }
 
                 // 8. Jump to next block
@@ -1591,11 +1589,11 @@ impl<'ctx> LLVMCodegen<'ctx> {
                 let val = self.compile_operand(expr)?;
 
                 // Store result if there's a destination
-                if let Some(local) = dest {
-                    if let Some(alloca) = self.locals.get(&(local.0 as usize)) {
-                        self.builder.build_store(*alloca, val)
-                            .map_err(|e| CodegenError { message: format!("store failed: {:?}", e) })?;
-                    }
+                if let Some(local) = dest
+                    && let Some(alloca) = self.locals.get(&(local.0 as usize))
+                {
+                    self.builder.build_store(*alloca, val)
+                        .map_err(|e| CodegenError { message: format!("store failed: {:?}", e) })?;
                 }
 
                 // Jump to next block
@@ -1614,11 +1612,11 @@ impl<'ctx> LLVMCodegen<'ctx> {
                 let val = self.compile_operand(task)?;
 
                 // Store result if there's a destination
-                if let Some(local) = dest {
-                    if let Some(alloca) = self.locals.get(&(local.0 as usize)) {
-                        self.builder.build_store(*alloca, val)
-                            .map_err(|e| CodegenError { message: format!("store failed: {:?}", e) })?;
-                    }
+                if let Some(local) = dest
+                    && let Some(alloca) = self.locals.get(&(local.0 as usize))
+                {
+                    self.builder.build_store(*alloca, val)
+                        .map_err(|e| CodegenError { message: format!("store failed: {:?}", e) })?;
                 }
 
                 // Jump to next block
