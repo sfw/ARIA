@@ -10,7 +10,7 @@ For native compilation (optional):
 ## Build from Source
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/sfw/forma.git
 cd forma
 cargo build --release
 ```

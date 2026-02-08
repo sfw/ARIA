@@ -1,0 +1,407 @@
+(* FORMA Programming Language Grammar - EBNF *)
+(* Version 0.1.0 *)
+
+(* ============================================ *)
+(* Top Level *)
+(* ============================================ *)
+
+Program = { Item } ;
+
+Item = Function
+     | Struct
+     | Enum
+     | Trait
+     | Impl
+     | TypeAlias
+     | Use
+     | Module
+     | Const
+     ;
+
+(* ============================================ *)
+(* Items *)
+(* ============================================ *)
+
+Function = [ "async" ] "f" Identifier [ GenericParams ] "(" [ ParamList ] ")" [ "->" Type ] FunctionBody ;
+
+FunctionBody = "=" Expression
+             | Block
+             ;
+
+ParamList = Param { "," Param } [ "," ] ;
+
+Param = [ "mut" ] Identifier ":" Type ;
+
+Struct = "s" Identifier [ GenericParams ] [ "=" StructBody ] ;
+
+StructBody = "{" [ FieldList ] "}"          (* named fields *)
+           | "(" [ TypeList ] ")"             (* tuple struct *)
+           ;                                  (* unit struct if omitted *)
+
+FieldList = Field { "," Field } [ "," ] ;
+
+Field = Identifier ":" Type ;
+
+Enum = "e" Identifier [ GenericParams ] "=" Variant { "|" Variant } ;
+
+Variant = Identifier [ VariantData ] ;
+
+VariantData = "(" [ TypeList ] ")"            (* tuple variant *)
+            | "{" [ FieldList ] "}"         (* struct variant *)
+            ;
+
+Trait = "t" Identifier [ GenericParams ] [ ":" TypeBounds ] "{" { TraitItem } "}" ;
+
+TraitItem = Function
+          | TypeAlias
+          ;
+
+Impl = "impl" [ GenericParams ] [ Type "for" ] Type [ WhereClause ] "{" { ImplItem } "}" ;
+
+ImplItem = Function ;
+
+TypeAlias = "type" Identifier [ GenericParams ] "=" Type ;
+
+Use = "use" UsePath ;
+
+UsePath = Identifier { "::" Identifier } [ UseTree ] ;
+
+UseTree = "::" "*"                            (* glob import *)
+        | "::" "{" UseList "}"              (* specific imports *)
+        | "as" Identifier                     (* rename *)
+        ;
+
+UseList = UsePath { "," UsePath } [ "," ] ;
+
+Module = "mod" Identifier [ "{" { Item } "}" ] ;
+
+Const = "const" Identifier ":" Type "=" Expression ;
+
+(* ============================================ *)
+(* Types *)
+(* ============================================ *)
+
+Type = TypePath
+     | ArrayType
+     | TupleType
+     | FunctionType
+     | ReferenceType
+     | PointerType
+     | ErrorType
+     | OptionType
+     | NeverType
+     ;
+
+PointerType = "*" Type ;                      (* Raw pointer to T *)
+
+OptionType = Type "?" ;                       (* Option[T] sugar *)
+
+TypePath = [ "::" ] Identifier { "::" Identifier } [ GenericArgs ] ;
+
+ArrayType = "[" Type [ ";" Expression ] "]" ;
+
+TupleType = "(" [ Type { "," Type } [ "," ] ] ")" ;
+
+FunctionType = "fn" "(" [ TypeList ] ")" [ "->" Type ] ;
+
+ReferenceType = "&" [ "mut" ] Type ;
+
+ErrorType = Type "!" Type ;                   (* Result type sugar *)
+
+NeverType = "!" ;
+
+GenericParams = "[" GenericParam { "," GenericParam } [ "," ] "]" ;
+
+GenericParam = Identifier [ ":" TypeBounds ] ;
+
+GenericArgs = "[" Type { "," Type } [ "," ] "]" ;
+
+TypeBounds = Type { "+" Type } ;
+
+TypeList = Type { "," Type } [ "," ] ;
+
+WhereClause = "where" WherePredicate { "," WherePredicate } ;
+
+WherePredicate = Type ":" TypeBounds ;
+
+(* ============================================ *)
+(* Expressions *)
+(* ============================================ *)
+
+Expression = AssignExpr ;
+
+AssignExpr = OrExpr [ AssignOp AssignExpr ] ;
+
+AssignOp = "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "&&=" | "||=" ;
+
+OrExpr = AndExpr { "||" AndExpr } ;
+
+AndExpr = CompareExpr { "&&" CompareExpr } ;
+
+CompareExpr = BitwiseOrExpr [ CompareOp BitwiseOrExpr ] ;
+
+CompareOp = "==" | "!=" | "<" | "<=" | ">" | ">=" ;
+
+BitwiseOrExpr = BitwiseXorExpr { "|" BitwiseXorExpr } ;
+
+BitwiseXorExpr = BitwiseAndExpr { "^" BitwiseAndExpr } ;
+
+BitwiseAndExpr = ShiftExpr { "&" ShiftExpr } ;
+
+ShiftExpr = AddExpr { ( "<<" | ">>" ) AddExpr } ;
+
+AddExpr = MulExpr { ( "+" | "-" ) MulExpr } ;
+
+MulExpr = UnaryExpr { ( "*" | "/" | "%" ) UnaryExpr } ;
+
+UnaryExpr = ( "-" | "!" | "&" [ "mut" ] | "*" ) UnaryExpr
+          | PostfixExpr
+          ;
+
+PostfixExpr = PrimaryExpr { Postfix } ;
+
+Postfix = "(" [ ArgList ] ")"                 (* function call *)
+        | "[" Expression "]"                  (* index *)
+        | "." Identifier [ GenericArgs ]      (* field/method access *)
+        | "." Integer                         (* tuple index *)
+        | "?"                                 (* try operator *)
+        | "as" Type                           (* type cast *)
+        ;
+
+ArgList = Expression { "," Expression } [ "," ] ;
+
+PrimaryExpr = Literal
+            | Identifier [ GenericArgs ]
+            | "(" Expression ")"              (* parenthesized *)
+            | "(" [ Expression { "," Expression } [ "," ] ] ")"  (* tuple *)
+            | "[" [ Expression { "," Expression } [ "," ] ] "]"  (* array *)
+            | "[" Expression ";" Expression "]"                    (* array repeat *)
+            | Block
+            | IfExpr
+            | MatchExpr
+            | WhileExpr
+            | ForExpr
+            | LoopExpr
+            | ReturnExpr
+            | BreakExpr
+            | ContinueExpr
+            | ClosureExpr
+            | StructExpr
+            | AwaitExpr
+            | SpawnExpr
+            ;
+
+Block = INDENT { Statement } [ Expression ] DEDENT
+      | "{" { Statement } [ Expression ] "}"
+      ;
+
+(* ============================================ *)
+(* Control Flow *)
+(* ============================================ *)
+
+IfExpr = "if" Expression Block [ "else" ( IfExpr | Block ) ] ;
+
+MatchExpr = "m" Expression INDENT { MatchArm } DEDENT ;
+
+MatchArm = Pattern { "|" Pattern } [ "if" Expression ] "=>" Expression ;
+
+WhileExpr = "wh" Expression Block
+          | "wh" "let" Pattern "=" Expression Block
+          ;
+
+ForExpr = "for" Pattern "in" Expression Block ;
+
+LoopExpr = "loop" Block ;
+
+ReturnExpr = "ret" [ Expression ] ;
+
+BreakExpr = "break" [ Expression ] ;
+
+ContinueExpr = "continue" ;
+
+AwaitExpr = "await" Expression ;
+
+SpawnExpr = "spawn" Expression ;
+
+ClosureExpr = "|" [ ParamList ] "|" [ "->" Type ] Expression ;
+
+StructExpr = TypePath "{" [ FieldInit { "," FieldInit } [ "," ] ] "}" ;
+
+FieldInit = Identifier [ ":" Expression ] ;
+
+(* ============================================ *)
+(* Statements *)
+(* ============================================ *)
+
+Statement = LetStatement
+          | ExprStatement
+          ;
+
+LetStatement = Identifier [ ":" Type ] ":=" Expression ;
+
+ExprStatement = Expression [ ";" ] ;
+
+(* ============================================ *)
+(* Patterns *)
+(* ============================================ *)
+
+Pattern = LiteralPattern
+        | IdentifierPattern
+        | WildcardPattern
+        | TuplePattern
+        | StructPattern
+        | EnumPattern
+        | RangePattern
+        | ReferencePattern
+        | OrPattern
+        ;
+
+LiteralPattern = Integer | Float | String | Char | "true" | "false" ;
+
+IdentifierPattern = [ "mut" ] Identifier ;
+
+WildcardPattern = "_" ;
+
+TuplePattern = "(" [ Pattern { "," Pattern } [ "," ] ] ")" ;
+
+StructPattern = TypePath "{" [ FieldPattern { "," FieldPattern } [ "," ] ] "}" ;
+
+FieldPattern = Identifier [ ":" Pattern ] ;
+
+EnumPattern = TypePath [ "(" [ Pattern { "," Pattern } [ "," ] ] ")" ] ;
+
+RangePattern = Pattern ".." [ "=" ] Pattern ;
+
+ReferencePattern = "&" [ "mut" ] Pattern ;
+
+OrPattern = Pattern { "|" Pattern } ;
+
+(* ============================================ *)
+(* Lexical Elements *)
+(* ============================================ *)
+
+Identifier = IdentifierStart { IdentifierContinue } ;
+
+IdentifierStart = "a".."z" | "A".."Z" | "_" ;
+
+IdentifierContinue = IdentifierStart | "0".."9" ;
+
+Literal = Integer | Float | String | Char | "true" | "false" ;
+
+Integer = DecimalInteger | HexInteger | BinaryInteger | OctalInteger ;
+
+DecimalInteger = Digit { Digit | "_" } ;
+
+HexInteger = "0x" HexDigit { HexDigit | "_" } ;
+
+BinaryInteger = "0b" ( "0" | "1" ) { "0" | "1" | "_" } ;
+
+OctalInteger = "0o" OctalDigit { OctalDigit | "_" } ;
+
+Float = Digit { Digit } "." Digit { Digit } [ Exponent ] ;
+
+Exponent = ( "e" | "E" ) [ "+" | "-" ] Digit { Digit } ;
+
+String = '"' { StringChar | EscapeSequence } '"' ;
+
+Char = "'" ( CharChar | EscapeSequence ) "'" ;
+
+StringChar = ? any character except '"', '\', or newline ? ;
+
+CharChar = ? any character except "'", '\', or newline ? ;
+
+EscapeSequence = '\' ( 'n' | 'r' | 't' | '\' | '"' | "'" | '0' | 'x' HexDigit HexDigit ) ;
+
+Digit = "0".."9" ;
+
+HexDigit = Digit | "a".."f" | "A".."F" ;
+
+OctalDigit = "0".."7" ;
+
+(* ============================================ *)
+(* Comments and Whitespace *)
+(* ============================================ *)
+
+LineComment = "//" { ? any character except newline ? } ;
+
+BlockComment = "/*" { ? any character ? } "*/" ;
+
+INDENT = ? increase in indentation level ? ;
+
+DEDENT = ? decrease in indentation level ? ;
+
+(* ============================================ *)
+(* Built-in Types *)
+(* ============================================ *)
+
+(* Primitive types: Int, Float, Bool, Char, Str, () *)
+(* Integer types: i8, i16, i32, i64, u8, u16, u32, u64 *)
+(* Generic types: Option[T], Result[T, E], Vec[T], Map[K, V] *)
+(* Array types: [T], [T; N] *)
+(* Tuple types: (T1, T2, ...) *)
+(* Function types: fn(Args) -> Ret *)
+(* Reference types: &T, &mut T *)
+
+(* Async types: Task[T], Future[T] *)
+(* Channel types: Sender[T], Receiver[T] *)
+(* Sync types: Mutex[T], MutexGuard[T] *)
+
+(* Network types: TcpStream, TcpListener, UdpSocket, TlsStream *)
+(* Database types: Database, Statement, Row *)
+(* HTTP types: HttpRequest, HttpResponse *)
+
+(* C FFI types: CInt, CUInt, CLong, CULong, CFloat, CDouble, CSize *)
+(* Pointer types: *T (raw pointer), *Void (void pointer) *)
+
+(* JSON type: Json *)
+
+(* Shorthand Keywords *)
+(* These are aliases for common keywords to reduce token count *)
+shorthand_keyword = 'f' (* function *)
+                  | 's' (* struct *)
+                  | 'e' (* enum *)
+                  | 't' (* trait *)
+                  | 'i' (* impl *)
+                  | 'm' (* match *)
+                  | 'us' (* use *)
+                  | 'wh' (* while *)
+                  | 'lp' (* loop *)
+                  | 'br' (* break *)
+                  | 'ct' (* continue *)
+                  | 'ret' (* return *)
+                  | 'as' (* async *)
+                  | 'sp' (* spawn *)
+                  | 'aw' (* await *) ;
+
+(* Indentation Rules *)
+(* FORMA uses significant whitespace like Python *)
+(* Blocks are delimited by INDENT and DEDENT tokens *)
+(* INDENT is generated when indentation increases *)
+(* DEDENT is generated when indentation decreases *)
+(* Tab characters are not allowed - use spaces only *)
+indentation = INDENT statement* DEDENT ;
+
+(* Contextual Keywords *)
+(* Single-letter keywords can be used as identifiers when unambiguous *)
+(* The parser uses lookahead to determine if f/s/e/t/i/m is a keyword or identifier *)
+(* Example: 'f' followed by identifier and '(' is function definition *)
+(* Example: 'f' followed by ':' is identifier in struct field *)
+
+(* Operator Precedence (highest to lowest) *)
+(* 1. Primary: literals, identifiers, parenthesized expressions *)
+(* 2. Postfix: function calls, method calls, field access, indexing *)
+(* 3. Unary: -, !, & *)
+(* 4. Multiplicative: *, /, % *)
+(* 5. Additive: +, - *)
+(* 6. Shift: <<, >> *)
+(* 7. Bitwise AND: & *)
+(* 8. Bitwise XOR: ^ *)
+(* 9. Bitwise OR: | *)
+(* 10. Comparison: ==, !=, <, >, <=, >= *)
+(* 11. Logical AND: && *)
+(* 12. Logical OR: || *)
+(* 13. Range: .., ..= *)
+(* 14. Assignment: =, +=, -=, *=, /=, %= *)
+
+(* End of FORMA Grammar *)
+

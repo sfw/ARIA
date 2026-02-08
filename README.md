@@ -44,13 +44,11 @@ FORMA uses **second-class references**—references can't be stored in structs o
 ```forma
 # Rust: fn longest<'a>(x: &'a str, y: &'a str) -> &'a str
 # FORMA: No lifetimes needed
-f longest(x: &Str, y: &Str) -> Str
-    m str_len(x) > str_len(y)
-        true -> x
-        false -> y
+f longest(x: Str, y: Str) -> Str
+    if len(x) > len(y) then x else y
 ```
 
-The compiler statically verifies memory safety. AI doesn't need to reason about lifetimes.
+The compiler guarantees memory safety through scope analysis. AI doesn't need to reason about lifetimes.
 
 ### 96% Fewer Syntax Errors
 
@@ -75,9 +73,8 @@ Every character costs API tokens. FORMA's concise syntax reduces costs and laten
 | Enum | `enum` | `e` |
 | Match | `match` | `m` |
 | While | `while` | `wh` |
-| Return | `return` | `ret` |
-| Use | `use` | `us` |
-| Import | `import` | `im` |
+| Return | `return` | `ret` / `return` |
+| Use/Import | `use` | `us` |
 
 ### AI Self-Correction
 
@@ -101,7 +98,7 @@ forma check --error-format json myfile.forma
 
 ```bash
 # Clone and build
-git clone <repo-url>
+git clone https://github.com/sfw/forma.git
 cd forma
 cargo build --release
 
@@ -204,7 +201,7 @@ f main() -> Int
 - **Capability system**: Fine-grained permissions for file, network, and FFI access
 - **Modules**: Simple `us std.collections` imports
 - **Async/await**: Native coroutines with spawn
-- **HTTP client & server**: Built-in networking primitives (reqwest, hyper)
+- **HTTP client & server**: Built-in networking primitives
 - **TCP/UDP sockets**: Full networking stack with TLS support
 - **SQLite**: Embedded database support (rusqlite)
 - **Compression**: gzip and zlib built-in
@@ -255,7 +252,7 @@ forma grammar --format json
 forma check --error-format json myfile.forma
 
 # Type queries for constrained decoding
-forma typeof myfile.forma --line 5 --column 10
+forma typeof myfile.forma --position "5:10"
 ```
 
 ## Documentation
@@ -264,7 +261,7 @@ forma typeof myfile.forma --line 5 --column 10
 
 ## License
 
-MIT OR Apache-2.0
+Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT License](LICENSE-MIT) at your option.
 
 ---
 

@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run tests
+        run: cargo test --all
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
+
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  showcase:
+    name: Showcase Examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --release
+      - name: Run showcase examples
+        run: |
+          PASS=0
+          FAIL=0
+          for f in examples/showcase/*.forma; do
+            name=$(basename "$f")
+            if ./target/release/forma run "$f" > /dev/null 2>&1; then
+              echo "PASS: $name"
+              ((PASS++))
+            else
+              echo "FAIL: $name"
+              ((FAIL++))
+            fi
+          done
+          echo ""
+          echo "Results: $PASS passed, $FAIL failed"
+          if [ "$FAIL" -gt 0 ]; then exit 1; fi

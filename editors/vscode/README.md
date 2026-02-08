@@ -88,11 +88,11 @@ f fib(n: Int) -> Int
     if n <= 1 then n else fib(n - 1) + fib(n - 2)
 
 f main() -> Int
-    result = fib(10)
+    result := fib(10)
     print(f"Fibonacci(10) = {result}")
     0
 ```
 
 ## License
 
-MIT
+MIT OR Apache-2.0

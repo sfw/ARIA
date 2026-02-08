@@ -17,6 +17,7 @@ Cargo.lock
 # OS files
 .DS_Store
 Thumbs.db
+*.db
 
 # Editor / IDE files
 *.swp
@@ -26,6 +27,7 @@ Thumbs.db
 .idea/
 *.iml
 .fleet/
+.obsidian/
 
 # FORMA project artifacts
 *.forma.out

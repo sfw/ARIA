@@ -142,7 +142,7 @@ FORMA v1.0 is the first production-ready release of the AI-optimized programming
 - Parser with error recovery
 - Type checker with full Hindley-Milner inference
 - MIR (Mid-level IR) lowering
-- Interpreter with 100+ builtins
+- Interpreter with 298+ builtins
 - LLVM codegen (experimental - closures pending)
 
 ---
@@ -204,7 +204,7 @@ FORMA v1.0 is the first production-ready release of the AI-optimized programming
 
 ## Known Limitations
 
-See [KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md) for complete details.
+See [KNOWN_LIMITATIONS.md](planning/analysis/KNOWN_LIMITATIONS.md) for complete details.
 
 **v1.2 Status: All v1.x features complete!**
 

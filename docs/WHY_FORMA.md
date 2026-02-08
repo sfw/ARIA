@@ -34,14 +34,13 @@ The problem isn't AI stupidity—it's that lifetimes require reasoning about the
 **FORMA's solution: Second-class references.** References exist but can't be stored in structs or returned from functions. This eliminates lifetime annotations entirely:
 
 ```forma
-// FORMA: Just works, no lifetime tracking needed
-f get_longest(strings: [String]) -> String {
-    v longest = strings[0].clone()
-    i s in strings {
-        m s.len() > longest.len() { longest = s.clone() }
-    }
+# FORMA: Just works, no lifetime tracking needed
+f get_longest(strings: [Str]) -> Str
+    longest := strings[0]
+    for s in strings
+        if len(s) > len(longest) then
+            longest := s
     longest
-}
 ```
 
 The compiler guarantees memory safety through scope analysis, not lifetime inference. AI doesn't need to reason about lifetimes because they don't exist.
@@ -62,14 +61,15 @@ where T::Item: Clone + Debug  // AI guessed these bounds
 **FORMA's solution: Strong type inference + structured errors.** FORMA uses Hindley-Milner type inference, so AI rarely needs explicit annotations. When types do mismatch, errors are machine-readable JSON with fix suggestions:
 
 ```forma
-// FORMA: Type inference handles most cases
-f process[T](items: [T]) -> [T] {
-    items | map(clone) | collect()
-}
+# FORMA: Type inference handles most cases
+f process[T](items: [T]) -> [T]
+    result := vec_new()
+    for item in items
+        vec_push(result, item)
+    result
 ```
 
 ```json
-// If AI gets types wrong, structured error guides self-correction
 {
   "error": "type_mismatch",
   "expected": "Int",
@@ -111,13 +111,15 @@ fn calculate(x: i32) -> i32 {
 **FORMA's solution: Grammar-constrained generation.** FORMA exports its grammar for constrained decoding. AI can only generate syntactically valid tokens:
 
 ```bash
-forma grammar --format lark > forma.grammar
+forma grammar --format ebnf > forma.ebnf
+forma grammar --format json > forma.json
 ```
 
 ```python
 # In your AI pipeline: constrain to valid syntax
+# Use EBNF or JSON grammar with your preferred toolkit
 from outlines import generate
-generator = generate.cfg(model, forma_grammar)
+generator = generate.cfg(model, open("forma.ebnf").read())
 code = generator(prompt)  # Guaranteed syntactically valid
 ```
 
@@ -198,11 +200,13 @@ FORMA isn't Rust. Some things are intentionally different:
 ## Getting Started
 
 ```bash
-curl -sSL https://forma-lang.org/install.sh | sh
-forma run hello.forma
+git clone https://github.com/sfw/forma.git
+cd forma
+cargo build --release
+./target/release/forma run examples/showcase/01_hello_world.forma
 ```
 
-See the [Language Tour](tour.md) to learn FORMA in 30 minutes.
+See the [README](../README.md) for full installation instructions and the [showcase examples](../examples/showcase/) for a tour of FORMA's features.
 
 ---
 

@@ -1,0 +1,395 @@
+{
+  "fileExtensions": [
+    ".forma"
+  ],
+  "name": "FORMA",
+  "rules": {
+    "Enum": {
+      "elements": [
+        {
+          "type": "literal",
+          "value": "e"
+        },
+        {
+          "rule": "Identifier",
+          "type": "ref"
+        },
+        {
+          "element": {
+            "rule": "GenericParams",
+            "type": "ref"
+          },
+          "type": "optional"
+        },
+        {
+          "type": "literal",
+          "value": "="
+        },
+        {
+          "rule": "Variant",
+          "type": "ref"
+        },
+        {
+          "element": {
+            "elements": [
+              {
+                "type": "literal",
+                "value": "|"
+              },
+              {
+                "rule": "Variant",
+                "type": "ref"
+              }
+            ],
+            "type": "sequence"
+          },
+          "type": "repeat"
+        }
+      ],
+      "type": "sequence"
+    },
+    "Expression": {
+      "alternatives": [
+        "Literal",
+        "Identifier",
+        "BinaryExpr",
+        "UnaryExpr",
+        "CallExpr",
+        "IndexExpr",
+        "FieldExpr",
+        "IfExpr",
+        "MatchExpr",
+        "WhileExpr",
+        "ForExpr",
+        "Block",
+        "ClosureExpr"
+      ],
+      "type": "choice"
+    },
+    "Function": {
+      "elements": [
+        {
+          "element": {
+            "type": "literal",
+            "value": "async"
+          },
+          "type": "optional"
+        },
+        {
+          "type": "literal",
+          "value": "f"
+        },
+        {
+          "rule": "Identifier",
+          "type": "ref"
+        },
+        {
+          "element": {
+            "rule": "GenericParams",
+            "type": "ref"
+          },
+          "type": "optional"
+        },
+        {
+          "type": "literal",
+          "value": "("
+        },
+        {
+          "element": {
+            "rule": "ParamList",
+            "type": "ref"
+          },
+          "type": "optional"
+        },
+        {
+          "type": "literal",
+          "value": ")"
+        },
+        {
+          "element": {
+            "elements": [
+              {
+                "type": "literal",
+                "value": "->"
+              },
+              {
+                "rule": "Type",
+                "type": "ref"
+              }
+            ],
+            "type": "sequence"
+          },
+          "type": "optional"
+        },
+        {
+          "rule": "FunctionBody",
+          "type": "ref"
+        }
+      ],
+      "type": "sequence"
+    },
+    "Impl": {
+      "elements": [
+        {
+          "type": "literal",
+          "value": "impl"
+        },
+        {
+          "element": {
+            "rule": "GenericParams",
+            "type": "ref"
+          },
+          "type": "optional"
+        },
+        {
+          "element": {
+            "elements": [
+              {
+                "rule": "Type",
+                "type": "ref"
+              },
+              {
+                "type": "literal",
+                "value": "for"
+              }
+            ],
+            "type": "sequence"
+          },
+          "type": "optional"
+        },
+        {
+          "rule": "Type",
+          "type": "ref"
+        },
+        {
+          "type": "literal",
+          "value": "{"
+        },
+        {
+          "element": {
+            "rule": "ImplItem",
+            "type": "ref"
+          },
+          "type": "repeat"
+        },
+        {
+          "type": "literal",
+          "value": "}"
+        }
+      ],
+      "type": "sequence"
+    },
+    "Item": {
+      "alternatives": [
+        "Function",
+        "Struct",
+        "Enum",
+        "Trait",
+        "Impl",
+        "TypeAlias",
+        "Use",
+        "Module",
+        "Const"
+      ],
+      "type": "choice"
+    },
+    "Pattern": {
+      "alternatives": [
+        "LiteralPattern",
+        "IdentifierPattern",
+        "WildcardPattern",
+        "TuplePattern",
+        "StructPattern",
+        "EnumPattern"
+      ],
+      "type": "choice"
+    },
+    "Program": {
+      "elements": [
+        {
+          "element": "Item",
+          "type": "repeat"
+        }
+      ],
+      "type": "sequence"
+    },
+    "Statement": {
+      "alternatives": [
+        "LetStatement",
+        "ExprStatement"
+      ],
+      "type": "choice"
+    },
+    "Struct": {
+      "elements": [
+        {
+          "type": "literal",
+          "value": "s"
+        },
+        {
+          "rule": "Identifier",
+          "type": "ref"
+        },
+        {
+          "element": {
+            "rule": "GenericParams",
+            "type": "ref"
+          },
+          "type": "optional"
+        },
+        {
+          "element": {
+            "elements": [
+              {
+                "type": "literal",
+                "value": "="
+              },
+              {
+                "rule": "StructBody",
+                "type": "ref"
+              }
+            ],
+            "type": "sequence"
+          },
+          "type": "optional"
+        }
+      ],
+      "type": "sequence"
+    },
+    "Trait": {
+      "elements": [
+        {
+          "type": "literal",
+          "value": "t"
+        },
+        {
+          "rule": "Identifier",
+          "type": "ref"
+        },
+        {
+          "element": {
+            "rule": "GenericParams",
+            "type": "ref"
+          },
+          "type": "optional"
+        },
+        {
+          "type": "literal",
+          "value": "{"
+        },
+        {
+          "element": {
+            "rule": "TraitItem",
+            "type": "ref"
+          },
+          "type": "repeat"
+        },
+        {
+          "type": "literal",
+          "value": "}"
+        }
+      ],
+      "type": "sequence"
+    },
+    "Type": {
+      "alternatives": [
+        "TypePath",
+        "ArrayType",
+        "TupleType",
+        "FunctionType",
+        "ReferenceType",
+        "NeverType"
+      ],
+      "type": "choice"
+    },
+    "keywords": [
+      "f",
+      "s",
+      "e",
+      "t",
+      "impl",
+      "type",
+      "use",
+      "mod",
+      "const",
+      "if",
+      "else",
+      "m",
+      "wh",
+      "for",
+      "loop",
+      "ret",
+      "break",
+      "continue",
+      "let",
+      "mut",
+      "async",
+      "await",
+      "true",
+      "false",
+      "as",
+      "where",
+      "fn",
+      "Self"
+    ],
+    "operators": {
+      "arithmetic": [
+        "+",
+        "-",
+        "*",
+        "/",
+        "%"
+      ],
+      "assignment": [
+        "=",
+        "+=",
+        "-=",
+        "*=",
+        "/=",
+        "%=",
+        "&&=",
+        "||="
+      ],
+      "bitwise": [
+        "&",
+        "|",
+        "^",
+        "<<",
+        ">>"
+      ],
+      "comparison": [
+        "==",
+        "!=",
+        "<",
+        "<=",
+        ">",
+        ">="
+      ],
+      "logical": [
+        "&&",
+        "||",
+        "!"
+      ],
+      "other": [
+        "->",
+        "=>",
+        "::",
+        ":",
+        ".",
+        "..",
+        "..=",
+        "?",
+        ":="
+      ]
+    },
+    "primitiveTypes": [
+      "Int",
+      "Float",
+      "Bool",
+      "Char",
+      "Str",
+      "()"
+    ]
+  },
+  "version": "0.1.0"
+}

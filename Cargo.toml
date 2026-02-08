@@ -2,6 +2,13 @@
 name = "forma"
 version = "0.1.0"
 edition = "2024"
+description = "An AI-optimized programming language with memory safety, minimal syntax, and grammar-constrained generation"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/sfw/forma"
+homepage = "https://github.com/sfw/forma"
+readme = "README.md"
+keywords = ["programming-language", "compiler", "ai", "memory-safety"]
+categories = ["compilers", "development-tools"]
 
 [dependencies]
 thiserror = "1.0"
