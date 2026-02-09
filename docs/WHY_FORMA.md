@@ -6,7 +6,7 @@ In 2023, AI wrote its first million lines of production code. By 2025, that numb
 
 Rust, Go, C++, and TypeScript were designed for a world where humans write code and compilers catch mistakes. They optimize for human readability, human intuition, and human debugging.
 
-That world is ending.
+That world is changing rapidly.
 
 What's replacing it has six problems that no existing language solves. AI can't handle lifetimes. It hallucinates types and APIs. It generates invalid syntax. It wastes tokens on verbose keywords. And even when it does produce working code, nobody can review it fast enough — teams are shipping AI-generated functions they haven't fully read, because code review doesn't scale to hundreds of functions a day.
 
@@ -114,7 +114,7 @@ FORMA uses single-character keywords and type shortcuts:
 | Result type | `Result<T, Error>` | `T!` | 76% |
 | For loop | `for x in items` | `i x in items` | 25% |
 
-Across typical codebases, FORMA uses **38% fewer tokens** than equivalent Rust. That's 38% lower API costs, 38% faster generation, and 38% more code fitting in context windows.
+Across typical codebases, FORMA uses **~35% fewer tokens** than equivalent Rust. That's lower API costs, faster generation, and more code fitting in context windows.
 
 ### 6. Verifiable AI Intent
 
@@ -212,6 +212,17 @@ FORMA isn't Rust. Some things are intentionally different:
 **Smaller ecosystem:** FORMA is new. Rust has crates.io. We're building stdlib and FFI to bridge this gap.
 
 **Less flexible:** Rust's expressiveness comes from complexity. FORMA trades some expressiveness for AI compatibility.
+
+## Inspirations
+
+FORMA draws from the best ideas in programming language design:
+
+- **Rust** — Ownership model and memory safety without garbage collection
+- **Python** — Clean, readable syntax with indentation-based structure
+- **Dafny/Eiffel** — Contract-based verification with preconditions and postconditions
+- **Haskell/ML** — Hindley-Milner type inference and algebraic data types
+
+We've combined these influences into something new: a language optimized for AI generation and human verification.
 
 ## Getting Started
 

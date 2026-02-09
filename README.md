@@ -32,6 +32,8 @@ f fetch_users(db: Database) -> Result[Vec[User], Str]
 
 Same memory safety as Rust. None of the complexity that trips up AI. Built-in tools to verify what was generated.
 
+FORMA draws from the best ideas in language design: Rust's ownership model, Python's clean syntax, Dafny's contract verification, and Haskell's type inference.
+
 ## Why FORMA Works
 
 FORMA solves six problems that every other AI coding stack leaves open.
@@ -89,7 +91,7 @@ forma grammar --format json > forma.json
 
 This eliminates syntax errors entirely — not by catching them, but by making them impossible.
 
-### 5. 38% Fewer Tokens
+### 5. ~35% Fewer Tokens
 
 Every character costs API tokens. FORMA's concise syntax reduces costs and latency:
 
@@ -103,7 +105,7 @@ Every character costs API tokens. FORMA's concise syntax reduces costs and laten
 | Return | `return` | `ret` / `return` |
 | Use/Import | `use` | `us` |
 
-Across typical codebases, FORMA uses 38% fewer tokens than equivalent Rust. That's 38% lower API costs, 38% faster generation, and 38% more code fitting in context windows.
+Across typical codebases, FORMA uses ~35% fewer tokens than equivalent Rust. That's lower API costs, faster generation, and more code fitting in context windows.
 
 ### 6. Verifiable AI Intent
 
@@ -156,6 +158,22 @@ echo 'f main()
 See [INSTALL.md](INSTALL.md) for detailed build instructions and dependencies.
 
 ## Feature Highlights
+
+### Variables
+
+FORMA uses two assignment operators:
+
+```forma
+# Immutable binding with =
+x = 42
+name = "Alice"
+
+# Mutable binding with :=
+counter := 0
+counter := counter + 1  # reassignment also uses :=
+```
+
+Use `=` for values that never change, `:=` for values you'll update.
 
 ### Pattern Matching
 
@@ -301,7 +319,23 @@ FORMA is in **active development**. The core language and standard library are f
 
 ## For AI Developers
 
-FORMA provides first-class tooling for the full AI code generation lifecycle — from generation through review:
+FORMA provides first-class tooling for the full AI code generation lifecycle — from generation through review.
+
+### Quick LLM Onboarding
+
+Add this to your system prompt:
+
+```
+You are writing code in FORMA, an AI-optimized systems language.
+KEYWORDS: f=function, s=struct, e=enum, t=trait, i=impl, m=match
+VARIABLES: x = 42 (immutable), y := 0 (mutable), y := y + 1 (reassignment uses :=)
+TYPES: Int, Float, Bool, Str, [T]=list, T?=Option, T!E=Result
+CONTRACTS: @pre(condition), @post(condition)
+```
+
+See the [Language Reference](https://sfw.github.io/forma/reference.html) for full LLM onboarding guidance.
+
+### Tooling
 
 ```bash
 # Grammar-constrained generation (EBNF or JSON)
