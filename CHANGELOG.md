@@ -16,7 +16,7 @@ All notable changes to FORMA are documented in this file.
 - Improved contract explanation with richer English translations (quantifiers, `old()`, membership, implications, conjunctions).
 - Added box-drawing output format for human-readable `explain`.
 - Added `@pure` contract pattern (postcondition marker for side-effect-free functions).
-- Fixed `max_steps` default regression (reverted from 100M to 1M; verify/explain set their own limits).
+- Fixed `max_steps` default regression (reduced from 100M to 10M; verify/explain set their own limits).
 - Replaced pointer-based `old()` expression keys with span-based keys for stability.
 
 ### CLI Error-Consistency Hardening

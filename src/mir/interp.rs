@@ -498,7 +498,7 @@ impl Interpreter {
         Ok(Self {
             program: Arc::new(program),
             call_stack: Vec::new(),
-            max_steps: 1_000_000,
+            max_steps: 10_000_000,
             step_counter: 0,
             run_timeout_ms: None,
             run_deadline: None,
@@ -600,7 +600,7 @@ impl Interpreter {
         Ok(Self {
             program,
             call_stack: Vec::new(),
-            max_steps: 1_000_000,
+            max_steps: 10_000_000,
             step_counter: 0,
             run_timeout_ms: None,
             run_deadline: None,
