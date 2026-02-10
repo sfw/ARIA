@@ -16,9 +16,9 @@ FORMA is designed from the ground up to solve all six.
 
 ### 1. Memory Safety Without Lifetimes
 
-Rust's borrow checker is famously difficult for humans. For AI, it's nearly impossible — 94.8% of AI Rust generation failures are lifetime/borrow checker errors.
+Rust's compiler is famously strict. For AI, it's a wall — [94.8% of AI failures targeting Rust are compilation errors](https://arxiv.org/abs/2411.13990), with dependency resolution (unresolved imports, missing methods) accounting for 61.9% of failures. Lifetimes and ownership add a second layer of complexity on top.
 
-The problem isn't AI stupidity — it's that lifetimes require reasoning about the entire call graph, tracking which references outlive which scopes, understanding implicit lifetime elision rules. AI models generate code token by token. They can't hold the full lifetime graph in context.
+The problem isn't AI stupidity — it's that Rust demands reasoning about module paths, trait bounds, and ownership flow across the entire call graph. AI models generate code token by token. They can't hold these cross-cutting concerns in context.
 
 **FORMA's solution: Second-class references.** References exist but can't be stored in structs or returned from functions. This eliminates lifetime annotations entirely:
 

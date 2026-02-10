@@ -12,7 +12,7 @@ This began as a simple experiment into the competency of claude code. As coding 
 
 AI is writing more code than ever. But the toolchain is broken in six places.
 
-AI models **can't write systems code reliably** — 94.8% of Rust generation failures are lifetime/borrow checker errors, 33.6% are type mismatches, and models routinely hallucinate APIs and syntax. AI models also **waste tokens** — verbose keywords and type annotations drive up API costs and latency. And even when AI does produce working code, **nobody can review it fast enough** — teams are shipping AI-generated functions they haven't fully read, because code review doesn't scale to hundreds of functions a day.
+AI models **can't write systems code reliably** — [94.8% of AI failures targeting Rust are compilation errors](https://arxiv.org/abs/2411.13990), dominated by dependency resolution (61.9%) and compounded by lifetime/ownership complexity. Models routinely hallucinate APIs and syntax. AI models also **waste tokens** — verbose keywords and type annotations drive up API costs and latency. And even when AI does produce working code, **nobody can review it fast enough** — teams are shipping AI-generated functions they haven't fully read, because code review doesn't scale to hundreds of functions a day.
 
 The issue isn't AI capability — it's language design. Rust, C++, and Go were designed for humans with compilers. Not for AI with humans. And none of them give you tools to understand and trust AI-generated code at scale.
 

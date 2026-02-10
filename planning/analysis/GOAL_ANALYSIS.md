@@ -89,10 +89,10 @@ The core vision of FORMA—an AI-optimized language with memory safety—is bein
 ### Finding 1: "94.8% of LLM failures with Rust are compilation errors"
 **Response:** ✅ ADDRESSED
 
-FORMA's simplified borrow checker eliminates the most common Rust errors:
-- No lifetime annotations to get wrong
-- Second-class references prevent stored reference bugs
-- Simpler mental model for AI to learn
+The paper shows 61.9% are dependency-resolution errors (unresolved imports, missing methods), with lifetime/ownership as a secondary layer. FORMA addresses both:
+- No lifetime annotations to get wrong (second-class references)
+- Batteries-included stdlib eliminates dependency resolution failures
+- Simpler type system and mental model for AI to learn
 
 ### Finding 2: "Type errors account for 33.6% of failed LLM-generated programs"
 **Response:** ✅ ADDRESSED

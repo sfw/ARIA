@@ -203,9 +203,9 @@ Designed for AI/systems programming.
 
 ### Current LLM Challenges with Rust
 
-- **94.8% of failures are compilation errors** in translation benchmarks
+- **94.8% of failures are compilation errors** in translation benchmarks (61.9% dependency resolution, plus lifetime/trait complexity)
 - Variable state misinterpretation
-- Complex lifetime/trait errors spanning multiple files
+- Unresolved imports, missing methods, and lifetime/trait errors spanning multiple files
 - Mutex and concurrency patterns are particularly challenging
 
 ### What Helps AI Generate Memory-Safe Code

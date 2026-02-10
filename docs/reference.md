@@ -67,7 +67,7 @@ Every FORMA program starts at `main`. By default, `main` returns nothing (unit).
 
 **Why indentation-based?** Braces are a leading source of syntax errors in AI-generated code. Indentation is unambiguous and reduces the grammar's complexity.
 
-**Why no lifetimes?** 94.8% of AI failures with Rust are lifetime/borrow-checker errors. FORMA uses second-class references that eliminate lifetime annotations entirely while preserving memory safety.
+**Why no lifetimes?** [94.8% of AI failures targeting Rust are compilation errors](https://arxiv.org/abs/2411.13990), with dependency resolution and type complexity as the top causes. Lifetimes add further friction. FORMA uses second-class references that eliminate lifetime annotations entirely while preserving memory safety.
 
 ---
 

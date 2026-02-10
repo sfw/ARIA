@@ -33,7 +33,7 @@ Minimize tokens while maintaining clarity. Every saved token improves AI accurac
 ## What We Got Right (Keep)
 
 ### ✅ Second-Class References
-Eliminates 94.8% of Rust's lifetime errors. This is FORMA's killer feature.
+Eliminates lifetime annotations — one of several factors behind the 94.8% compile-error rate in AI-to-Rust benchmarks. This is FORMA's killer feature.
 
 ### ✅ Indentation-Significant Syntax
 Removes brace matching errors. Clear visual structure.

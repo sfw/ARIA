@@ -21,8 +21,8 @@ This document presents research on how generative AI (LLMs) generates code and w
 ### Memory Management and Ownership
 
 For Rust specifically:
-- **94.8% of failures are compilation errors** in translation benchmarks
-- Borrow checker creates particular difficulty
+- **94.8% of failures are compilation errors** in translation benchmarks (61.9% are dependency resolution; lifetime/ownership is a secondary layer)
+- Borrow checker and module system create particular difficulty
 - Models cannot just learn syntax—they must internalize ownership logic as hard constraints
 
 ### API Hallucinations
@@ -131,7 +131,7 @@ Token-Oriented Object Notation achieves **30-60% fewer tokens than JSON** by:
 
 **Struggling Languages:**
 - OCaml, Racket (limited training data)
-- Rust (94.8% failures are compilation errors)
+- Rust (94.8% of failures are compilation errors — mostly dependency resolution)
 
 ### Key Correlations
 

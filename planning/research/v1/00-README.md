@@ -139,7 +139,7 @@ aria pkg add serde      # Add dependency
 
 Rust's lifetime system is powerful but complex. Research shows:
 - 94.8% of LLM failures with Rust are compilation errors
-- Lifetime annotations are the #1 source of confusion
+- Dependency resolution (unresolved imports, missing methods) accounts for 61.9% of failures; lifetimes add further complexity
 
 ARIA's solution: References can be passed to functions and returned (if derived from inputs), but cannot be stored in structs. This eliminates lifetime annotations while maintaining memory safety.
 

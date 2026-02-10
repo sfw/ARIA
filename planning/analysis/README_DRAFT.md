@@ -9,7 +9,7 @@
 AI code generation is transforming software development. But there's a catch: **AI fails spectacularly at systems programming.**
 
 When researchers tested LLMs on Rust code generation:
-- **94.8%** of failures were lifetime/borrow checker errors
+- **94.8%** of failures were compilation errors (61.9% dependency resolution, plus lifetime/ownership complexity)
 - **33.6%** were type mismatches
 - AI models hallucinate syntax, invent APIs, and struggle with memory semantics
 

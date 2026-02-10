@@ -11,7 +11,7 @@ Before comparing, let's establish what FORMA is optimized for:
 
 ### Pillar 1: AI Code Generation First
 - **Goal:** Reduce AI failure modes (lifetimes, type complexity, syntax errors)
-- **Metrics:** 94.8% lifetime errors eliminated, 96% fewer syntax errors, 38% fewer tokens
+- **Metrics:** 94.8% of Rust AI failures are compile errors (FORMA reduces via simpler type system, no lifetimes, batteries-included stdlib), 38% fewer tokens
 
 ### Pillar 2: Memory Safety Without Lifetimes
 - **Goal:** Rust-level safety via second-class references

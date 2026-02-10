@@ -18,7 +18,7 @@ FORMA delivers memory safety without the complexity that trips up AI code genera
 1. **Memory Safety Without Lifetimes**
    - Rust-level guarantees via "second-class references"
    - No lifetime annotations to hallucinate or get wrong
-   - AI success rate: 94.8% of Rust's lifetime errors eliminated
+   - AI success rate: 94.8% of Rust AI failures are compile errors — FORMA eliminates via no lifetimes + batteries-included stdlib
 
 2. **96% Fewer Syntax Errors**
    - Grammar designed for constrained decoding
