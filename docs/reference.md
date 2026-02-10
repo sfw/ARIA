@@ -601,6 +601,9 @@ f main()
 | `unwrap` | `Option[T] -> T` | Extract value, panic on `None` |
 | `unwrap_or` | `(Option[T], T) -> T` | Extract value, or return default on `None` |
 | `expect` | `(Option[T], Str) -> T` | Extract value, panic with message on `None` |
+| `map_opt` | `(Option[T], (T) -> U) -> Option[U]` | Apply function to `Some` value |
+| `flatten` | `(Option[Option[T]]) -> Option[T]` | Flatten nested Option |
+| `and_then` | `(Option[T], (T) -> Option[U]) -> Option[U]` | Chain Option-returning function |
 
 ```forma
 # Check status
@@ -614,6 +617,16 @@ unwrap(Some(42))             # 42
 unwrap_or(Some(42), 0)      # 42
 unwrap_or(None, 0)          # 0
 expect(Some(42), "missing")  # 42
+
+# Option chaining
+map_opt(Some(5), |x: Int| x * 2)   # Some(10)
+map_opt(None, |x: Int| x * 2)      # None
+
+flatten(Some(Some(42)))  # Some(42)
+flatten(Some(None))      # None
+
+and_then(Some(5), |x: Int| if x > 0 then Some(x * 10) else None)  # Some(50)
+and_then(None, |x: Int| Some(x * 10))                              # None
 ```
 
 ### Pattern Matching on Option/Result
@@ -1080,7 +1093,7 @@ mutex_unlock(mtx)
 
 ## Standard Library Overview
 
-FORMA includes 298+ builtin functions. Here are the key categories:
+FORMA includes 316+ builtin functions. Here are the key categories:
 
 ### I/O
 
@@ -1098,7 +1111,9 @@ FORMA includes 298+ builtin functions. Here are the key categories:
 | `sqrt(x)` | Square root |
 | `pow(base, exp)` | Exponentiation |
 | `sin(x)`, `cos(x)`, `tan(x)` | Trigonometry |
+| `asin(x)`, `acos(x)`, `atan2(y, x)` | Inverse trigonometry |
 | `log(x)`, `exp(x)` | Logarithm, exponential |
+| `log2(x)` | Base-2 logarithm |
 | `floor(x)`, `ceil(x)`, `round(x)` | Rounding |
 
 ### String Operations
@@ -1112,8 +1127,10 @@ FORMA includes 298+ builtin functions. Here are the key categories:
 | `str_split(s, delim)` | Split string |
 | `str_trim(s)` | Remove whitespace |
 | `str_replace_all(s, old, new)` | Replace all occurrences |
+| `str_replace(s, old, new)` | Replace all occurrences (alias for `str_replace_all`) |
 | `str_slice(s, start, end)` | Get substring |
-| `str_to_int(s)` | Parse integer |
+| `str_to_int(s)` | Parse integer (returns `Option[Int]`) |
+| `str_to_float(s)` | Parse float (returns `Option[Float]`) |
 
 ### Collections
 
@@ -1126,7 +1143,14 @@ FORMA includes 298+ builtin functions. Here are the key categories:
 | `vec_slice(list, start, end)` | Get sublist |
 | `vec_concat(a, b)` | Concatenate lists |
 | `vec_reverse(list)` | Reverse list |
+| `vec_sort(list)` | Sort list (generic: Int, Float, Str, Char) |
+| `vec_index_of(list, item)` | Find first index of item (returns `Option[Int]`) |
 | `sort_ints(list)` | Sort integers |
+| `map(list, fn)` | Apply function to each element |
+| `filter(list, fn)` | Keep elements matching predicate |
+| `reduce(list, init, fn)` | Fold list with accumulator |
+| `any(list, fn)` | True if any element matches predicate |
+| `all(list, fn)` | True if all elements match predicate |
 | `map_new()` | Create empty map |
 | `map_get(map, key)` | Get value by key |
 | `map_insert(map, key, value)` | Insert entry |
@@ -1142,6 +1166,10 @@ Requires `--allow-read` and/or `--allow-write` capability flags:
 | `file_write(path, content)` | Write content to file |
 | `file_exists(path)` | Check if file exists |
 | `file_append(path, content)` | Append to file |
+| `file_read_bytes(path)` | Read file as byte array (`Result[[Int], Str]`) |
+| `file_write_bytes(path, bytes)` | Write byte array to file (`Result[(), Str]`) |
+| `file_read_lines(path)` | Read file as line array (stdlib: `us std.io`) |
+| `file_write_lines(path, lines)` | Write line array to file (stdlib: `us std.io`) |
 | `file_remove(path)` | Delete file |
 | `dir_list(path)` | List directory contents |
 | `dir_create(path)` | Create directory |
@@ -1200,6 +1228,7 @@ Capability-gated groups:
 | `random_int(min, max)` | Random integer in range |
 | `random_bool()` | Random boolean |
 | `random_choice(list)` | Random element |
+| `random_shuffle(list)` | Shuffled copy of list |
 
 ### Time
 
@@ -1228,6 +1257,19 @@ Capability-gated groups:
 | `assert(condition)` | Assert or panic |
 | `panic(message)` | Panic with message |
 | `exit(code)` | Exit process |
+
+### Standard Library Modules
+
+FORMA includes stdlib modules written in FORMA that compose builtins. Import with `us`:
+
+| Module | Import | Key Functions |
+|--------|--------|---------------|
+| `std.core` | `us std.core` | `clamp(v, lo, hi)` (Int), `clamp_float(v, lo, hi)` (Float), `abs`, `min`, `max`, `pow`, `gcd`, `lcm` |
+| `std.io` | `us std.io` | `file_read_lines(path)`, `file_write_lines(path, lines)`, `puts(s)`, `file_read_or(path, default)` |
+| `std.string` | `us std.string` | `str_join(arr, sep)`, `str_replace_first(s, old, new)`, `str_index_of(s, sub)`, `str_pad_left`, `str_pad_right` |
+| `std.vec` | `us std.vec` | `int_vec_index_of(arr, x)`, `int_vec_sum(arr)`, `int_vec_max(arr)`, `int_vec_min(arr)` |
+| `std.iter` | `us std.iter` | `range(start, end)`, `enumerate(arr)` |
+| `std.map` | `us std.map` | `map_get_or(m, key, default)`, `map_update(m, key, fn)` |
 
 ---
 

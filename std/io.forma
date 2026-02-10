@@ -52,3 +52,28 @@ f file_read_or(path: Str, default: Str) -> Str
     m file_read(path)
         Ok(content) -> content
         Err(_) -> default
+
+# ============================================================
+# Extended File I/O
+# ============================================================
+
+# Read file as array of lines
+f file_read_lines(path: Str) -> Result[[Str], Str]
+    m file_read(path)
+        Ok(content) -> Ok(str_split(content, "\n"))
+        Err(e) -> Err(e)
+
+# Write array of lines to file (joins with newline)
+f file_write_lines(path: Str, lines: [Str]) -> Result[(), Str]
+    content := join_lines_helper(lines, 0, "")
+    file_write(path, content)
+
+# Helper: join array of strings with newline separator using only builtins
+f join_lines_helper(lines: [Str], idx: Int, acc: Str) -> Str
+    if idx >= vec_len(lines) then acc
+    else
+        m vec_get(lines, idx)
+            Some(line) ->
+                new_acc := if idx == 0 then line else str_concat(str_concat(acc, "\n"), line)
+                join_lines_helper(lines, idx + 1, new_acc)
+            None -> acc

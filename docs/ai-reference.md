@@ -295,8 +295,30 @@ is_err(Err("bad"))            # true
 # Functions returning Option
 str_to_int("42")              # Some(42)
 str_to_int("abc")             # None
+str_to_float("3.14")          # Some(3.14)
 vec_get([10, 20], 0)          # Some(10)
 vec_get([10, 20], 5)          # None
+
+# Option chaining
+map_opt(Some(5), |x: Int| x * 2)   # Some(10)
+map_opt(None, |x: Int| x * 2)      # None
+flatten(Some(Some(42)))             # Some(42)
+and_then(Some(5), |x: Int| if x > 0 then Some(x * 10) else None)  # Some(50)
+```
+
+## Functional Operations
+
+```forma
+# Higher-order collection operations (closures require typed params)
+doubled := map([1, 2, 3], |x: Int| x * 2)           # [2, 4, 6]
+evens := filter([1, 2, 3, 4], |x: Int| x % 2 == 0)  # [2, 4]
+total := reduce([1, 2, 3], 0, |acc: Int, x: Int| acc + x)  # 6
+any([1, 2, 3], |x: Int| x > 2)                       # true
+all([1, 2, 3], |x: Int| x > 0)                       # true
+
+# Generic sort and search
+vec_sort([3, 1, 2])                 # [1, 2, 3]
+vec_index_of([10, 20, 30], 20)     # Some(1)
 ```
 
 ## Reference Parameters
@@ -380,19 +402,25 @@ f main()
 `print(v)` `eprintln(v)` `str(v)`
 
 ### Math
-`abs(n)` `sqrt(x)` `pow(b,e)` `sin(x)` `cos(x)` `tan(x)` `log(x)` `exp(x)` `floor(x)` `ceil(x)` `round(x)`
+`abs(n)` `sqrt(x)` `pow(b,e)` `sin(x)` `cos(x)` `tan(x)` `asin(x)` `acos(x)` `atan2(y,x)` `log(x)` `log2(x)` `exp(x)` `floor(x)` `ceil(x)` `round(x)`
 
 ### String
-`str_len(s)` `str_contains(s,sub)` `str_starts_with(s,p)` `str_ends_with(s,p)` `str_split(s,d)` `str_trim(s)` `str_slice(s,i,j)` `str_replace_all(s,old,new)` `str_to_int(s)`
+`str_len(s)` `str_contains(s,sub)` `str_starts_with(s,p)` `str_ends_with(s,p)` `str_split(s,d)` `str_trim(s)` `str_slice(s,i,j)` `str_replace(s,old,new)` `str_replace_all(s,old,new)` `str_to_int(s)` `str_to_float(s)`
 
 ### Collection
-`len(c)` `vec_new()` `vec_push(v,x)` `vec_pop(v)` `vec_slice(v,i,j)` `vec_concat(a,b)` `vec_reverse(v)` `sort_ints(v)` `map_new()` `map_get(m,k)` `map_insert(m,k,v)` `map_keys(m)` `map_contains(m,k)`
+`len(c)` `vec_new()` `vec_push(v,x)` `vec_pop(v)` `vec_slice(v,i,j)` `vec_concat(a,b)` `vec_reverse(v)` `vec_sort(v)` `vec_index_of(v,x)` `sort_ints(v)` `map_new()` `map_get(m,k)` `map_insert(m,k,v)` `map_keys(m)` `map_contains(m,k)`
+
+### Functional (higher-order)
+`map(arr,fn)` `filter(arr,fn)` `reduce(arr,init,fn)` `any(arr,fn)` `all(arr,fn)`
 
 ### Option/Result
-`unwrap(v)` `unwrap_or(v,d)` `expect(v,msg)` `is_some(v)` `is_none(v)` `is_ok(v)` `is_err(v)`
+`unwrap(v)` `unwrap_or(v,d)` `expect(v,msg)` `is_some(v)` `is_none(v)` `is_ok(v)` `is_err(v)` `map_opt(opt,fn)` `flatten(opt)` `and_then(opt,fn)`
 
 ### File I/O (needs --allow-read/--allow-write)
-`file_read(p)` `file_write(p,c)` `file_exists(p)` `file_append(p,c)` `dir_list(p)` `dir_create(p)` `path_join(a,b)`
+`file_read(p)` `file_write(p,c)` `file_exists(p)` `file_append(p,c)` `file_read_bytes(p)` `file_write_bytes(p,b)` `dir_list(p)` `dir_create(p)` `path_join(a,b)`
+
+### Stdlib File I/O (requires `us std.io`)
+`file_read_lines(p)` `file_write_lines(p,lines)`
 
 ### JSON
 `json_parse(s)` `json_stringify(v)` `json_get(o,k)` `json_get_str(o,k)` `json_get_int(o,k)`
@@ -412,7 +440,7 @@ f main()
 `channel_new()` `channel_send(s,v)` `channel_recv(r)` `mutex_new(v)` `mutex_lock(m)` `mutex_unlock(m)` `sleep_async(s)`
 
 ### Random
-`random()` `random_int(min,max)` `random_bool()` `random_choice(list)`
+`random()` `random_int(min,max)` `random_bool()` `random_choice(list)` `random_shuffle(list)`
 
 ### Time
 `time_now()` `time_now_ms()` `time_sleep(s)` `time_format(ts,fmt)`
@@ -422,6 +450,16 @@ f main()
 
 ### Assertions
 `assert(cond)` `panic(msg)` `exit(code)`
+
+## Stdlib Modules
+
+Import with `us`. These are FORMA functions that compose builtins.
+- `us std.core` → `clamp(v,lo,hi)` `clamp_float(v,lo,hi)` `abs` `min` `max` `gcd` `lcm`
+- `us std.io` → `file_read_lines(path)` `file_write_lines(path,lines)` `puts(s)`
+- `us std.string` → `str_join(arr,sep)` `str_replace_first(s,old,new)` `str_index_of(s,sub)`
+- `us std.vec` → `int_vec_index_of(arr,x)` `int_vec_sum(arr)` `int_vec_max(arr)`
+- `us std.iter` → `range(start,end)` `enumerate(arr)`
+- `us std.map` → `map_get_or(m,key,default)` `map_update(m,key,fn)`
 
 ## CLI
 

@@ -2802,6 +2802,39 @@ impl Interpreter {
                     })),
                 }
             }
+            "str_to_float" => {
+                validate_args!(args, 1, "str_to_float");
+                // str_to_float(s: Str) -> Float?
+                let s = match &args[0] {
+                    Value::Str(s) => s.clone(),
+                    Value::Ref(inner) => {
+                        if let Value::Str(s) = inner.as_ref() {
+                            s.clone()
+                        } else {
+                            return Err(InterpError {
+                                message: "str_to_float: expected string".to_string(),
+                            });
+                        }
+                    }
+                    _ => {
+                        return Err(InterpError {
+                            message: "str_to_float: expected string".to_string(),
+                        });
+                    }
+                };
+                match s.trim().parse::<f64>() {
+                    Ok(f) => Ok(Some(Value::Enum {
+                        type_name: "Option".to_string(),
+                        variant: "Some".to_string(),
+                        fields: vec![Value::Float(f)],
+                    })),
+                    Err(_) => Ok(Some(Value::Enum {
+                        type_name: "Option".to_string(),
+                        variant: "None".to_string(),
+                        fields: vec![],
+                    })),
+                }
+            }
             "int_to_str" => {
                 validate_args!(args, 1, "int_to_str");
                 let n = args[0].as_int().ok_or_else(|| InterpError {
@@ -2896,6 +2929,59 @@ impl Interpreter {
                     _ => {
                         return Err(InterpError {
                             message: "str_replace_all: expected string replacement".to_string(),
+                        });
+                    }
+                };
+                Ok(Some(Value::Str(s.replace(&pattern, &replacement))))
+            }
+            "str_replace" => {
+                validate_args!(args, 3, "str_replace");
+                // str_replace(s, pattern, replacement) -> Str — alias for str_replace_all
+                let s = match &args[0] {
+                    Value::Str(s) => s.clone(),
+                    Value::Ref(inner) => match inner.as_ref() {
+                        Value::Str(s) => s.clone(),
+                        _ => {
+                            return Err(InterpError {
+                                message: "str_replace: expected string".to_string(),
+                            });
+                        }
+                    },
+                    _ => {
+                        return Err(InterpError {
+                            message: "str_replace: expected string".to_string(),
+                        });
+                    }
+                };
+                let pattern = match &args[1] {
+                    Value::Str(s) => s.clone(),
+                    Value::Ref(inner) => match inner.as_ref() {
+                        Value::Str(s) => s.clone(),
+                        _ => {
+                            return Err(InterpError {
+                                message: "str_replace: expected string pattern".to_string(),
+                            });
+                        }
+                    },
+                    _ => {
+                        return Err(InterpError {
+                            message: "str_replace: expected string pattern".to_string(),
+                        });
+                    }
+                };
+                let replacement = match &args[2] {
+                    Value::Str(s) => s.clone(),
+                    Value::Ref(inner) => match inner.as_ref() {
+                        Value::Str(s) => s.clone(),
+                        _ => {
+                            return Err(InterpError {
+                                message: "str_replace: expected string replacement".to_string(),
+                            });
+                        }
+                    },
+                    _ => {
+                        return Err(InterpError {
+                            message: "str_replace: expected string replacement".to_string(),
                         });
                     }
                 };
@@ -3776,6 +3862,92 @@ impl Interpreter {
                     })),
                 }
             }
+            "file_read_bytes" => {
+                validate_args!(args, 1, "file_read_bytes");
+                self.require_capability("read", "file_read_bytes")?;
+                // file_read_bytes(path: Str) -> Result[[Int], Str]
+                let path = match &args[0] {
+                    Value::Str(s) => s.clone(),
+                    _ => {
+                        return Err(InterpError {
+                            message: "file_read_bytes: expected Str path".to_string(),
+                        });
+                    }
+                };
+                match std::fs::read(&path) {
+                    Ok(bytes) => {
+                        let arr: Vec<Value> =
+                            bytes.into_iter().map(|b| Value::Int(b as i64)).collect();
+                        Ok(Some(Value::Enum {
+                            type_name: "Result".to_string(),
+                            variant: "Ok".to_string(),
+                            fields: vec![Value::Array(arr)],
+                        }))
+                    }
+                    Err(e) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    })),
+                }
+            }
+            "file_write_bytes" => {
+                validate_args!(args, 2, "file_write_bytes");
+                self.require_capability("write", "file_write_bytes")?;
+                // file_write_bytes(path: Str, bytes: [Int]) -> Result[(), Str]
+                let path = match &args[0] {
+                    Value::Str(s) => s.clone(),
+                    _ => {
+                        return Err(InterpError {
+                            message: "file_write_bytes: expected Str path".to_string(),
+                        });
+                    }
+                };
+                let arr = match &args[1] {
+                    Value::Array(arr) => arr,
+                    _ => {
+                        return Err(InterpError {
+                            message: "file_write_bytes: expected array of Int".to_string(),
+                        });
+                    }
+                };
+                let mut bytes = Vec::with_capacity(arr.len());
+                for (i, v) in arr.iter().enumerate() {
+                    match v {
+                        Value::Int(n) => {
+                            if *n < 0 || *n > 255 {
+                                return Err(InterpError {
+                                    message: format!(
+                                        "file_write_bytes: byte at index {} out of range (0-255): {}",
+                                        i, n
+                                    ),
+                                });
+                            }
+                            bytes.push(*n as u8);
+                        }
+                        _ => {
+                            return Err(InterpError {
+                                message: format!(
+                                    "file_write_bytes: expected Int at index {}, got {:?}",
+                                    i, v
+                                ),
+                            });
+                        }
+                    }
+                }
+                match std::fs::write(&path, &bytes) {
+                    Ok(()) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Ok".to_string(),
+                        fields: vec![Value::Unit],
+                    })),
+                    Err(e) => Ok(Some(Value::Enum {
+                        type_name: "Result".to_string(),
+                        variant: "Err".to_string(),
+                        fields: vec![Value::Str(e.to_string())],
+                    })),
+                }
+            }
 
             // ===== CLI support =====
             "args" => {
@@ -4003,6 +4175,71 @@ impl Interpreter {
                     }
                 };
                 Ok(Some(Value::Float(x.log10())))
+            }
+            "log2" => {
+                validate_args!(args, 1, "log2");
+                // log2(x: Float) -> Float
+                let x = match &args[0] {
+                    Value::Float(f) => *f,
+                    Value::Int(i) => *i as f64,
+                    _ => {
+                        return Err(InterpError {
+                            message: "log2: expected Float".to_string(),
+                        });
+                    }
+                };
+                Ok(Some(Value::Float(x.log2())))
+            }
+            "asin" => {
+                validate_args!(args, 1, "asin");
+                // asin(x: Float) -> Float
+                let x = match &args[0] {
+                    Value::Float(f) => *f,
+                    Value::Int(i) => *i as f64,
+                    _ => {
+                        return Err(InterpError {
+                            message: "asin: expected Float".to_string(),
+                        });
+                    }
+                };
+                Ok(Some(Value::Float(x.asin())))
+            }
+            "acos" => {
+                validate_args!(args, 1, "acos");
+                // acos(x: Float) -> Float
+                let x = match &args[0] {
+                    Value::Float(f) => *f,
+                    Value::Int(i) => *i as f64,
+                    _ => {
+                        return Err(InterpError {
+                            message: "acos: expected Float".to_string(),
+                        });
+                    }
+                };
+                Ok(Some(Value::Float(x.acos())))
+            }
+            "atan2" => {
+                validate_args!(args, 2, "atan2");
+                // atan2(y: Float, x: Float) -> Float
+                let y = match &args[0] {
+                    Value::Float(f) => *f,
+                    Value::Int(i) => *i as f64,
+                    _ => {
+                        return Err(InterpError {
+                            message: "atan2: expected Float for y".to_string(),
+                        });
+                    }
+                };
+                let x = match &args[1] {
+                    Value::Float(f) => *f,
+                    Value::Int(i) => *i as f64,
+                    _ => {
+                        return Err(InterpError {
+                            message: "atan2: expected Float for x".to_string(),
+                        });
+                    }
+                };
+                Ok(Some(Value::Float(y.atan2(x))))
             }
             "exp" => {
                 validate_args!(args, 1, "exp");
@@ -9062,6 +9299,128 @@ impl Interpreter {
                 }
                 Ok(Some(Value::Array(result)))
             }
+            "random_shuffle" => {
+                validate_args!(args, 1, "random_shuffle");
+                // random_shuffle(arr: [T]) -> [T] — alias for shuffle
+                let arr = match &args[0] {
+                    Value::Array(arr) => arr.clone(),
+                    _ => {
+                        return Err(InterpError {
+                            message: "random_shuffle: expected array".to_string(),
+                        });
+                    }
+                };
+                let mut result = arr;
+                let mut rng = rand::thread_rng();
+                for i in (1..result.len()).rev() {
+                    let j = rng.gen_range(0..=i);
+                    result.swap(i, j);
+                }
+                Ok(Some(Value::Array(result)))
+            }
+            "vec_sort" => {
+                validate_args!(args, 1, "vec_sort");
+                // vec_sort(arr: [T]) -> [T] — generic sort dispatching on element type
+                let arr = match &args[0] {
+                    Value::Array(arr) => arr.clone(),
+                    _ => {
+                        return Err(InterpError {
+                            message: "vec_sort: expected array".to_string(),
+                        });
+                    }
+                };
+                if arr.is_empty() {
+                    return Ok(Some(Value::Array(arr)));
+                }
+                let mut result = arr;
+                match &result[0] {
+                    Value::Int(_) => {
+                        result.sort_by(|a, b| {
+                            let ai = match a {
+                                Value::Int(i) => *i,
+                                _ => i64::MAX,
+                            };
+                            let bi = match b {
+                                Value::Int(i) => *i,
+                                _ => i64::MAX,
+                            };
+                            ai.cmp(&bi)
+                        });
+                    }
+                    Value::Float(_) => {
+                        result.sort_by(|a, b| {
+                            let af = match a {
+                                Value::Float(f) => *f,
+                                _ => f64::NAN,
+                            };
+                            let bf = match b {
+                                Value::Float(f) => *f,
+                                _ => f64::NAN,
+                            };
+                            af.partial_cmp(&bf).unwrap_or(std::cmp::Ordering::Equal)
+                        });
+                    }
+                    Value::Str(_) => {
+                        result.sort_by(|a, b| {
+                            let a_s = match a {
+                                Value::Str(s) => s.as_str(),
+                                _ => "",
+                            };
+                            let b_s = match b {
+                                Value::Str(s) => s.as_str(),
+                                _ => "",
+                            };
+                            a_s.cmp(b_s)
+                        });
+                    }
+                    Value::Char(_) => {
+                        result.sort_by(|a, b| {
+                            let ac = match a {
+                                Value::Char(c) => *c,
+                                _ => '\0',
+                            };
+                            let bc = match b {
+                                Value::Char(c) => *c,
+                                _ => '\0',
+                            };
+                            ac.cmp(&bc)
+                        });
+                    }
+                    other => {
+                        return Err(InterpError {
+                            message: format!("vec_sort: unsupported element type: {:?}", other),
+                        });
+                    }
+                }
+                Ok(Some(Value::Array(result)))
+            }
+            "vec_index_of" => {
+                validate_args!(args, 2, "vec_index_of");
+                // vec_index_of(arr: [T], target: T) -> Int?
+                let arr = match &args[0] {
+                    Value::Array(arr) => arr,
+                    _ => {
+                        return Err(InterpError {
+                            message: "vec_index_of: expected array".to_string(),
+                        });
+                    }
+                };
+                let target = &args[1];
+                for (i, elem) in arr.iter().enumerate() {
+                    if elem == target {
+                        return Ok(Some(Value::Enum {
+                            type_name: "Option".to_string(),
+                            variant: "Some".to_string(),
+                            fields: vec![Value::Int(i as i64)],
+                        }));
+                    }
+                }
+                Ok(Some(Value::Enum {
+                    type_name: "Option".to_string(),
+                    variant: "None".to_string(),
+                    fields: vec![],
+                }))
+            }
             "min_of" => {
                 validate_args!(args, 1, "min_of");
                 // min_of(arr: [Int]) -> Int?
@@ -10321,6 +10680,354 @@ impl Interpreter {
                     }
                 };
                 Ok(Some(Value::Int(row.len() as i64)))
+            }
+
+            // ===== Functional collection operations =====
+            "map" => {
+                validate_args!(args, 2, "map");
+                // map(arr: [T], fn: (T) -> U) -> [U]
+                let arr = match &args[0] {
+                    Value::Array(arr) => arr.clone(),
+                    _ => {
+                        return Err(InterpError {
+                            message: "map: first argument must be an array".to_string(),
+                        });
+                    }
+                };
+                let (func_name, captures) = match &args[1] {
+                    Value::Closure {
+                        func_name,
+                        captures,
+                    } => (func_name.clone(), captures.clone()),
+                    _ => {
+                        return Err(InterpError {
+                            message: "map: second argument must be a closure".to_string(),
+                        });
+                    }
+                };
+                let func = self
+                    .program
+                    .functions
+                    .get(&func_name)
+                    .cloned()
+                    .ok_or_else(|| InterpError {
+                        message: format!("map: closure function '{}' not found", func_name),
+                    })?;
+                let mut result = Vec::with_capacity(arr.len());
+                for elem in arr {
+                    let mut call_args = captures.clone();
+                    call_args.push(elem);
+                    let val = self.call_function_internal(&func, call_args)?;
+                    result.push(val);
+                }
+                Ok(Some(Value::Array(result)))
+            }
+            "filter" => {
+                validate_args!(args, 2, "filter");
+                // filter(arr: [T], fn: (T) -> Bool) -> [T]
+                let arr = match &args[0] {
+                    Value::Array(arr) => arr.clone(),
+                    _ => {
+                        return Err(InterpError {
+                            message: "filter: first argument must be an array".to_string(),
+                        });
+                    }
+                };
+                let (func_name, captures) = match &args[1] {
+                    Value::Closure {
+                        func_name,
+                        captures,
+                    } => (func_name.clone(), captures.clone()),
+                    _ => {
+                        return Err(InterpError {
+                            message: "filter: second argument must be a closure".to_string(),
+                        });
+                    }
+                };
+                let func = self
+                    .program
+                    .functions
+                    .get(&func_name)
+                    .cloned()
+                    .ok_or_else(|| InterpError {
+                        message: format!("filter: closure function '{}' not found", func_name),
+                    })?;
+                let mut result = Vec::new();
+                for elem in arr {
+                    let mut call_args = captures.clone();
+                    call_args.push(elem.clone());
+                    let val = self.call_function_internal(&func, call_args)?;
+                    match val {
+                        Value::Bool(true) => result.push(elem),
+                        Value::Bool(false) => {}
+                        _ => {
+                            return Err(InterpError {
+                                message: "filter: predicate must return Bool".to_string(),
+                            });
+                        }
+                    }
+                }
+                Ok(Some(Value::Array(result)))
+            }
+            "reduce" => {
+                validate_args!(args, 3, "reduce");
+                // reduce(arr: [T], init: U, fn: (U, T) -> U) -> U
+                let arr = match &args[0] {
+                    Value::Array(arr) => arr.clone(),
+                    _ => {
+                        return Err(InterpError {
+                            message: "reduce: first argument must be an array".to_string(),
+                        });
+                    }
+                };
+                let init = args[1].clone();
+                let (func_name, captures) = match &args[2] {
+                    Value::Closure {
+                        func_name,
+                        captures,
+                    } => (func_name.clone(), captures.clone()),
+                    _ => {
+                        return Err(InterpError {
+                            message: "reduce: third argument must be a closure".to_string(),
+                        });
+                    }
+                };
+                let func = self
+                    .program
+                    .functions
+                    .get(&func_name)
+                    .cloned()
+                    .ok_or_else(|| InterpError {
+                        message: format!("reduce: closure function '{}' not found", func_name),
+                    })?;
+                let mut acc = init;
+                for elem in arr {
+                    let mut call_args = captures.clone();
+                    call_args.push(acc);
+                    call_args.push(elem);
+                    acc = self.call_function_internal(&func, call_args)?;
+                }
+                Ok(Some(acc))
+            }
+            "any" => {
+                validate_args!(args, 2, "any");
+                // any(arr: [T], fn: (T) -> Bool) -> Bool
+                let arr = match &args[0] {
+                    Value::Array(arr) => arr.clone(),
+                    _ => {
+                        return Err(InterpError {
+                            message: "any: first argument must be an array".to_string(),
+                        });
+                    }
+                };
+                let (func_name, captures) = match &args[1] {
+                    Value::Closure {
+                        func_name,
+                        captures,
+                    } => (func_name.clone(), captures.clone()),
+                    _ => {
+                        return Err(InterpError {
+                            message: "any: second argument must be a closure".to_string(),
+                        });
+                    }
+                };
+                let func = self
+                    .program
+                    .functions
+                    .get(&func_name)
+                    .cloned()
+                    .ok_or_else(|| InterpError {
+                        message: format!("any: closure function '{}' not found", func_name),
+                    })?;
+                for elem in arr {
+                    let mut call_args = captures.clone();
+                    call_args.push(elem);
+                    let val = self.call_function_internal(&func, call_args)?;
+                    match val {
+                        Value::Bool(true) => return Ok(Some(Value::Bool(true))),
+                        Value::Bool(false) => {}
+                        _ => {
+                            return Err(InterpError {
+                                message: "any: predicate must return Bool".to_string(),
+                            });
+                        }
+                    }
+                }
+                Ok(Some(Value::Bool(false)))
+            }
+            "all" => {
+                validate_args!(args, 2, "all");
+                // all(arr: [T], fn: (T) -> Bool) -> Bool
+                let arr = match &args[0] {
+                    Value::Array(arr) => arr.clone(),
+                    _ => {
+                        return Err(InterpError {
+                            message: "all: first argument must be an array".to_string(),
+                        });
+                    }
+                };
+                let (func_name, captures) = match &args[1] {
+                    Value::Closure {
+                        func_name,
+                        captures,
+                    } => (func_name.clone(), captures.clone()),
+                    _ => {
+                        return Err(InterpError {
+                            message: "all: second argument must be a closure".to_string(),
+                        });
+                    }
+                };
+                let func = self
+                    .program
+                    .functions
+                    .get(&func_name)
+                    .cloned()
+                    .ok_or_else(|| InterpError {
+                        message: format!("all: closure function '{}' not found", func_name),
+                    })?;
+                for elem in arr {
+                    let mut call_args = captures.clone();
+                    call_args.push(elem);
+                    let val = self.call_function_internal(&func, call_args)?;
+                    match val {
+                        Value::Bool(false) => return Ok(Some(Value::Bool(false))),
+                        Value::Bool(true) => {}
+                        _ => {
+                            return Err(InterpError {
+                                message: "all: predicate must return Bool".to_string(),
+                            });
+                        }
+                    }
+                }
+                Ok(Some(Value::Bool(true)))
+            }
+
+            // ===== Option chaining =====
+            "map_opt" => {
+                validate_args!(args, 2, "map_opt");
+                // map_opt(opt: Option[T], fn: (T) -> U) -> Option[U]
+                let opt = &args[0];
+                let (func_name, captures) = match &args[1] {
+                    Value::Closure {
+                        func_name,
+                        captures,
+                    } => (func_name.clone(), captures.clone()),
+                    _ => {
+                        return Err(InterpError {
+                            message: "map_opt: second argument must be a closure".to_string(),
+                        });
+                    }
+                };
+                match opt {
+                    Value::Enum {
+                        variant, fields, ..
+                    } if variant == "Some" && !fields.is_empty() => {
+                        let func =
+                            self.program
+                                .functions
+                                .get(&func_name)
+                                .cloned()
+                                .ok_or_else(|| InterpError {
+                                    message: format!(
+                                        "map_opt: closure function '{}' not found",
+                                        func_name
+                                    ),
+                                })?;
+                        let mut call_args = captures;
+                        call_args.push(fields[0].clone());
+                        let result = self.call_function_internal(&func, call_args)?;
+                        Ok(Some(Value::Enum {
+                            type_name: "Option".to_string(),
+                            variant: "Some".to_string(),
+                            fields: vec![result],
+                        }))
+                    }
+                    Value::Enum { variant, .. } if variant == "None" => Ok(Some(Value::Enum {
+                        type_name: "Option".to_string(),
+                        variant: "None".to_string(),
+                        fields: vec![],
+                    })),
+                    _ => Err(InterpError {
+                        message: "map_opt: first argument must be Option (Some or None)"
+                            .to_string(),
+                    }),
+                }
+            }
+            "flatten" => {
+                validate_args!(args, 1, "flatten");
+                // flatten(opt: Option[Option[T]]) -> Option[T]
+                match &args[0] {
+                    Value::Enum {
+                        variant, fields, ..
+                    } if variant == "Some" && !fields.is_empty() => {
+                        // Inner value should be an Option
+                        match &fields[0] {
+                            Value::Enum {
+                                variant: inner_v, ..
+                            } if inner_v == "Some" || inner_v == "None" => {
+                                Ok(Some(fields[0].clone()))
+                            }
+                            _ => Err(InterpError {
+                                message: "flatten: inner value must be Option".to_string(),
+                            }),
+                        }
+                    }
+                    Value::Enum { variant, .. } if variant == "None" => Ok(Some(Value::Enum {
+                        type_name: "Option".to_string(),
+                        variant: "None".to_string(),
+                        fields: vec![],
+                    })),
+                    _ => Err(InterpError {
+                        message: "flatten: argument must be Option".to_string(),
+                    }),
+                }
+            }
+            "and_then" => {
+                validate_args!(args, 2, "and_then");
+                // and_then(opt: Option[T], fn: (T) -> Option[U]) -> Option[U]
+                let opt = &args[0];
+                let (func_name, captures) = match &args[1] {
+                    Value::Closure {
+                        func_name,
+                        captures,
+                    } => (func_name.clone(), captures.clone()),
+                    _ => {
+                        return Err(InterpError {
+                            message: "and_then: second argument must be a closure".to_string(),
+                        });
+                    }
+                };
+                match opt {
+                    Value::Enum {
+                        variant, fields, ..
+                    } if variant == "Some" && !fields.is_empty() => {
+                        let func =
+                            self.program
+                                .functions
+                                .get(&func_name)
+                                .cloned()
+                                .ok_or_else(|| InterpError {
+                                    message: format!(
+                                        "and_then: closure function '{}' not found",
+                                        func_name
+                                    ),
+                                })?;
+                        let mut call_args = captures;
+                        call_args.push(fields[0].clone());
+                        let result = self.call_function_internal(&func, call_args)?;
+                        // Result should already be Option — don't wrap
+                        Ok(Some(result))
+                    }
+                    Value::Enum { variant, .. } if variant == "None" => Ok(Some(Value::Enum {
+                        type_name: "Option".to_string(),
+                        variant: "None".to_string(),
+                        fields: vec![],
+                    })),
+                    _ => Err(InterpError {
+                        message: "and_then: first argument must be Option (Some or None)"
+                            .to_string(),
+                    }),
+                }
             }
 
             // Not a built-in function
@@ -12924,5 +13631,488 @@ f main() -> Int = append_x("forma").len()
         let input: Vec<Value> = vec![];
         let output: Vec<Value> = vec![];
         assert!(Interpreter::is_stable_sort(&input, &output, "key").unwrap());
+    }
+
+    // ===== Sprint 51: Negative-path tests for new builtins =====
+
+    #[test]
+    fn test_map_non_closure_arg() {
+        let result = run_source(
+            r#"
+f main() -> Int
+    map([1, 2, 3], 42)
+    0
+"#,
+        );
+        assert!(result.is_err(), "map with non-closure should fail");
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("closure"),
+            "error should mention closure: {err}"
+        );
+    }
+
+    #[test]
+    fn test_filter_non_closure_arg() {
+        let result = run_source(
+            r#"
+f main() -> Int
+    filter([1, 2, 3], "not_a_closure")
+    0
+"#,
+        );
+        assert!(result.is_err(), "filter with non-closure should fail");
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("closure"),
+            "error should mention closure: {err}"
+        );
+    }
+
+    #[test]
+    fn test_reduce_non_closure_arg() {
+        let result = run_source(
+            r#"
+f main() -> Int
+    reduce([1, 2, 3], 0, true)
+    0
+"#,
+        );
+        assert!(result.is_err(), "reduce with non-closure should fail");
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("closure"),
+            "error should mention closure: {err}"
+        );
+    }
+
+    #[test]
+    fn test_any_non_closure_arg() {
+        let result = run_source(
+            r#"
+f main() -> Int
+    any([1, 2, 3], 0)
+    0
+"#,
+        );
+        assert!(result.is_err(), "any with non-closure should fail");
+    }
+
+    #[test]
+    fn test_all_non_closure_arg() {
+        let result = run_source(
+            r#"
+f main() -> Int
+    all([1, 2, 3], 0)
+    0
+"#,
+        );
+        assert!(result.is_err(), "all with non-closure should fail");
+    }
+
+    #[test]
+    fn test_map_opt_non_closure_arg() {
+        let result = run_source(
+            r#"
+f main() -> Int
+    map_opt(Some(5), 42)
+    0
+"#,
+        );
+        assert!(result.is_err(), "map_opt with non-closure should fail");
+    }
+
+    #[test]
+    fn test_and_then_non_closure_arg() {
+        let result = run_source(
+            r#"
+f main() -> Int
+    and_then(Some(5), 42)
+    0
+"#,
+        );
+        assert!(result.is_err(), "and_then with non-closure should fail");
+    }
+
+    #[test]
+    fn test_vec_sort_empty() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        let result = interp
+            .call_builtin("vec_sort", &[Value::Array(vec![])])
+            .unwrap()
+            .unwrap();
+        assert_eq!(result, Value::Array(vec![]));
+    }
+
+    #[test]
+    fn test_vec_sort_ints() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        let arr = Value::Array(vec![Value::Int(3), Value::Int(1), Value::Int(2)]);
+        let result = interp.call_builtin("vec_sort", &[arr]).unwrap().unwrap();
+        assert_eq!(
+            result,
+            Value::Array(vec![Value::Int(1), Value::Int(2), Value::Int(3)])
+        );
+    }
+
+    #[test]
+    fn test_vec_sort_strings() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        let arr = Value::Array(vec![
+            Value::Str("c".to_string()),
+            Value::Str("a".to_string()),
+            Value::Str("b".to_string()),
+        ]);
+        let result = interp.call_builtin("vec_sort", &[arr]).unwrap().unwrap();
+        assert_eq!(
+            result,
+            Value::Array(vec![
+                Value::Str("a".to_string()),
+                Value::Str("b".to_string()),
+                Value::Str("c".to_string())
+            ])
+        );
+    }
+
+    #[test]
+    fn test_vec_sort_mixed_types_uses_fallback() {
+        // vec_sort dispatches on first element type and uses fallback values for mismatched types
+        // (e.g., i64::MAX for non-Int when sorting as Int). This is lenient behavior, not an error.
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        let arr = Value::Array(vec![
+            Value::Int(3),
+            Value::Str("a".to_string()),
+            Value::Int(1),
+        ]);
+        let result = interp.call_builtin("vec_sort", &[arr]).unwrap().unwrap();
+        // Str fallback is i64::MAX, so it sorts to the end
+        match result {
+            Value::Array(sorted) => {
+                assert_eq!(sorted.len(), 3);
+                assert_eq!(sorted[0], Value::Int(1));
+                assert_eq!(sorted[1], Value::Int(3));
+                // Str element pushed to end by i64::MAX fallback
+                assert_eq!(sorted[2], Value::Str("a".to_string()));
+            }
+            _ => panic!("expected array"),
+        }
+    }
+
+    #[test]
+    fn test_vec_index_of_found() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        let arr = Value::Array(vec![Value::Int(10), Value::Int(20), Value::Int(30)]);
+        let result = interp
+            .call_builtin("vec_index_of", &[arr, Value::Int(20)])
+            .unwrap()
+            .unwrap();
+        match result {
+            Value::Enum {
+                variant, fields, ..
+            } => {
+                assert_eq!(variant, "Some");
+                assert_eq!(fields, vec![Value::Int(1)]);
+            }
+            _ => panic!("expected Some enum"),
+        }
+    }
+
+    #[test]
+    fn test_vec_index_of_not_found() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        let arr = Value::Array(vec![Value::Int(10), Value::Int(20)]);
+        let result = interp
+            .call_builtin("vec_index_of", &[arr, Value::Int(99)])
+            .unwrap()
+            .unwrap();
+        match result {
+            Value::Enum { variant, .. } => assert_eq!(variant, "None"),
+            _ => panic!("expected None enum"),
+        }
+    }
+
+    #[test]
+    fn test_str_to_float_valid() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        let result = interp
+            .call_builtin("str_to_float", &[Value::Str("2.75".to_string())])
+            .unwrap()
+            .unwrap();
+        match result {
+            Value::Enum {
+                variant, fields, ..
+            } => {
+                assert_eq!(variant, "Some");
+                if let Value::Float(f) = &fields[0] {
+                    assert!((*f - 2.75).abs() < 0.001);
+                } else {
+                    panic!("expected Float inside Some");
+                }
+            }
+            _ => panic!("expected Some enum"),
+        }
+    }
+
+    #[test]
+    fn test_str_to_float_invalid() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        let result = interp
+            .call_builtin("str_to_float", &[Value::Str("not_a_number".to_string())])
+            .unwrap()
+            .unwrap();
+        match result {
+            Value::Enum { variant, .. } => assert_eq!(variant, "None"),
+            _ => panic!("expected None enum"),
+        }
+    }
+
+    #[test]
+    fn test_str_to_float_negative() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        let result = interp
+            .call_builtin("str_to_float", &[Value::Str("-2.5".to_string())])
+            .unwrap()
+            .unwrap();
+        match result {
+            Value::Enum {
+                variant, fields, ..
+            } => {
+                assert_eq!(variant, "Some");
+                if let Value::Float(f) = &fields[0] {
+                    assert!((*f - (-2.5)).abs() < 0.001);
+                } else {
+                    panic!("expected Float inside Some");
+                }
+            }
+            _ => panic!("expected Some enum"),
+        }
+    }
+
+    #[test]
+    fn test_log2_known_value() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        let result = interp
+            .call_builtin("log2", &[Value::Float(8.0)])
+            .unwrap()
+            .unwrap();
+        assert_eq!(result, Value::Float(3.0));
+    }
+
+    #[test]
+    fn test_asin_zero() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        let result = interp
+            .call_builtin("asin", &[Value::Float(0.0)])
+            .unwrap()
+            .unwrap();
+        assert_eq!(result, Value::Float(0.0));
+    }
+
+    #[test]
+    fn test_acos_one() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        let result = interp
+            .call_builtin("acos", &[Value::Float(1.0)])
+            .unwrap()
+            .unwrap();
+        assert_eq!(result, Value::Float(0.0));
+    }
+
+    #[test]
+    fn test_atan2_known_value() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        let result = interp
+            .call_builtin("atan2", &[Value::Float(1.0), Value::Float(1.0)])
+            .unwrap()
+            .unwrap();
+        if let Value::Float(f) = result {
+            assert!((f - std::f64::consts::FRAC_PI_4).abs() < 0.001);
+        } else {
+            panic!("expected Float");
+        }
+    }
+
+    #[test]
+    fn test_str_replace_alias() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        let result = interp
+            .call_builtin(
+                "str_replace",
+                &[
+                    Value::Str("hello world".to_string()),
+                    Value::Str("world".to_string()),
+                    Value::Str("FORMA".to_string()),
+                ],
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(result, Value::Str("hello FORMA".to_string()));
+    }
+
+    #[test]
+    fn test_file_write_bytes_invalid_range() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        interp.capabilities.insert("write".to_string());
+        // Byte value 256 is out of range
+        let result = interp.call_builtin(
+            "file_write_bytes",
+            &[
+                Value::Str("/tmp/test_invalid.bin".to_string()),
+                Value::Array(vec![Value::Int(256)]),
+            ],
+        );
+        // Should return an error (either InterpError or Result::Err)
+        assert!(
+            result.is_err()
+                || matches!(
+                    result.as_ref().unwrap().as_ref().unwrap(),
+                    Value::Enum { variant, .. } if variant == "Err"
+                ),
+            "file_write_bytes with byte > 255 should fail"
+        );
+    }
+
+    #[test]
+    fn test_file_write_bytes_negative_value() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        interp.capabilities.insert("write".to_string());
+        // Byte value -1 is out of range
+        let result = interp.call_builtin(
+            "file_write_bytes",
+            &[
+                Value::Str("/tmp/test_neg.bin".to_string()),
+                Value::Array(vec![Value::Int(-1)]),
+            ],
+        );
+        assert!(
+            result.is_err()
+                || matches!(
+                    result.as_ref().unwrap().as_ref().unwrap(),
+                    Value::Enum { variant, .. } if variant == "Err"
+                ),
+            "file_write_bytes with byte < 0 should fail"
+        );
+    }
+
+    #[test]
+    fn test_file_read_bytes_no_capability() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        // No "read" capability set
+        let result = interp.call_builtin(
+            "file_read_bytes",
+            &[Value::Str("/tmp/test.bin".to_string())],
+        );
+        assert!(
+            result.is_err(),
+            "file_read_bytes without read capability should fail"
+        );
+        let err = result.unwrap_err().message;
+        assert!(
+            err.contains("capability") || err.contains("read"),
+            "error should mention capability: {err}"
+        );
+    }
+
+    #[test]
+    fn test_file_write_bytes_no_capability() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        // No "write" capability set
+        let result = interp.call_builtin(
+            "file_write_bytes",
+            &[
+                Value::Str("/tmp/test.bin".to_string()),
+                Value::Array(vec![Value::Int(0)]),
+            ],
+        );
+        assert!(
+            result.is_err(),
+            "file_write_bytes without write capability should fail"
+        );
+        let err = result.unwrap_err().message;
+        assert!(
+            err.contains("capability") || err.contains("write"),
+            "error should mention capability: {err}"
+        );
+    }
+
+    #[test]
+    fn test_flatten_some_some() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        let inner = Value::Enum {
+            type_name: "Option".to_string(),
+            variant: "Some".to_string(),
+            fields: vec![Value::Int(42)],
+        };
+        let outer = Value::Enum {
+            type_name: "Option".to_string(),
+            variant: "Some".to_string(),
+            fields: vec![inner],
+        };
+        let result = interp.call_builtin("flatten", &[outer]).unwrap().unwrap();
+        match result {
+            Value::Enum {
+                variant, fields, ..
+            } => {
+                assert_eq!(variant, "Some");
+                assert_eq!(fields, vec![Value::Int(42)]);
+            }
+            _ => panic!("expected Some(42)"),
+        }
+    }
+
+    #[test]
+    fn test_flatten_some_none() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        let inner = Value::Enum {
+            type_name: "Option".to_string(),
+            variant: "None".to_string(),
+            fields: vec![],
+        };
+        let outer = Value::Enum {
+            type_name: "Option".to_string(),
+            variant: "Some".to_string(),
+            fields: vec![inner],
+        };
+        let result = interp.call_builtin("flatten", &[outer]).unwrap().unwrap();
+        match result {
+            Value::Enum { variant, .. } => assert_eq!(variant, "None"),
+            _ => panic!("expected None"),
+        }
+    }
+
+    #[test]
+    fn test_flatten_none() {
+        let program = Program::new();
+        let mut interp = Interpreter::new(program).unwrap();
+        let none = Value::Enum {
+            type_name: "Option".to_string(),
+            variant: "None".to_string(),
+            fields: vec![],
+        };
+        let result = interp.call_builtin("flatten", &[none]).unwrap().unwrap();
+        match result {
+            Value::Enum { variant, .. } => assert_eq!(variant, "None"),
+            _ => panic!("expected None"),
+        }
     }
 }

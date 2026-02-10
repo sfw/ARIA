@@ -1,0 +1,111 @@
+# Functional collection operations tests
+# Tests map, filter, reduce, any, all builtins
+
+f check(label: Str, actual: Int, expected: Int) -> Int
+    if actual != expected then print("FAIL: " + label + " expected " + str(expected) + ", got " + str(actual))
+    if actual != expected then 1 else 0
+
+f check_bool(label: Str, actual: Bool, expected: Bool) -> Int
+    if actual != expected then print("FAIL: " + label + " expected " + str(expected) + ", got " + str(actual))
+    if actual != expected then 1 else 0
+
+f main() -> Int
+    fails := 0
+
+    # map: double each element
+    doubled := map([1, 2, 3], |x: Int| x * 2)
+    fails = fails + check("map_len", vec_len(doubled), 3)
+    fails = fails + check("map_0", doubled[0], 2)
+    fails = fails + check("map_1", doubled[1], 4)
+    fails = fails + check("map_2", doubled[2], 6)
+
+    # map: empty array
+    empty := map([], |x: Int| x * 2)
+    fails = fails + check("map_empty", vec_len(empty), 0)
+
+    # filter: keep evens
+    evens := filter([1, 2, 3, 4, 5, 6], |x: Int| x % 2 == 0)
+    fails = fails + check("filter_len", vec_len(evens), 3)
+    fails = fails + check("filter_0", evens[0], 2)
+    fails = fails + check("filter_1", evens[1], 4)
+    fails = fails + check("filter_2", evens[2], 6)
+
+    # filter: nothing matches
+    no_match := filter([1, 3, 5], |x: Int| x % 2 == 0)
+    fails = fails + check("filter_none", vec_len(no_match), 0)
+
+    # reduce: sum
+    total := reduce([1, 2, 3, 4], 0, |acc: Int, x: Int| acc + x)
+    fails = fails + check("reduce_sum", total, 10)
+
+    # reduce: product
+    product := reduce([2, 3, 4], 1, |acc: Int, x: Int| acc * x)
+    fails = fails + check("reduce_product", product, 24)
+
+    # reduce: empty array returns init
+    empty_reduce := reduce([], 42, |acc: Int, x: Int| acc + x)
+    fails = fails + check("reduce_empty", empty_reduce, 42)
+
+    # any: true case
+    has_big := any([1, 2, 5, 3], |x: Int| x > 4)
+    fails = fails + check_bool("any_true", has_big, true)
+
+    # any: false case
+    has_neg := any([1, 2, 3], |x: Int| x < 0)
+    fails = fails + check_bool("any_false", has_neg, false)
+
+    # any: empty array
+    any_empty := any([], |x: Int| x > 0)
+    fails = fails + check_bool("any_empty", any_empty, false)
+
+    # all: true case
+    all_pos := all([1, 2, 3], |x: Int| x > 0)
+    fails = fails + check_bool("all_true", all_pos, true)
+
+    # all: false case
+    all_big := all([1, 2, 3], |x: Int| x > 2)
+    fails = fails + check_bool("all_false", all_big, false)
+
+    # all: empty array
+    all_empty := all([], |x: Int| x > 0)
+    fails = fails + check_bool("all_empty", all_empty, true)
+
+    # vec_sort: integers
+    sorted := vec_sort([3, 1, 4, 1, 5, 9, 2])
+    fails = fails + check("sort_0", sorted[0], 1)
+    fails = fails + check("sort_1", sorted[1], 1)
+    fails = fails + check("sort_last", sorted[6], 9)
+
+    # vec_sort: empty
+    empty_sort := vec_sort([])
+    fails = fails + check("sort_empty", vec_len(empty_sort), 0)
+
+    # vec_index_of: found
+    m vec_index_of([10, 20, 30], 20)
+        Some(idx) -> fails = fails + check("index_of_found", idx, 1)
+        None -> fails = fails + 1
+
+    # vec_index_of: not found
+    m vec_index_of([10, 20, 30], 99)
+        Some(_) -> fails = fails + 1
+        None -> fails = fails + 0
+
+    # str_replace
+    replaced := str_replace("hello world", "world", "FORMA")
+    if replaced != "hello FORMA" then
+        print("FAIL: str_replace got " + replaced)
+        fails = fails + 1
+
+    # str_to_float
+    m str_to_float("3.14")
+        Some(f) ->
+            if f > 3.13 && f < 3.15 then fails = fails + 0
+            else fails = fails + 1
+        None -> fails = fails + 1
+
+    m str_to_float("not_a_number")
+        Some(_) -> fails = fails + 1
+        None -> fails = fails + 0
+
+    if fails == 0 then print("All functional tests passed")
+    fails

@@ -3818,6 +3818,269 @@ impl TypeEnv {
             },
         );
 
+        // ===== Sprint 51: New builtins =====
+
+        // str_to_float: Str -> Float?
+        env.bindings.insert(
+            "str_to_float".to_string(),
+            TypeScheme {
+                vars: vec![],
+                ty: Ty::Fn(vec![Ty::Str], Box::new(Ty::Option(Box::new(Ty::Float)))),
+            },
+        );
+
+        // log2: Float -> Float
+        env.bindings.insert(
+            "log2".to_string(),
+            TypeScheme {
+                vars: vec![],
+                ty: Ty::Fn(vec![Ty::Float], Box::new(Ty::Float)),
+            },
+        );
+
+        // asin: Float -> Float
+        env.bindings.insert(
+            "asin".to_string(),
+            TypeScheme {
+                vars: vec![],
+                ty: Ty::Fn(vec![Ty::Float], Box::new(Ty::Float)),
+            },
+        );
+
+        // acos: Float -> Float
+        env.bindings.insert(
+            "acos".to_string(),
+            TypeScheme {
+                vars: vec![],
+                ty: Ty::Fn(vec![Ty::Float], Box::new(Ty::Float)),
+            },
+        );
+
+        // atan2: (Float, Float) -> Float
+        env.bindings.insert(
+            "atan2".to_string(),
+            TypeScheme {
+                vars: vec![],
+                ty: Ty::Fn(vec![Ty::Float, Ty::Float], Box::new(Ty::Float)),
+            },
+        );
+
+        // str_replace: (Str, Str, Str) -> Str
+        env.bindings.insert(
+            "str_replace".to_string(),
+            TypeScheme {
+                vars: vec![],
+                ty: Ty::Fn(vec![Ty::Str, Ty::Str, Ty::Str], Box::new(Ty::Str)),
+            },
+        );
+
+        // random_shuffle: [T] -> [T]
+        let random_shuffle_t = TypeVar::fresh();
+        env.bindings.insert(
+            "random_shuffle".to_string(),
+            TypeScheme {
+                vars: vec![random_shuffle_t],
+                ty: Ty::Fn(
+                    vec![Ty::List(Box::new(Ty::Var(random_shuffle_t)))],
+                    Box::new(Ty::List(Box::new(Ty::Var(random_shuffle_t)))),
+                ),
+            },
+        );
+
+        // vec_sort: [T] -> [T]
+        let vec_sort_t = TypeVar::fresh();
+        env.bindings.insert(
+            "vec_sort".to_string(),
+            TypeScheme {
+                vars: vec![vec_sort_t],
+                ty: Ty::Fn(
+                    vec![Ty::List(Box::new(Ty::Var(vec_sort_t)))],
+                    Box::new(Ty::List(Box::new(Ty::Var(vec_sort_t)))),
+                ),
+            },
+        );
+
+        // vec_index_of: ([T], T) -> Int?
+        let vec_index_of_t = TypeVar::fresh();
+        env.bindings.insert(
+            "vec_index_of".to_string(),
+            TypeScheme {
+                vars: vec![vec_index_of_t],
+                ty: Ty::Fn(
+                    vec![
+                        Ty::List(Box::new(Ty::Var(vec_index_of_t))),
+                        Ty::Var(vec_index_of_t),
+                    ],
+                    Box::new(Ty::Option(Box::new(Ty::Int))),
+                ),
+            },
+        );
+
+        // file_read_bytes: Str -> Result[[Int], Str]
+        env.bindings.insert(
+            "file_read_bytes".to_string(),
+            TypeScheme {
+                vars: vec![],
+                ty: Ty::Fn(
+                    vec![Ty::Str],
+                    Box::new(Ty::Result(
+                        Box::new(Ty::List(Box::new(Ty::Int))),
+                        Box::new(Ty::Str),
+                    )),
+                ),
+            },
+        );
+
+        // file_write_bytes: (Str, [Int]) -> Result[(), Str]
+        env.bindings.insert(
+            "file_write_bytes".to_string(),
+            TypeScheme {
+                vars: vec![],
+                ty: Ty::Fn(
+                    vec![Ty::Str, Ty::List(Box::new(Ty::Int))],
+                    Box::new(Ty::Result(Box::new(Ty::Unit), Box::new(Ty::Str))),
+                ),
+            },
+        );
+
+        // map: ([T], (T) -> U) -> [U]
+        let map_t = TypeVar::fresh();
+        let map_u = TypeVar::fresh();
+        env.bindings.insert(
+            "map".to_string(),
+            TypeScheme {
+                vars: vec![map_t, map_u],
+                ty: Ty::Fn(
+                    vec![
+                        Ty::List(Box::new(Ty::Var(map_t))),
+                        Ty::Fn(vec![Ty::Var(map_t)], Box::new(Ty::Var(map_u))),
+                    ],
+                    Box::new(Ty::List(Box::new(Ty::Var(map_u)))),
+                ),
+            },
+        );
+
+        // filter: ([T], (T) -> Bool) -> [T]
+        let filter_t = TypeVar::fresh();
+        env.bindings.insert(
+            "filter".to_string(),
+            TypeScheme {
+                vars: vec![filter_t],
+                ty: Ty::Fn(
+                    vec![
+                        Ty::List(Box::new(Ty::Var(filter_t))),
+                        Ty::Fn(vec![Ty::Var(filter_t)], Box::new(Ty::Bool)),
+                    ],
+                    Box::new(Ty::List(Box::new(Ty::Var(filter_t)))),
+                ),
+            },
+        );
+
+        // reduce: ([T], U, (U, T) -> U) -> U
+        let reduce_t = TypeVar::fresh();
+        let reduce_u = TypeVar::fresh();
+        env.bindings.insert(
+            "reduce".to_string(),
+            TypeScheme {
+                vars: vec![reduce_t, reduce_u],
+                ty: Ty::Fn(
+                    vec![
+                        Ty::List(Box::new(Ty::Var(reduce_t))),
+                        Ty::Var(reduce_u),
+                        Ty::Fn(
+                            vec![Ty::Var(reduce_u), Ty::Var(reduce_t)],
+                            Box::new(Ty::Var(reduce_u)),
+                        ),
+                    ],
+                    Box::new(Ty::Var(reduce_u)),
+                ),
+            },
+        );
+
+        // any: ([T], (T) -> Bool) -> Bool
+        let any_t = TypeVar::fresh();
+        env.bindings.insert(
+            "any".to_string(),
+            TypeScheme {
+                vars: vec![any_t],
+                ty: Ty::Fn(
+                    vec![
+                        Ty::List(Box::new(Ty::Var(any_t))),
+                        Ty::Fn(vec![Ty::Var(any_t)], Box::new(Ty::Bool)),
+                    ],
+                    Box::new(Ty::Bool),
+                ),
+            },
+        );
+
+        // all: ([T], (T) -> Bool) -> Bool
+        let all_t = TypeVar::fresh();
+        env.bindings.insert(
+            "all".to_string(),
+            TypeScheme {
+                vars: vec![all_t],
+                ty: Ty::Fn(
+                    vec![
+                        Ty::List(Box::new(Ty::Var(all_t))),
+                        Ty::Fn(vec![Ty::Var(all_t)], Box::new(Ty::Bool)),
+                    ],
+                    Box::new(Ty::Bool),
+                ),
+            },
+        );
+
+        // map_opt: (Option[T], (T) -> U) -> Option[U]
+        let map_opt_t = TypeVar::fresh();
+        let map_opt_u = TypeVar::fresh();
+        env.bindings.insert(
+            "map_opt".to_string(),
+            TypeScheme {
+                vars: vec![map_opt_t, map_opt_u],
+                ty: Ty::Fn(
+                    vec![
+                        Ty::Option(Box::new(Ty::Var(map_opt_t))),
+                        Ty::Fn(vec![Ty::Var(map_opt_t)], Box::new(Ty::Var(map_opt_u))),
+                    ],
+                    Box::new(Ty::Option(Box::new(Ty::Var(map_opt_u)))),
+                ),
+            },
+        );
+
+        // flatten: Option[Option[T]] -> Option[T]
+        let flatten_t = TypeVar::fresh();
+        env.bindings.insert(
+            "flatten".to_string(),
+            TypeScheme {
+                vars: vec![flatten_t],
+                ty: Ty::Fn(
+                    vec![Ty::Option(Box::new(Ty::Option(Box::new(Ty::Var(
+                        flatten_t,
+                    )))))],
+                    Box::new(Ty::Option(Box::new(Ty::Var(flatten_t)))),
+                ),
+            },
+        );
+
+        // and_then: (Option[T], (T) -> Option[U]) -> Option[U]
+        let and_then_t = TypeVar::fresh();
+        let and_then_u = TypeVar::fresh();
+        env.bindings.insert(
+            "and_then".to_string(),
+            TypeScheme {
+                vars: vec![and_then_t, and_then_u],
+                ty: Ty::Fn(
+                    vec![
+                        Ty::Option(Box::new(Ty::Var(and_then_t))),
+                        Ty::Fn(
+                            vec![Ty::Var(and_then_t)],
+                            Box::new(Ty::Option(Box::new(Ty::Var(and_then_u)))),
+                        ),
+                    ],
+                    Box::new(Ty::Option(Box::new(Ty::Var(and_then_u)))),
+                ),
+            },
+        );
+
         env
     }
 

@@ -1,0 +1,52 @@
+# Option chaining tests
+# Tests map_opt, flatten, and_then builtins
+
+f check(label: Str, actual: Int, expected: Int) -> Int
+    if actual != expected then print("FAIL: " + label + " expected " + str(expected) + ", got " + str(actual))
+    if actual != expected then 1 else 0
+
+f main() -> Int
+    fails := 0
+
+    # map_opt: Some case
+    m map_opt(Some(5), |x: Int| x * 2)
+        Some(v) -> fails = fails + check("map_opt_some", v, 10)
+        None -> fails = fails + 1
+
+    # map_opt: None case
+    m map_opt(None, |x: Int| x * 2)
+        Some(_) -> fails = fails + 1
+        None -> fails = fails + 0
+
+    # flatten: Some(Some(42))
+    m flatten(Some(Some(42)))
+        Some(v) -> fails = fails + check("flatten_some_some", v, 42)
+        None -> fails = fails + 1
+
+    # flatten: Some(None)
+    m flatten(Some(None))
+        Some(_) -> fails = fails + 1
+        None -> fails = fails + 0
+
+    # flatten: None
+    m flatten(None)
+        Some(_) -> fails = fails + 1
+        None -> fails = fails + 0
+
+    # and_then: Some -> Some
+    m and_then(Some(5), |x: Int| if x > 0 then Some(x * 10) else None)
+        Some(v) -> fails = fails + check("and_then_some_some", v, 50)
+        None -> fails = fails + 1
+
+    # and_then: Some -> None
+    m and_then(Some(0 - 5), |x: Int| if x > 0 then Some(x * 10) else None)
+        Some(_) -> fails = fails + 1
+        None -> fails = fails + 0
+
+    # and_then: None -> skips function
+    m and_then(None, |x: Int| Some(x * 10))
+        Some(_) -> fails = fails + 1
+        None -> fails = fails + 0
+
+    if fails == 0 then print("All option chaining tests passed")
+    fails

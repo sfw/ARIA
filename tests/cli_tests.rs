@@ -833,3 +833,45 @@ fn test_cli_copy_prop_soundness() {
         "Copy prop soundness output should be identical with and without optimization"
     );
 }
+
+// ===== Sprint 51: Functional collection + option chaining tests =====
+
+#[test]
+fn test_cli_functional_operations() {
+    let output = Command::new(forma_bin())
+        .args(["run", "--allow-all"])
+        .arg(forma_test("test_functional.forma"))
+        .output()
+        .expect("failed to execute forma");
+    assert!(
+        output.status.success(),
+        "test_functional.forma should pass: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("All functional tests passed"),
+        "Expected success message, got: {}",
+        stdout
+    );
+}
+
+#[test]
+fn test_cli_option_chaining() {
+    let output = Command::new(forma_bin())
+        .args(["run", "--allow-all"])
+        .arg(forma_test("test_option_chaining.forma"))
+        .output()
+        .expect("failed to execute forma");
+    assert!(
+        output.status.success(),
+        "test_option_chaining.forma should pass: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("All option chaining tests passed"),
+        "Expected success message, got: {}",
+        stdout
+    );
+}

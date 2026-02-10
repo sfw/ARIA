@@ -498,6 +498,26 @@ fn get_builtin_info(name: &str) -> Option<String> {
         "tcp_listen" => Some("tcp_listen(host: Str, port: Int) -> Result[TcpListener, Str]\nCreate TCP listener".to_string()),
         "alloc" => Some("alloc(size: Int) -> *Void\nAllocate memory".to_string()),
         "dealloc" => Some("dealloc(ptr: *Void, size: Int) -> ()\nFree memory".to_string()),
+        // Sprint 51
+        "map" => Some("map(arr: [T], fn: (T) -> U) -> [U]\nTransform each element of an array".to_string()),
+        "filter" => Some("filter(arr: [T], fn: (T) -> Bool) -> [T]\nKeep elements matching predicate".to_string()),
+        "reduce" => Some("reduce(arr: [T], init: U, fn: (U, T) -> U) -> U\nFold array with accumulator".to_string()),
+        "any" => Some("any(arr: [T], fn: (T) -> Bool) -> Bool\nTest if any element matches".to_string()),
+        "all" => Some("all(arr: [T], fn: (T) -> Bool) -> Bool\nTest if all elements match".to_string()),
+        "vec_sort" => Some("vec_sort(arr: [T]) -> [T]\nSort array (Int, Float, Str, Char)".to_string()),
+        "vec_index_of" => Some("vec_index_of(arr: [T], target: T) -> Int?\nFind index of first matching element".to_string()),
+        "str_replace" => Some("str_replace(s: Str, pattern: Str, replacement: Str) -> Str\nReplace all occurrences".to_string()),
+        "str_to_float" => Some("str_to_float(s: Str) -> Float?\nParse string to float".to_string()),
+        "log2" => Some("log2(x: Float) -> Float\nBase-2 logarithm".to_string()),
+        "asin" => Some("asin(x: Float) -> Float\nArcsine (inverse sine)".to_string()),
+        "acos" => Some("acos(x: Float) -> Float\nArccosine (inverse cosine)".to_string()),
+        "atan2" => Some("atan2(y: Float, x: Float) -> Float\nTwo-argument arctangent".to_string()),
+        "map_opt" => Some("map_opt(opt: T?, fn: (T) -> U) -> U?\nMap over Option value".to_string()),
+        "flatten" => Some("flatten(opt: T??) -> T?\nFlatten nested Option".to_string()),
+        "and_then" => Some("and_then(opt: T?, fn: (T) -> U?) -> U?\nChain Option with function returning Option".to_string()),
+        "file_read_bytes" => Some("file_read_bytes(path: Str) -> Result[[Int], Str]\nRead file as byte array".to_string()),
+        "file_write_bytes" => Some("file_write_bytes(path: Str, bytes: [Int]) -> Result[(), Str]\nWrite byte array to file".to_string()),
+        "random_shuffle" => Some("random_shuffle(arr: [T]) -> [T]\nShuffle array randomly".to_string()),
         _ => None,
     }
 }
@@ -659,6 +679,90 @@ pub fn analyze_completions(content: &str, position: Position) -> Vec<CompletionI
             "map_insert",
             CompletionItemKind::FUNCTION,
             "Insert into map",
+        ),
+        // Sprint 51: New builtins
+        completion_item(
+            "map",
+            CompletionItemKind::FUNCTION,
+            "Transform array elements with closure",
+        ),
+        completion_item(
+            "filter",
+            CompletionItemKind::FUNCTION,
+            "Filter array elements with predicate",
+        ),
+        completion_item(
+            "reduce",
+            CompletionItemKind::FUNCTION,
+            "Fold array with accumulator",
+        ),
+        completion_item(
+            "any",
+            CompletionItemKind::FUNCTION,
+            "Test if any element matches predicate",
+        ),
+        completion_item(
+            "all",
+            CompletionItemKind::FUNCTION,
+            "Test if all elements match predicate",
+        ),
+        completion_item(
+            "vec_sort",
+            CompletionItemKind::FUNCTION,
+            "Sort array (generic)",
+        ),
+        completion_item(
+            "vec_index_of",
+            CompletionItemKind::FUNCTION,
+            "Find index of element",
+        ),
+        completion_item(
+            "str_replace",
+            CompletionItemKind::FUNCTION,
+            "Replace all occurrences in string",
+        ),
+        completion_item(
+            "str_to_float",
+            CompletionItemKind::FUNCTION,
+            "Parse string to float",
+        ),
+        completion_item(
+            "map_opt",
+            CompletionItemKind::FUNCTION,
+            "Map over Option value",
+        ),
+        completion_item(
+            "flatten",
+            CompletionItemKind::FUNCTION,
+            "Flatten nested Option",
+        ),
+        completion_item(
+            "and_then",
+            CompletionItemKind::FUNCTION,
+            "Chain Option with function returning Option",
+        ),
+        completion_item("log2", CompletionItemKind::FUNCTION, "Base-2 logarithm"),
+        completion_item("asin", CompletionItemKind::FUNCTION, "Arcsine"),
+        completion_item("acos", CompletionItemKind::FUNCTION, "Arccosine"),
+        completion_item(
+            "atan2",
+            CompletionItemKind::FUNCTION,
+            "Two-argument arctangent",
+        ),
+        completion_item(
+            "file_read_bytes",
+            CompletionItemKind::FUNCTION,
+            "Read file as byte array",
+        ),
+        completion_item(
+            "file_write_bytes",
+            CompletionItemKind::FUNCTION,
+            "Write byte array to file",
+        ),
+        completion_item(
+            "random_shuffle",
+            CompletionItemKind::FUNCTION,
+            "Shuffle array randomly",
         ),
     ]);
 

@@ -125,3 +125,9 @@ f is_negative(n: Int) -> Bool
 # Check if a number is zero
 f is_zero(n: Int) -> Bool
     n == 0
+
+# Clamp a float between min and max
+f clamp_float(value: Float, min_val: Float, max_val: Float) -> Float
+    if value < min_val then min_val
+    else if value > max_val then max_val
+    else value
