@@ -1,0 +1,55 @@
+# Sprint 49: @stable contract pass-path tests
+# @stable(input, result, field) requires:
+#   - output is sorted by field in nondecreasing order
+#   - output is a permutation of input (same elements)
+#   - equal-field elements keep original relative order
+#
+# Failure paths (dropped/duplicated/unsorted/unstable) are covered by
+# Rust unit tests in src/mir/interp.rs (test_is_stable_sort_*)
+
+s Record
+    key: Int
+    val: Str
+
+# Passing case: valid stable sort by key
+@stable(input, result, key)
+f stable_sort_valid(input: [Record]) -> [Record]
+    # Input: [{key:2,val:"a"}, {key:1,val:"b"}, {key:2,val:"c"}]
+    # Correct stable sort: [{key:1,val:"b"}, {key:2,val:"a"}, {key:2,val:"c"}]
+    result := []
+    result := vec_push(result, Record { key: 1, val: "b" })
+    result := vec_push(result, Record { key: 2, val: "a" })
+    result := vec_push(result, Record { key: 2, val: "c" })
+    result
+
+# Passing case: single-element array
+@stable(input, result, key)
+f stable_sort_single(input: [Record]) -> [Record]
+    input
+
+# Passing case: already-sorted input
+@stable(input, result, key)
+f stable_sort_already_sorted(input: [Record]) -> [Record]
+    input
+
+f main() -> Int
+    # Test valid stable sort
+    input := []
+    input := vec_push(input, Record { key: 2, val: "a" })
+    input := vec_push(input, Record { key: 1, val: "b" })
+    input := vec_push(input, Record { key: 2, val: "c" })
+    _ := stable_sort_valid(input)
+
+    # Test single element
+    single := []
+    single := vec_push(single, Record { key: 1, val: "x" })
+    _ := stable_sort_single(single)
+
+    # Test already sorted
+    sorted := []
+    sorted := vec_push(sorted, Record { key: 1, val: "a" })
+    sorted := vec_push(sorted, Record { key: 2, val: "b" })
+    sorted := vec_push(sorted, Record { key: 3, val: "c" })
+    _ := stable_sort_already_sorted(sorted)
+
+    0

@@ -1,0 +1,34 @@
+# Sprint 48: Sequence pattern tests
+
+# @prefix as precondition: a is a prefix of b
+@prefix(a, b)
+f prefix_len(a: [Int], b: [Int]) -> Int
+    a.len()
+
+# @reversed as precondition
+@reversed(a, b)
+f reversed_len(a: [Int], b: [Int]) -> Int
+    a.len()
+
+# @equals as precondition (set equality)
+@equals(a, b)
+f check_equal(a: [Int], b: [Int]) -> Bool
+    true
+
+# @superset as precondition
+@superset(big, small)
+f check_superset(big: [Int], small: [Int]) -> Bool
+    true
+
+# @suffix as precondition
+@suffix(a, b)
+f suffix_len(a: [Int], b: [Int]) -> Int
+    a.len()
+
+f main() -> Int
+    _ := prefix_len([1, 2], [1, 2, 3])
+    _ := reversed_len([3, 2, 1], [1, 2, 3])
+    _ := check_equal([1, 2, 3], [3, 2, 1])
+    _ := check_superset([1, 2, 3, 4], [1, 2])
+    _ := suffix_len([2, 3], [1, 2, 3])
+    0

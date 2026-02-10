@@ -1,0 +1,35 @@
+# Sprint 48: Numeric pattern tests
+
+@even(n)
+@even(result)
+f double_it(n: Int) -> Int
+    n * 2
+
+@odd(n)
+@odd(result)
+f keep_odd(n: Int) -> Int
+    n
+
+@divisible(n, 3)
+@divisible(result, 3)
+f triple(n: Int) -> Int
+    n * 3
+
+@in_range(x, 0, 100)
+@bounded(result, 1, 99)
+f exclusive_identity(x: Int) -> Int
+    x
+
+@even(n)
+@nonnegative(n)
+@post(result == n / 2)
+f half_even(n: Int) -> Int
+    n / 2
+
+f main() -> Int
+    _ := double_it(4)
+    _ := keep_odd(7)
+    _ := triple(9)
+    _ := exclusive_identity(50)
+    _ := half_even(10)
+    0

@@ -1175,6 +1175,199 @@ impl Interpreter {
                                 }),
                             }
                         }
+                        "is_prefix" => {
+                            let mut arg_vals = Vec::new();
+                            for arg in args {
+                                arg_vals.push(self.eval_contract_expr(&arg.value)?);
+                            }
+                            if arg_vals.len() != 2 {
+                                return Err(InterpError {
+                                    message: "is_prefix() takes exactly 2 arguments".to_string(),
+                                });
+                            }
+                            match (&arg_vals[0], &arg_vals[1]) {
+                                (Value::Array(a), Value::Array(b)) => {
+                                    let result = a.len() <= b.len()
+                                        && a.iter().zip(b.iter()).all(|(x, y)| x == y);
+                                    Ok(Value::Bool(result))
+                                }
+                                _ => Err(InterpError {
+                                    message: format!(
+                                        "is_prefix() expects (Array, Array), got ({:?}, {:?})",
+                                        arg_vals[0], arg_vals[1]
+                                    ),
+                                }),
+                            }
+                        }
+                        "is_suffix" => {
+                            let mut arg_vals = Vec::new();
+                            for arg in args {
+                                arg_vals.push(self.eval_contract_expr(&arg.value)?);
+                            }
+                            if arg_vals.len() != 2 {
+                                return Err(InterpError {
+                                    message: "is_suffix() takes exactly 2 arguments".to_string(),
+                                });
+                            }
+                            match (&arg_vals[0], &arg_vals[1]) {
+                                (Value::Array(a), Value::Array(b)) => {
+                                    let result = a.len() <= b.len()
+                                        && a.iter()
+                                            .zip(b[b.len() - a.len()..].iter())
+                                            .all(|(x, y)| x == y);
+                                    Ok(Value::Bool(result))
+                                }
+                                _ => Err(InterpError {
+                                    message: format!(
+                                        "is_suffix() expects (Array, Array), got ({:?}, {:?})",
+                                        arg_vals[0], arg_vals[1]
+                                    ),
+                                }),
+                            }
+                        }
+                        "is_reversed" => {
+                            let mut arg_vals = Vec::new();
+                            for arg in args {
+                                arg_vals.push(self.eval_contract_expr(&arg.value)?);
+                            }
+                            if arg_vals.len() != 2 {
+                                return Err(InterpError {
+                                    message: "is_reversed() takes exactly 2 arguments".to_string(),
+                                });
+                            }
+                            match (&arg_vals[0], &arg_vals[1]) {
+                                (Value::Array(a), Value::Array(b)) => {
+                                    let result = a.len() == b.len()
+                                        && a.iter().zip(b.iter().rev()).all(|(x, y)| x == y);
+                                    Ok(Value::Bool(result))
+                                }
+                                _ => Err(InterpError {
+                                    message: format!(
+                                        "is_reversed() expects (Array, Array), got ({:?}, {:?})",
+                                        arg_vals[0], arg_vals[1]
+                                    ),
+                                }),
+                            }
+                        }
+                        "is_rotated" => {
+                            let mut arg_vals = Vec::new();
+                            for arg in args {
+                                arg_vals.push(self.eval_contract_expr(&arg.value)?);
+                            }
+                            if arg_vals.len() != 3 {
+                                return Err(InterpError {
+                                    message: "is_rotated() takes 3 arguments: a, b, k".to_string(),
+                                });
+                            }
+                            match (&arg_vals[0], &arg_vals[1], &arg_vals[2]) {
+                                (Value::Array(a), Value::Array(b), Value::Int(k)) => {
+                                    if a.len() != b.len() {
+                                        return Ok(Value::Bool(false));
+                                    }
+                                    // Empty arrays: any rotation of [] is []
+                                    if a.is_empty() {
+                                        return Ok(Value::Bool(true));
+                                    }
+                                    // Normalize k via rem_euclid to handle negative values safely
+                                    let len = a.len() as i64;
+                                    let k_norm = ((*k % len) + len) % len;
+                                    let k_usize = k_norm as usize;
+                                    let result = a
+                                        .iter()
+                                        .enumerate()
+                                        .all(|(i, x)| x == &b[(i + k_usize) % b.len()]);
+                                    Ok(Value::Bool(result))
+                                }
+                                _ => Err(InterpError {
+                                    message: format!(
+                                        "is_rotated() expects (Array, Array, Int), got ({:?}, {:?}, {:?})",
+                                        arg_vals[0], arg_vals[1], arg_vals[2]
+                                    ),
+                                }),
+                            }
+                        }
+                        "is_partitioned" => {
+                            let mut arg_vals = Vec::new();
+                            for arg in args {
+                                arg_vals.push(self.eval_contract_expr(&arg.value)?);
+                            }
+                            if arg_vals.len() != 2 {
+                                return Err(InterpError {
+                                    message: "is_partitioned() takes 2 arguments: arr, pivot_idx"
+                                        .to_string(),
+                                });
+                            }
+                            match (&arg_vals[0], &arg_vals[1]) {
+                                (Value::Array(arr), Value::Int(pivot_idx)) => {
+                                    if *pivot_idx < 0 {
+                                        return Ok(Value::Bool(false));
+                                    }
+                                    let p = *pivot_idx as usize;
+                                    if p >= arr.len() {
+                                        return Ok(Value::Bool(false));
+                                    }
+                                    let pivot_val = &arr[p];
+                                    let left_ok =
+                                        arr[..p].iter().all(|x| Self::value_le(x, pivot_val));
+                                    let right_ok =
+                                        arr[p + 1..].iter().all(|x| Self::value_le(pivot_val, x));
+                                    Ok(Value::Bool(left_ok && right_ok))
+                                }
+                                _ => Err(InterpError {
+                                    message: format!(
+                                        "is_partitioned() expects (Array, Int), got ({:?}, {:?})",
+                                        arg_vals[0], arg_vals[1]
+                                    ),
+                                }),
+                            }
+                        }
+                        "set_equals" => {
+                            let mut arg_vals = Vec::new();
+                            for arg in args {
+                                arg_vals.push(self.eval_contract_expr(&arg.value)?);
+                            }
+                            if arg_vals.len() != 2 {
+                                return Err(InterpError {
+                                    message: "set_equals() takes exactly 2 arguments".to_string(),
+                                });
+                            }
+                            match (&arg_vals[0], &arg_vals[1]) {
+                                (Value::Array(a), Value::Array(b)) => {
+                                    let a_in_b = a.iter().all(|x| b.contains(x));
+                                    let b_in_a = b.iter().all(|x| a.contains(x));
+                                    Ok(Value::Bool(a_in_b && b_in_a))
+                                }
+                                _ => Err(InterpError {
+                                    message: format!(
+                                        "set_equals() expects (Array, Array), got ({:?}, {:?})",
+                                        arg_vals[0], arg_vals[1]
+                                    ),
+                                }),
+                            }
+                        }
+                        "stable" => {
+                            let mut arg_vals = Vec::new();
+                            for arg in args {
+                                arg_vals.push(self.eval_contract_expr(&arg.value)?);
+                            }
+                            if arg_vals.len() != 3 {
+                                return Err(InterpError {
+                                    message: "stable() takes 3 arguments: input, output, key_field"
+                                        .to_string(),
+                                });
+                            }
+                            match (&arg_vals[0], &arg_vals[1], &arg_vals[2]) {
+                                (Value::Array(input), Value::Array(output), Value::Str(key)) => {
+                                    Ok(Value::Bool(Self::is_stable_sort(input, output, key)?))
+                                }
+                                _ => Err(InterpError {
+                                    message: format!(
+                                        "stable() expects (Array, Array, Str), got ({:?}, {:?}, {:?})",
+                                        arg_vals[0], arg_vals[1], arg_vals[2]
+                                    ),
+                                }),
+                            }
+                        }
                         _ => Err(InterpError {
                             message: format!("function '{}' not supported in contracts", func_name),
                         }),
@@ -1452,6 +1645,75 @@ impl Interpreter {
             }
         }
         counts.is_empty()
+    }
+
+    fn value_le(a: &Value, b: &Value) -> bool {
+        match (a, b) {
+            (Value::Int(x), Value::Int(y)) => x <= y,
+            (Value::Float(x), Value::Float(y)) => x <= y,
+            (Value::Str(x), Value::Str(y)) => x <= y,
+            (Value::Char(x), Value::Char(y)) => x <= y,
+            _ => format!("{:?}", a) <= format!("{:?}", b),
+        }
+    }
+
+    fn get_field_value(val: &Value, key: &str) -> Result<Value, InterpError> {
+        match val {
+            Value::Struct(_, fields) => fields.get(key).cloned().ok_or_else(|| InterpError {
+                message: format!("struct has no field '{}'", key),
+            }),
+            _ => Err(InterpError {
+                message: format!("stable() requires struct values, got {:?}", val),
+            }),
+        }
+    }
+
+    fn is_stable_sort(input: &[Value], output: &[Value], key: &str) -> Result<bool, InterpError> {
+        // Require same length (no dropped or duplicated elements)
+        if input.len() != output.len() {
+            return Ok(false);
+        }
+
+        // Match each output element to its input position by full value equality
+        let mut input_used: Vec<bool> = vec![false; input.len()];
+        let mut output_orig_positions: Vec<usize> = Vec::with_capacity(output.len());
+
+        for out_val in output {
+            let mut found = false;
+            for (i, in_val) in input.iter().enumerate() {
+                if !input_used[i] && in_val == out_val {
+                    input_used[i] = true;
+                    output_orig_positions.push(i);
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                return Ok(false); // output contains element not in input
+            }
+        }
+
+        // Require nondecreasing key order (output must be sorted by key)
+        for i in 1..output.len() {
+            let prev_key = Self::get_field_value(&output[i - 1], key)?;
+            let curr_key = Self::get_field_value(&output[i], key)?;
+            if !Self::value_le(&prev_key, &curr_key) {
+                return Ok(false);
+            }
+        }
+
+        // For equal-key elements, verify original relative order is preserved
+        for i in 0..output.len() {
+            let k_i = Self::get_field_value(&output[i], key)?;
+            for j in (i + 1)..output.len() {
+                let k_j = Self::get_field_value(&output[j], key)?;
+                if k_i == k_j && output_orig_positions[i] > output_orig_positions[j] {
+                    return Ok(false);
+                }
+            }
+        }
+
+        Ok(true)
     }
 
     /// Compare two values with a comparison function
@@ -12500,5 +12762,167 @@ f main() -> Int = append_x("forma").len()
             Value::Enum { variant, .. } => assert_eq!(variant, "Err", "channel should be full"),
             _ => panic!("expected Err"),
         }
+    }
+
+    // --- Sprint 49: is_rotated unit tests ---
+
+    /// Helper: check rotation logic (mirrors runtime is_rotated)
+    fn check_rotated(a: &[Value], b: &[Value], k: i64) -> bool {
+        if a.len() != b.len() {
+            return false;
+        }
+        if a.is_empty() {
+            return true;
+        }
+        let len = a.len() as i64;
+        let k_norm = ((k % len) + len) % len;
+        let k_usize = k_norm as usize;
+        a.iter()
+            .enumerate()
+            .all(|(i, x)| x == &b[(i + k_usize) % b.len()])
+    }
+
+    #[test]
+    fn test_is_rotated_positive_k() {
+        // [1,2,3] rotated by k=1: a[0]==b[1], a[1]==b[2], a[2]==b[0] => b=[3,1,2]
+        let a = [Value::Int(1), Value::Int(2), Value::Int(3)];
+        let b = [Value::Int(3), Value::Int(1), Value::Int(2)];
+        assert!(check_rotated(&a, &b, 1));
+    }
+
+    #[test]
+    fn test_is_rotated_negative_k() {
+        // k=-1 on len=3 => k_norm=2 => b=[2,3,1]
+        let a = [Value::Int(1), Value::Int(2), Value::Int(3)];
+        let b = [Value::Int(2), Value::Int(3), Value::Int(1)];
+        assert!(check_rotated(&a, &b, -1));
+    }
+
+    #[test]
+    fn test_is_rotated_zero_k() {
+        let a = [Value::Int(1), Value::Int(2), Value::Int(3)];
+        assert!(check_rotated(&a, &a, 0));
+    }
+
+    #[test]
+    fn test_is_rotated_empty_arrays() {
+        let a: [Value; 0] = [];
+        assert!(check_rotated(&a, &a, 0));
+        assert!(check_rotated(&a, &a, 5));
+        assert!(check_rotated(&a, &a, -3));
+    }
+
+    #[test]
+    fn test_is_rotated_large_k() {
+        // k=100 on len=3 => k_norm = 100 % 3 = 1
+        let a = [Value::Int(1), Value::Int(2), Value::Int(3)];
+        let b = [Value::Int(3), Value::Int(1), Value::Int(2)];
+        assert!(check_rotated(&a, &b, 100));
+    }
+
+    #[test]
+    fn test_is_rotated_wrong_output() {
+        let a = [Value::Int(1), Value::Int(2), Value::Int(3)];
+        let b = [Value::Int(1), Value::Int(3), Value::Int(2)]; // not a rotation
+        for k in 0..3 {
+            assert!(!check_rotated(&a, &b, k), "k={} should not match", k);
+        }
+    }
+
+    #[test]
+    fn test_is_rotated_different_lengths() {
+        let a = [Value::Int(1), Value::Int(2)];
+        let b = [Value::Int(1), Value::Int(2), Value::Int(3)];
+        assert!(!check_rotated(&a, &b, 0));
+    }
+
+    // --- Sprint 49: is_stable_sort unit tests ---
+
+    fn make_record(key: i64, val: &str) -> Value {
+        let mut fields = HashMap::new();
+        fields.insert("key".to_string(), Value::Int(key));
+        fields.insert("val".to_string(), Value::Str(val.to_string()));
+        Value::Struct("Record".to_string(), fields)
+    }
+
+    #[test]
+    fn test_is_stable_sort_valid() {
+        let input = vec![
+            make_record(2, "a"),
+            make_record(1, "b"),
+            make_record(2, "c"),
+        ];
+        let output = vec![
+            make_record(1, "b"),
+            make_record(2, "a"),
+            make_record(2, "c"),
+        ];
+        assert!(Interpreter::is_stable_sort(&input, &output, "key").unwrap());
+    }
+
+    #[test]
+    fn test_is_stable_sort_unstable_order() {
+        // Same keys but wrong relative order for key=2 elements
+        let input = vec![
+            make_record(2, "a"),
+            make_record(1, "b"),
+            make_record(2, "c"),
+        ];
+        let output = vec![
+            make_record(1, "b"),
+            make_record(2, "c"), // should come after (2,"a")
+            make_record(2, "a"),
+        ];
+        assert!(!Interpreter::is_stable_sort(&input, &output, "key").unwrap());
+    }
+
+    #[test]
+    fn test_is_stable_sort_dropped_element() {
+        let input = vec![
+            make_record(2, "a"),
+            make_record(1, "b"),
+            make_record(2, "c"),
+        ];
+        let output = vec![
+            make_record(1, "b"),
+            make_record(2, "a"),
+            // missing (2, "c")
+        ];
+        assert!(!Interpreter::is_stable_sort(&input, &output, "key").unwrap());
+    }
+
+    #[test]
+    fn test_is_stable_sort_duplicated_element() {
+        let input = vec![make_record(2, "a"), make_record(1, "b")];
+        let output = vec![
+            make_record(1, "b"),
+            make_record(1, "b"), // duplicated, not in input
+            make_record(2, "a"),
+        ];
+        assert!(!Interpreter::is_stable_sort(&input, &output, "key").unwrap());
+    }
+
+    #[test]
+    fn test_is_stable_sort_unsorted_output() {
+        // Output is a permutation with stable relative order, but NOT sorted by key
+        let input = vec![
+            make_record(1, "a"),
+            make_record(3, "b"),
+            make_record(2, "c"),
+        ];
+        // Unsorted output: key order is 1, 3, 2 (not nondecreasing)
+        let output = vec![
+            make_record(1, "a"),
+            make_record(3, "b"),
+            make_record(2, "c"),
+        ];
+        assert!(!Interpreter::is_stable_sort(&input, &output, "key").unwrap());
+    }
+
+    #[test]
+    fn test_is_stable_sort_empty() {
+        let input: Vec<Value> = vec![];
+        let output: Vec<Value> = vec![];
+        assert!(Interpreter::is_stable_sort(&input, &output, "key").unwrap());
     }
 }

@@ -771,6 +771,161 @@ fn compile_program_for_analysis(
     Ok(program)
 }
 
+fn parse_func_args2(expr: &str, prefix: &str) -> Option<(String, String)> {
+    expr.strip_prefix(prefix)?
+        .strip_suffix(')')?
+        .split_once(", ")
+        .map(|(a, b)| (a.to_string(), b.to_string()))
+}
+
+fn parse_func_args3(expr: &str, prefix: &str) -> Option<(String, String, String)> {
+    let inner = expr.strip_prefix(prefix)?.strip_suffix(')')?;
+    let parts: Vec<&str> = inner.splitn(3, ", ").collect();
+    if parts.len() == 3 {
+        Some((
+            parts[0].to_string(),
+            parts[1].to_string(),
+            parts[2].to_string(),
+        ))
+    } else {
+        None
+    }
+}
+
+fn pattern_to_english(pattern_name: Option<&str>, expr_string: &str) -> String {
+    if let Some(name) = pattern_name {
+        let result = match name {
+            "even" => expr_string
+                .strip_suffix(" % 2 == 0")
+                .map(|x| format!("{} is even", x)),
+            "odd" => expr_string
+                .strip_suffix(" % 2 != 0")
+                .map(|x| format!("{} is odd", x)),
+            "divisible" => expr_string.find(" % ").and_then(|idx| {
+                let x = &expr_string[..idx];
+                expr_string[idx + 3..]
+                    .strip_suffix(" == 0")
+                    .map(|n| format!("{} is divisible by {}", x, n))
+            }),
+            "in_range" => expr_string.find(" && ").and_then(|idx| {
+                let left = &expr_string[..idx];
+                let right = &expr_string[idx + 4..];
+                left.find(" > ").and_then(|gt| {
+                    right.find(" < ").map(|lt| {
+                        format!(
+                            "{} is strictly between {} and {}",
+                            &left[..gt],
+                            &left[gt + 3..],
+                            &right[lt + 3..]
+                        )
+                    })
+                })
+            }),
+            "contains" => expr_string.find(" in ").map(|idx| {
+                format!(
+                    "{} contains {}",
+                    &expr_string[idx + 4..],
+                    &expr_string[..idx]
+                )
+            }),
+            "all_positive" => expr_string
+                .strip_prefix("forall x in ")
+                .and_then(|r| r.strip_suffix(": x > 0"))
+                .map(|arr| format!("all elements in {} are positive", arr)),
+            "all_nonnegative" => expr_string
+                .strip_prefix("forall x in ")
+                .and_then(|r| r.strip_suffix(": x >= 0"))
+                .map(|arr| format!("all elements in {} are non-negative", arr)),
+            "all_nonzero" => expr_string
+                .strip_prefix("forall x in ")
+                .and_then(|r| r.strip_suffix(": x != 0"))
+                .map(|arr| format!("all elements in {} are non-zero", arr)),
+            "valid_index" => expr_string.find(" >= 0 && ").and_then(|idx| {
+                let i = &expr_string[..idx];
+                let rest = &expr_string[idx + 9..];
+                rest.find(" < ").map(|lt| {
+                    let arr = rest[lt + 3..].trim_end_matches(".len()");
+                    format!("{} is a valid index for {}", i, arr)
+                })
+            }),
+            "valid_range" => Some("valid slice bounds".to_string()),
+            "subset" => expr_string.strip_prefix("forall x in ").and_then(|rest| {
+                rest.find(": x in ")
+                    .map(|idx| format!("{} is a subset of {}", &rest[..idx], &rest[idx + 7..]))
+            }),
+            "superset" => expr_string.strip_prefix("forall x in ").and_then(|rest| {
+                rest.find(": x in ")
+                    .map(|idx| format!("{} is a superset of {}", &rest[idx + 7..], &rest[..idx]))
+            }),
+            "disjoint" => expr_string.strip_prefix("forall x in ").and_then(|rest| {
+                rest.find(": forall y in ").map(|idx| {
+                    let a = &rest[..idx];
+                    let b_and_pred = &rest[idx + 14..];
+                    let b = b_and_pred.split(':').next().unwrap_or("").trim();
+                    format!("{} and {} have no common elements", a, b)
+                })
+            }),
+            "equals" => parse_func_args2(expr_string, "set_equals(")
+                .map(|(a, b)| format!("{} and {} contain exactly the same elements", a, b)),
+            "prefix" => parse_func_args2(expr_string, "is_prefix(")
+                .map(|(a, b)| format!("{} is a prefix of {}", a, b)),
+            "suffix" => parse_func_args2(expr_string, "is_suffix(")
+                .map(|(a, b)| format!("{} is a suffix of {}", a, b)),
+            "reversed" => parse_func_args2(expr_string, "is_reversed(")
+                .map(|(a, b)| format!("{} is the reverse of {}", a, b)),
+            "rotated" => parse_func_args3(expr_string, "is_rotated(")
+                .map(|(a, b, k)| format!("{} is a rotation of {} by {}", a, b, k)),
+            "strictly_sorted" => expr_string
+                .strip_prefix("forall i in 0..")
+                .and_then(|rest| {
+                    rest.find(".len()")
+                        .map(|idx| format!("{} is strictly sorted (no duplicates)", &rest[..idx]))
+                }),
+            "strictly_sorted_desc" => {
+                expr_string
+                    .strip_prefix("forall i in 0..")
+                    .and_then(|rest| {
+                        rest.find(".len()").map(|idx| {
+                            format!(
+                                "{} is strictly sorted descending (no duplicates)",
+                                &rest[..idx]
+                            )
+                        })
+                    })
+            }
+            "sorted_by" => expr_string
+                .strip_prefix("forall i in 0..")
+                .and_then(|rest| {
+                    rest.find(".len()").and_then(|idx| {
+                        let arr = &rest[..idx];
+                        rest.split(": ").nth(1).and_then(|after| {
+                            after.find("].").and_then(|f_start| {
+                                let field_rest = &after[f_start + 2..];
+                                field_rest.find(' ').map(|f_end| {
+                                    format!("{} is sorted by {} field", arr, &field_rest[..f_end])
+                                })
+                            })
+                        })
+                    })
+                }),
+            "partitioned" => parse_func_args2(expr_string, "is_partitioned(")
+                .map(|(arr, pivot)| format!("{} is partitioned at index {}", arr, pivot)),
+            "stable" => parse_func_args3(expr_string, "stable(").map(|(input, output, key)| {
+                let key = key.trim_matches('"');
+                format!(
+                    "{} is a stable sort of {} by {} (sorted by {}, permutation preserved, equal-{} elements keep original order)",
+                    output, input, key, key, key
+                )
+            }),
+            _ => None,
+        };
+        if let Some(english) = result {
+            return english;
+        }
+    }
+    explain_contract_text(expr_string)
+}
+
 fn explain_contract_text(expr: &str) -> String {
     let trimmed = expr.trim();
 
@@ -1244,7 +1399,7 @@ fn explain(
             .iter()
             .map(|c| ExplainContract {
                 expression: c.expr_string.clone(),
-                english: explain_contract_text(&c.expr_string),
+                english: pattern_to_english(c.pattern_name.as_deref(), &c.expr_string),
                 pattern_name: c.pattern_name.clone(),
                 message: c.message.clone(),
             })
@@ -1254,7 +1409,7 @@ fn explain(
             .iter()
             .map(|c| ExplainContract {
                 expression: c.expr_string.clone(),
-                english: explain_contract_text(&c.expr_string),
+                english: pattern_to_english(c.pattern_name.as_deref(), &c.expr_string),
                 pattern_name: c.pattern_name.clone(),
                 message: c.message.clone(),
             })

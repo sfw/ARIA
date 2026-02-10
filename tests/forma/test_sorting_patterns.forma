@@ -1,0 +1,42 @@
+# Sprint 48/49: Sorting pattern tests
+
+@nonempty(items)
+@strictly_sorted(result)
+@permutation(items, result)
+f sort_unique(items: [Int]) -> [Int]
+    sort_ints(items)
+
+@nonempty(items)
+@strictly_sorted_desc(result)
+f sort_desc_unique(items: [Int]) -> [Int]
+    sort_ints_desc(items)
+
+# @partitioned: all elements left of pivot <= pivot, all right >= pivot
+@partitioned(arr, 1)
+f check_partitioned(arr: [Int]) -> Bool
+    true
+
+# @sorted_by: struct field ordering
+s Item
+    priority: Int
+    name: Str
+
+@sorted_by(items, priority)
+f check_sorted_by(items: [Item]) -> Bool
+    true
+
+f main() -> Int
+    _ := sort_unique([3, 1, 2])
+    _ := sort_desc_unique([1, 3, 2])
+
+    # Partitioned: [1, 3, 5] with pivot_idx=1 => left=[1]<=3, right=[5]>=3
+    _ := check_partitioned([1, 3, 5])
+
+    # Sorted by priority field
+    items := []
+    items := vec_push(items, Item { priority: 1, name: "first" })
+    items := vec_push(items, Item { priority: 2, name: "second" })
+    items := vec_push(items, Item { priority: 3, name: "third" })
+    _ := check_sorted_by(items)
+
+    0

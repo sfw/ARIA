@@ -1,0 +1,41 @@
+# Sprint 49: @rotated edge case tests — must NOT panic
+
+# Positive rotation: a[i] == b[(i+k) % len]
+# [1,2,3] with k=1: a[0]==b[1], a[1]==b[2], a[2]==b[0] => b=[3,1,2]
+@rotated(a, b, 1)
+f check_rotated_pos(a: [Int], b: [Int]) -> Bool
+    true
+
+# Zero rotation: identity
+@rotated(a, b, 0)
+f check_rotated_zero(a: [Int], b: [Int]) -> Bool
+    true
+
+# Negative rotation: k=-1, normalized to len-1=2
+# [1,2,3] with k=2: a[0]==b[2], a[1]==b[0], a[2]==b[1] => b=[2,3,1]
+@rotated(a, b, -1)
+f check_rotated_neg(a: [Int], b: [Int]) -> Bool
+    true
+
+# Large k (larger than array length): k=100 % 3 = 1
+@rotated(a, b, 100)
+f check_rotated_large(a: [Int], b: [Int]) -> Bool
+    true
+
+f main() -> Int
+    # Positive rotation
+    _ := check_rotated_pos([1, 2, 3], [3, 1, 2])
+
+    # Zero rotation: identity
+    _ := check_rotated_zero([1, 2, 3], [1, 2, 3])
+
+    # Negative rotation: k=-1 => normalized k=2
+    _ := check_rotated_neg([1, 2, 3], [2, 3, 1])
+
+    # Large k: k=100 % 3 = 1, same as k=1
+    _ := check_rotated_large([1, 2, 3], [3, 1, 2])
+
+    # Empty arrays: trivially rotated
+    _ := check_rotated_zero([], [])
+
+    0

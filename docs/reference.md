@@ -863,24 +863,74 @@ Contracts support rich expression syntax:
 
 ### Named Contract Patterns
 
-FORMA provides 12 named patterns that expand to contract expressions:
+FORMA provides 35 named patterns that expand to contract expressions:
 
-| Pattern | Context | Expansion |
-|---------|---------|-----------|
-| `@nonempty(x)` | Pre-only | `x.len() > 0` |
-| `@nonnegative(x)` | Both | `x >= 0` |
+#### Numeric Patterns
+
+| Pattern | Context | Meaning |
+|---------|---------|---------|
 | `@positive(x)` | Both | `x > 0` |
+| `@nonnegative(x)` | Both | `x >= 0` |
 | `@nonzero(x)` | Both | `x != 0` |
-| `@bounded(x, lo, hi)` | Both | `x >= lo && x <= hi` |
-| `@sorted(x)` | Both | `forall i in 0..x.len()-1: x[i] <= x[i+1]` |
-| `@sorted_desc(x)` | Both | `forall i in 0..x.len()-1: x[i] >= x[i+1]` |
-| `@unique(x)` | Both | `forall i,j: i != j => x[i] != x[j]` |
-| `@same_length(a, b)` | Both | `a.len() == b.len()` |
-| `@permutation(a, b)` | Both | `permutation(a, b)` |
-| `@unchanged(x)` | Post-only | `x == old(x)` |
-| `@pure` | Post-only | `true` (no side effects marker) |
+| `@even(x)` | Both | `x % 2 == 0` |
+| `@odd(x)` | Both | `x % 2 != 0` |
+| `@divisible(x, n)` | Both | `x % n == 0` |
+| `@bounded(x, lo, hi)` | Both | `lo <= x <= hi` (inclusive) |
+| `@in_range(x, lo, hi)` | Both | `lo < x < hi` (exclusive) |
 
-Patterns used as `@pre` default to preconditions. When the first argument is `result`, they become postconditions.
+#### Collection Patterns
+
+| Pattern | Context | Meaning |
+|---------|---------|---------|
+| `@nonempty(x)` | Pre-only | `x.len() > 0` |
+| `@contains(arr, elem)` | Both | `elem` is in `arr` |
+| `@all_positive(arr)` | Both | all elements > 0 |
+| `@all_nonnegative(arr)` | Both | all elements >= 0 |
+| `@all_nonzero(arr)` | Both | all elements != 0 |
+| `@valid_index(arr, i)` | Both | `0 <= i < arr.len()` |
+| `@valid_range(arr, lo, hi)` | Both | valid slice bounds |
+
+#### Set Relationships
+
+| Pattern | Context | Meaning |
+|---------|---------|---------|
+| `@subset(a, b)` | Both | all of `a` in `b` |
+| `@superset(a, b)` | Both | all of `b` in `a` |
+| `@disjoint(a, b)` | Both | no overlap between `a` and `b` |
+| `@equals(a, b)` | Both | same elements (set equality) |
+| `@same_length(a, b)` | Both | `a.len() == b.len()` |
+| `@permutation(a, b)` | Both | same elements with same multiplicities |
+
+#### Sequence Relationships
+
+| Pattern | Context | Meaning |
+|---------|---------|---------|
+| `@prefix(a, b)` | Both | `a` starts `b` |
+| `@suffix(a, b)` | Both | `a` ends `b` |
+| `@reversed(a, b)` | Both | `a` is reverse of `b` |
+| `@rotated(a, b, k)` | Both | `a` is `b` rotated by `k` (k is normalized via modular arithmetic; empty arrays are trivially rotated) |
+| `@unique(x)` | Both | no duplicate elements |
+
+#### Ordering Patterns
+
+| Pattern | Context | Meaning |
+|---------|---------|---------|
+| `@sorted(x)` | Both | ascending order (allows duplicates) |
+| `@sorted_desc(x)` | Both | descending order (allows duplicates) |
+| `@strictly_sorted(x)` | Both | ascending, no duplicates |
+| `@strictly_sorted_desc(x)` | Both | descending, no duplicates |
+| `@sorted_by(arr, field)` | Both | sorted by struct field |
+| `@partitioned(arr, pivot)` | Both | partitioned at pivot index |
+| `@stable(in, out, field)` | Post-only | stable sort: output is sorted by field, is a permutation of input, and equal-field elements keep original relative order (field is an identifier, e.g. `@stable(items, result, priority)`) |
+
+#### State Patterns
+
+| Pattern | Context | Meaning |
+|---------|---------|---------|
+| `@unchanged(x)` | Post-only | `x == old(x)` |
+| `@pure` | Post-only | no side effects marker |
+
+**Postcondition inference rule:** Patterns default to preconditions. A pattern automatically becomes a postcondition when any of its arguments is the identifier `result` (the function return value). For example, `@sorted(result)` is a postcondition, while `@sorted(items)` is a precondition. Use `@pre(...)` or `@post(...)` to override this behavior explicitly.
 
 ### Contract Explainability
 

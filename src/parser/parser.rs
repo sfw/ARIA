@@ -606,6 +606,219 @@ impl<'a> Parser<'a> {
                 }
                 ("true".to_string(), true, PatternContext::PostOnly)
             }
+            // === Sprint 48: Numeric Patterns ===
+            "even" => {
+                let x = Self::pattern_arg_name(attr, 0)?;
+                (
+                    format!("{} % 2 == 0", x),
+                    Self::is_result_context(attr),
+                    PatternContext::Both,
+                )
+            }
+            "odd" => {
+                let x = Self::pattern_arg_name(attr, 0)?;
+                (
+                    format!("{} % 2 != 0", x),
+                    Self::is_result_context(attr),
+                    PatternContext::Both,
+                )
+            }
+            "divisible" => {
+                let x = Self::pattern_arg_name(attr, 0)?;
+                let n = Self::pattern_arg_name(attr, 1)?;
+                (
+                    format!("{} % {} == 0", x, n),
+                    Self::is_result_context(attr),
+                    PatternContext::Both,
+                )
+            }
+            "in_range" => {
+                let x = Self::pattern_arg_name(attr, 0)?;
+                let lo = Self::pattern_arg_name(attr, 1)?;
+                let hi = Self::pattern_arg_name(attr, 2)?;
+                (
+                    format!("{} > {} && {} < {}", x, lo, x, hi),
+                    Self::is_result_context(attr),
+                    PatternContext::Both,
+                )
+            }
+            // === Sprint 48: Collection Membership Patterns ===
+            "contains" => {
+                let arr = Self::pattern_arg_name(attr, 0)?;
+                let elem = Self::pattern_arg_name(attr, 1)?;
+                (
+                    format!("{} in {}", elem, arr),
+                    Self::is_result_context(attr),
+                    PatternContext::Both,
+                )
+            }
+            "all_positive" => {
+                let arr = Self::pattern_arg_name(attr, 0)?;
+                (
+                    format!("forall x in {}: x > 0", arr),
+                    Self::is_result_context(attr),
+                    PatternContext::Both,
+                )
+            }
+            "all_nonnegative" => {
+                let arr = Self::pattern_arg_name(attr, 0)?;
+                (
+                    format!("forall x in {}: x >= 0", arr),
+                    Self::is_result_context(attr),
+                    PatternContext::Both,
+                )
+            }
+            "all_nonzero" => {
+                let arr = Self::pattern_arg_name(attr, 0)?;
+                (
+                    format!("forall x in {}: x != 0", arr),
+                    Self::is_result_context(attr),
+                    PatternContext::Both,
+                )
+            }
+            // === Sprint 48: Index Patterns ===
+            "valid_index" => {
+                let arr = Self::pattern_arg_name(attr, 0)?;
+                let i = Self::pattern_arg_name(attr, 1)?;
+                (
+                    format!("{} >= 0 && {} < {}.len()", i, i, arr),
+                    Self::is_result_context(attr),
+                    PatternContext::Both,
+                )
+            }
+            "valid_range" => {
+                let arr = Self::pattern_arg_name(attr, 0)?;
+                let lo = Self::pattern_arg_name(attr, 1)?;
+                let hi = Self::pattern_arg_name(attr, 2)?;
+                (
+                    format!("{} >= 0 && {} <= {}.len() && {} <= {}", lo, hi, arr, lo, hi),
+                    Self::is_result_context(attr),
+                    PatternContext::Both,
+                )
+            }
+            // === Sprint 48: Set-like Patterns ===
+            "subset" => {
+                let a = Self::pattern_arg_name(attr, 0)?;
+                let b = Self::pattern_arg_name(attr, 1)?;
+                (
+                    format!("forall x in {}: x in {}", a, b),
+                    Self::is_result_context(attr),
+                    PatternContext::Both,
+                )
+            }
+            "superset" => {
+                let a = Self::pattern_arg_name(attr, 0)?;
+                let b = Self::pattern_arg_name(attr, 1)?;
+                (
+                    format!("forall x in {}: x in {}", b, a),
+                    Self::is_result_context(attr),
+                    PatternContext::Both,
+                )
+            }
+            "disjoint" => {
+                let a = Self::pattern_arg_name(attr, 0)?;
+                let b = Self::pattern_arg_name(attr, 1)?;
+                (
+                    format!("forall x in {}: forall y in {}: x != y", a, b),
+                    Self::is_result_context(attr),
+                    PatternContext::Both,
+                )
+            }
+            "equals" => {
+                let a = Self::pattern_arg_name(attr, 0)?;
+                let b = Self::pattern_arg_name(attr, 1)?;
+                (
+                    format!("set_equals({}, {})", a, b),
+                    Self::is_result_context(attr),
+                    PatternContext::Both,
+                )
+            }
+            // === Sprint 48: Sequence Patterns ===
+            "prefix" => {
+                let a = Self::pattern_arg_name(attr, 0)?;
+                let b = Self::pattern_arg_name(attr, 1)?;
+                (
+                    format!("is_prefix({}, {})", a, b),
+                    Self::is_result_context(attr),
+                    PatternContext::Both,
+                )
+            }
+            "suffix" => {
+                let a = Self::pattern_arg_name(attr, 0)?;
+                let b = Self::pattern_arg_name(attr, 1)?;
+                (
+                    format!("is_suffix({}, {})", a, b),
+                    Self::is_result_context(attr),
+                    PatternContext::Both,
+                )
+            }
+            "reversed" => {
+                let a = Self::pattern_arg_name(attr, 0)?;
+                let b = Self::pattern_arg_name(attr, 1)?;
+                (
+                    format!("is_reversed({}, {})", a, b),
+                    Self::is_result_context(attr),
+                    PatternContext::Both,
+                )
+            }
+            "rotated" => {
+                let a = Self::pattern_arg_name(attr, 0)?;
+                let b = Self::pattern_arg_name(attr, 1)?;
+                let k = Self::pattern_arg_name(attr, 2)?;
+                (
+                    format!("is_rotated({}, {}, {})", a, b, k),
+                    Self::is_result_context(attr),
+                    PatternContext::Both,
+                )
+            }
+            // === Sprint 48: Sorting & Ordering Patterns ===
+            "strictly_sorted" => {
+                let x = Self::pattern_arg_name(attr, 0)?;
+                (
+                    format!("forall i in 0..{}.len()-1: {}[i] < {}[i+1]", x, x, x),
+                    Self::is_result_context(attr),
+                    PatternContext::Both,
+                )
+            }
+            "strictly_sorted_desc" => {
+                let x = Self::pattern_arg_name(attr, 0)?;
+                (
+                    format!("forall i in 0..{}.len()-1: {}[i] > {}[i+1]", x, x, x),
+                    Self::is_result_context(attr),
+                    PatternContext::Both,
+                )
+            }
+            "sorted_by" => {
+                let arr = Self::pattern_arg_name(attr, 0)?;
+                let field = Self::pattern_arg_name(attr, 1)?;
+                (
+                    format!(
+                        "forall i in 0..{}.len()-1: {}[i].{} <= {}[i+1].{}",
+                        arr, arr, field, arr, field
+                    ),
+                    Self::is_result_context(attr),
+                    PatternContext::Both,
+                )
+            }
+            "partitioned" => {
+                let arr = Self::pattern_arg_name(attr, 0)?;
+                let pivot = Self::pattern_arg_name(attr, 1)?;
+                (
+                    format!("is_partitioned({}, {})", arr, pivot),
+                    Self::is_result_context(attr),
+                    PatternContext::Both,
+                )
+            }
+            "stable" => {
+                let input = Self::pattern_arg_name(attr, 0)?;
+                let output = Self::pattern_arg_name(attr, 1)?;
+                let key = Self::pattern_arg_name(attr, 2)?;
+                (
+                    format!("stable({}, {}, \"{}\")", input, output, key),
+                    true,
+                    PatternContext::PostOnly,
+                )
+            }
             _ => return Ok(None),
         };
 

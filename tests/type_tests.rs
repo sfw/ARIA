@@ -393,9 +393,8 @@ fn test_type_relations_size_of() {
 #[test]
 fn test_unification_basic() {
     use forma::lexer::Span;
-    use forma::types::{Unifier, reset_type_var_counter};
+    use forma::types::Unifier;
 
-    reset_type_var_counter();
     let mut unifier = Unifier::new();
     let span = Span::new(0, 0, 0, 0);
 
@@ -410,9 +409,8 @@ fn test_unification_basic() {
 #[test]
 fn test_unification_type_var() {
     use forma::lexer::Span;
-    use forma::types::{TypeVar, Unifier, reset_type_var_counter};
+    use forma::types::{TypeVar, Unifier};
 
-    reset_type_var_counter();
     let mut unifier = Unifier::new();
     let span = Span::new(0, 0, 0, 0);
 
@@ -429,9 +427,8 @@ fn test_unification_type_var() {
 #[test]
 fn test_unification_compound() {
     use forma::lexer::Span;
-    use forma::types::{TypeVar, Unifier, reset_type_var_counter};
+    use forma::types::{TypeVar, Unifier};
 
-    reset_type_var_counter();
     let mut unifier = Unifier::new();
     let span = Span::new(0, 0, 0, 0);
 
@@ -450,9 +447,8 @@ fn test_unification_compound() {
 #[test]
 fn test_occurs_check() {
     use forma::lexer::Span;
-    use forma::types::{TypeVar, Unifier, reset_type_var_counter};
+    use forma::types::{TypeVar, Unifier};
 
-    reset_type_var_counter();
     let mut unifier = Unifier::new();
     let span = Span::new(0, 0, 0, 0);
 
@@ -465,9 +461,8 @@ fn test_occurs_check() {
 
 #[test]
 fn test_type_scheme_instantiation() {
-    use forma::types::{TypeScheme, TypeVar, reset_type_var_counter};
+    use forma::types::{TypeScheme, TypeVar};
 
-    reset_type_var_counter();
     let var = TypeVar::fresh();
 
     let scheme = TypeScheme {

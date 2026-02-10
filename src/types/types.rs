@@ -16,7 +16,8 @@ pub fn fresh_type_var_id() -> u32 {
     TYPE_VAR_COUNTER.fetch_add(1, Ordering::SeqCst)
 }
 
-/// Reset the type variable counter (useful for tests).
+/// Reset the type variable counter (useful for REPL sessions).
+#[allow(dead_code)]
 pub fn reset_type_var_counter() {
     TYPE_VAR_COUNTER.store(0, Ordering::SeqCst);
 }
@@ -870,7 +871,6 @@ mod tests {
 
     #[test]
     fn test_substitution() {
-        reset_type_var_counter();
         let v1 = TypeVar::fresh();
         let v2 = TypeVar::fresh();
 
@@ -885,7 +885,6 @@ mod tests {
 
     #[test]
     fn test_type_scheme_instantiate() {
-        reset_type_var_counter();
         let v = TypeVar::fresh();
         let scheme = TypeScheme {
             vars: vec![v],

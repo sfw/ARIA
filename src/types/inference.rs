@@ -7017,7 +7017,6 @@ impl Default for InferenceEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::types::reset_type_var_counter;
 
     #[test]
     fn test_unify_primitives() {
@@ -7031,7 +7030,6 @@ mod tests {
 
     #[test]
     fn test_unify_type_var() {
-        reset_type_var_counter();
         let mut unifier = Unifier::new();
         let span = Span::new(0, 0, 0, 0);
 
@@ -7044,7 +7042,6 @@ mod tests {
 
     #[test]
     fn test_unify_list() {
-        reset_type_var_counter();
         let mut unifier = Unifier::new();
         let span = Span::new(0, 0, 0, 0);
 
@@ -7060,7 +7057,6 @@ mod tests {
 
     #[test]
     fn test_occurs_check() {
-        reset_type_var_counter();
         let mut unifier = Unifier::new();
         let span = Span::new(0, 0, 0, 0);
 
@@ -7073,7 +7069,6 @@ mod tests {
 
     #[test]
     fn test_unify_function() {
-        reset_type_var_counter();
         let mut unifier = Unifier::new();
         let span = Span::new(0, 0, 0, 0);
 

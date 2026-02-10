@@ -34,5 +34,5 @@ pub use inference::{InferenceEngine, TypeDef, TypeEnv, TypeError, Unifier};
 pub use types::{
     Capability, EnumInfo, EnvCapability, FileCapability, FunctionInfo, LinearityKind, MethodInfo,
     Mutability, NetworkCapability, StructInfo, Substitution, TraitBound, TraitInfo, Ty, TypeId,
-    TypeScheme, TypeVar, VariantFields, VariantInfo, fresh_type_var_id, reset_type_var_counter,
+    TypeScheme, TypeVar, VariantFields, VariantInfo, fresh_type_var_id,
 };

@@ -1,0 +1,52 @@
+# Sprint 48: Collection pattern tests
+
+@all_positive(items)
+@all_positive(result)
+f double_all(items: [Int]) -> [Int]
+    result := vec_new()
+    i := 0
+    wh i < items.len()
+        vec_push(result, items[i] * 2)
+        i := i + 1
+    result
+
+@contains(items, target)
+@contains(result, target)
+f with_target(items: [Int], target: Int) -> [Int]
+    items
+
+@all_nonnegative(items)
+f check_nonneg(items: [Int]) -> Int
+    items.len()
+
+@all_nonzero(items)
+f check_nonzero(items: [Int]) -> Int
+    items.len()
+
+@nonempty(items)
+@valid_index(result, 0)
+f first_valid(items: [Int]) -> [Int]
+    items
+
+@valid_range(items, lo, hi)
+f slice_check(items: [Int], lo: Int, hi: Int) -> Int
+    hi - lo
+
+@subset(a, b)
+f check_subset(a: [Int], b: [Int]) -> Bool
+    true
+
+@disjoint(a, b)
+f check_disjoint(a: [Int], b: [Int]) -> Bool
+    true
+
+f main() -> Int
+    _ := double_all([1, 2, 3])
+    _ := with_target([1, 2, 3], 2)
+    _ := check_nonneg([0, 1, 2])
+    _ := check_nonzero([1, 2, 3])
+    _ := first_valid([10])
+    _ := slice_check([1, 2, 3, 4], 1, 3)
+    _ := check_subset([1, 2], [1, 2, 3])
+    _ := check_disjoint([1, 2], [3, 4])
+    0
