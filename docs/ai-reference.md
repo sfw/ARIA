@@ -1,5 +1,5 @@
 # FORMA AI Quick Reference
-<!-- Token-efficient reference for LLM system prompts. ~400 lines. -->
+<!-- Token-efficient reference for LLM system prompts. ~600 lines. -->
 <!-- Include this in context windows for correct FORMA code generation. -->
 
 ## Syntax Overview
@@ -10,6 +10,7 @@
 - Type annotations: `x: Type = value`
 - Last expression is return value
 - Generics use `[T]` not `<T>`
+- F-strings: `f"hello {name}, result is {x + 1}"`
 
 ## Keywords
 
@@ -147,6 +148,7 @@ m expr
     Pattern if guard -> expr
     Variant(x) -> expr
     (a, b) -> expr
+    Point { x, y } -> x + y                     # struct destructure
     _ -> expr                                    # wildcard
 ```
 
@@ -170,9 +172,20 @@ lp                                               # infinite loop
     if done then br
     body
 
+'outer: for x in xs                              # labeled loop
+    for y in ys
+        if x == y then br 'outer                 # break outer
+
 ret value                                        # early return
 br                                               # break
 ct                                               # continue
+```
+
+### String Interpolation
+```forma
+name := "world"
+greeting := f"hello {name}"                      # "hello world"
+result := f"{x} + {y} = {x + y}"                # expressions allowed
 ```
 
 ### Closures
@@ -241,6 +254,8 @@ as f work() -> Int
 
 task := sp work()                                # spawn
 value := aw task                                 # await
+results := aw await_all(tasks)                   # await multiple
+first := aw await_any(tasks)                     # first to complete
 ```
 
 ## Error Handling Patterns
@@ -278,11 +293,9 @@ m str_to_int(s)
 ### Option/Result Utility Functions
 
 ```forma
-# Option checks
+# Option checks and unwrapping
 is_some(Some(42))             # true
 is_none(None)                 # true
-
-# Option unwrapping
 unwrap(Some(42))              # 42 (panics on None)
 unwrap_or(Some(42), 0)       # 42
 unwrap_or(None, 0)           # 0
@@ -379,6 +392,7 @@ f main()
 f handler(req: HttpRequest) -> HttpResponse
     m req.path
         "/" -> http_response(200, "OK")
+        "/json" -> http_json_response(200, json_object())
         _ -> http_response(404, "Not Found")
 
 f main()
@@ -398,17 +412,21 @@ f main()
 
 ## Key Builtins (by category)
 
-### I/O
-`print(v)` `eprintln(v)` `str(v)`
+### I/O & Logging
+`print(v)` `eprintln(v)` `str(v)` `debug(v)` `info(v)` `warning(v)` `error(v)`
+`log_info(msg)` `log_warn(msg)` `log_error(msg)` `log_debug(msg)` `log_set_level(lvl)` `log_set_format(fmt)`
 
 ### Math
-`abs(n)` `sqrt(x)` `pow(b,e)` `sin(x)` `cos(x)` `tan(x)` `asin(x)` `acos(x)` `atan2(y,x)` `log(x)` `log2(x)` `exp(x)` `floor(x)` `ceil(x)` `round(x)`
+`abs(n)` `abs_float(x)` `sqrt(x)` `pow(b,e)` `sin(x)` `cos(x)` `tan(x)` `asin(x)` `acos(x)` `atan2(y,x)` `log(x)` `log2(x)` `exp(x)` `floor(x)` `ceil(x)` `round(x)` `min_of(a,b)` `max_of(a,b)` `sum_of(arr)`
 
 ### String
-`str_len(s)` `str_contains(s,sub)` `str_starts_with(s,p)` `str_ends_with(s,p)` `str_split(s,d)` `str_trim(s)` `str_slice(s,i,j)` `str_replace(s,old,new)` `str_replace_all(s,old,new)` `str_to_int(s)` `str_to_float(s)`
+`str_len(s)` `str_contains(s,sub)` `str_starts_with(s,p)` `str_ends_with(s,p)` `str_split(s,d)` `str_trim(s)` `str_slice(s,i,j)` `str_char_at(s,i)` `str_concat(a,b)` `str_replace(s,old,new)` `str_replace_all(s,old,new)` `str_to_int(s)` `str_to_int_radix(s,radix)` `str_to_float(s)` `int_to_str(n)` `int_to_char(n)` `char_to_str(c)` `char_to_int(c)`
+
+### Character Classification
+`char_is_alpha(c)` `char_is_digit(c)` `char_is_alphanumeric(c)` `char_is_whitespace(c)`
 
 ### Collection
-`len(c)` `vec_new()` `vec_push(v,x)` `vec_pop(v)` `vec_slice(v,i,j)` `vec_concat(a,b)` `vec_reverse(v)` `vec_sort(v)` `vec_index_of(v,x)` `sort_ints(v)` `map_new()` `map_get(m,k)` `map_insert(m,k,v)` `map_keys(m)` `map_contains(m,k)`
+`len(c)` `is_empty(c)` `contains(c,v)` `reverse(v)` `vec_new()` `vec_push(v,x)` `vec_pop(v)` `vec_get(v,i)` `vec_set(v,i,x)` `vec_first(v)` `vec_last(v)` `vec_len(v)` `vec_slice(v,i,j)` `vec_concat(a,b)` `vec_reverse(v)` `vec_sort(v)` `vec_index_of(v,x)` `binary_search(v,x)` `shuffle(v)` `sort_ints(v)` `sort_ints_desc(v)` `sort_floats(v)` `sort_strings(v)` `sort_strings_desc(v)` `map_new()` `map_get(m,k)` `map_insert(m,k,v)` `map_remove(m,k)` `map_keys(m)` `map_values(m)` `map_contains(m,k)` `map_len(m)`
 
 ### Functional (higher-order)
 `map(arr,fn)` `filter(arr,fn)` `reduce(arr,init,fn)` `any(arr,fn)` `all(arr,fn)`
@@ -417,39 +435,70 @@ f main()
 `unwrap(v)` `unwrap_or(v,d)` `expect(v,msg)` `is_some(v)` `is_none(v)` `is_ok(v)` `is_err(v)` `map_opt(opt,fn)` `flatten(opt)` `and_then(opt,fn)`
 
 ### File I/O (needs --allow-read/--allow-write)
-`file_read(p)` `file_write(p,c)` `file_exists(p)` `file_append(p,c)` `file_read_bytes(p)` `file_write_bytes(p,b)` `dir_list(p)` `dir_create(p)` `path_join(a,b)`
+`file_read(p)` `file_write(p,c)` `file_exists(p)` `file_append(p,c)` `file_read_bytes(p)` `file_write_bytes(p,b)` `file_copy(src,dst)` `file_move(src,dst)` `file_remove(p)` `file_size(p)` `file_is_file(p)` `file_is_dir(p)` `dir_list(p)` `dir_create(p)` `dir_create_all(p)` `dir_remove(p)` `dir_remove_all(p)`
+
+### Path Operations
+`path_join(a,b)` `path_parent(p)` `path_filename(p)` `path_stem(p)` `path_extension(p)` `path_absolute(p)` `path_is_absolute(p)` `path_is_relative(p)`
 
 ### Stdlib File I/O (requires `us std.io`)
 `file_read_lines(p)` `file_write_lines(p,lines)`
 
 ### JSON
-`json_parse(s)` `json_stringify(v)` `json_get(o,k)` `json_get_str(o,k)` `json_get_int(o,k)`
+`json_parse(s)` `json_stringify(v)` `json_stringify_pretty(v)` `json_get(o,k)` `json_get_str(o,k)` `json_get_int(o,k)` `json_get_float(o,k)` `json_get_bool(o,k)` `json_get_array(o,k)` `json_has(o,k)` `json_set(o,k,v)` `json_keys(o)` `json_values(o)` `json_object()` `json_array()` `json_null()` `json_from_str(s)` `json_from_int(n)` `json_from_float(x)` `json_from_bool(b)` `json_array_get(a,i)` `json_array_len(a)` `json_type(v)` `json_is_object(v)` `json_is_array(v)` `json_is_string(v)` `json_is_number(v)` `json_is_bool(v)` `json_is_null(v)` `json_to_value(j)`
 
-### Networking (needs --allow-network)
-`http_get(url)` `http_post(url,body)` `http_post_json(url,j)` `http_serve(port,handler)` `tcp_connect(h,p)` `tcp_read(c)` `tcp_write(c,d)` `tls_connect(h,p)`
+### HTTP (needs --allow-network)
+`http_get(url)` `http_post(url,body)` `http_post_json(url,j)` `http_put(url,body)` `http_delete(url)` `http_request_new(method,url)` `http_req_header(req,k,v)` `http_req_param(req,k,v)` `http_req_json(req,j)` `http_req_form(req,data)` `http_serve(port,handler)` `http_response(code,body)` `http_response_with_headers(code,body,hdrs)` `http_json_response(code,json)` `http_file_response(code,path)` `http_redirect(url)`
 
-### Process/Env/Unsafe capabilities
-- Process builtins require `--allow-exec`
-- Environment builtins require `--allow-env`
-- Pointer/memory/FFI-style builtins require `--allow-unsafe`
+### TCP (needs --allow-network)
+`tcp_connect(host,port)` `tcp_listen(host,port)` `tcp_accept(listener)` `tcp_read(conn)` `tcp_read_exact(conn,n)` `tcp_read_line(conn)` `tcp_write(conn,data)` `tcp_write_all(conn,data)` `tcp_close(conn)` `tcp_listener_close(l)` `tcp_local_addr(conn)` `tcp_peer_addr(conn)` `tcp_set_timeout(conn,ms)`
+
+### UDP (needs --allow-network)
+`udp_bind(host,port)` `udp_connect(sock,host,port)` `udp_send(sock,data)` `udp_send_to(sock,data,addr)` `udp_recv(sock)` `udp_recv_from(sock)` `udp_close(sock)`
+
+### TLS (needs --allow-network)
+`tls_connect(host,port)` `tls_read(conn)` `tls_write(conn,data)` `tls_close(conn)`
+
+### DNS (needs --allow-network)
+`dns_lookup(host)` `dns_reverse_lookup(ip)`
 
 ### Database
-`db_open(path)` `db_open_memory()` `db_execute(db,sql)` `db_query(db,sql)` `db_close(db)` `row_get_int(r,i)` `row_get_str(r,i)` `row_get_float(r,i)`
+`db_open(path)` `db_open_memory()` `db_execute(db,sql)` `db_query(db,sql)` `db_query_one(db,sql)` `db_prepare(db,sql)` `db_execute_prepared(stmt,params)` `db_query_prepared(stmt,params)` `db_close(db)` `row_get(r,i)` `row_get_int(r,i)` `row_get_str(r,i)` `row_get_float(r,i)` `row_get_bool(r,i)` `row_is_null(r,i)` `row_len(r)`
 
 ### Async/Channels
-`channel_new()` `channel_send(s,v)` `channel_recv(r)` `mutex_new(v)` `mutex_lock(m)` `mutex_unlock(m)` `sleep_async(s)`
+`channel_new()` `channel_send(s,v)` `channel_recv(r)` `channel_try_send(s,v)` `channel_try_recv(r)` `channel_close(ch)` `mutex_new(v)` `mutex_lock(m)` `mutex_unlock(m)` `mutex_try_lock(m)` `mutex_get(m)` `mutex_set(m,v)` `sleep_async(s)` `await_all(tasks)` `await_any(tasks)` `timeout(future,ms)`
 
 ### Random
-`random()` `random_int(min,max)` `random_bool()` `random_choice(list)` `random_shuffle(list)`
+`random()` `random_int(min,max)` `random_bool()` `random_choice(list)` `random_shuffle(list)` `shuffle(list)`
 
 ### Time
-`time_now()` `time_now_ms()` `time_sleep(s)` `time_format(ts,fmt)`
+`time_now()` `time_now_ms()` `time_sleep(s)` `time_format(ts,fmt)` `time_format_iso(ts)` `time_parse(s,fmt)` `time_parse_iso(s)` `time_from_parts(y,mo,d,h,mi,s)` `time_add(ts,secs)` `time_sub(ts,secs)` `time_diff(a,b)` `time_year(ts)` `time_month(ts)` `time_day(ts)` `time_hour(ts)` `time_minute(ts)` `time_second(ts)` `time_weekday(ts)` `duration_seconds(s)` `duration_minutes(m)` `duration_hours(h)` `duration_days(d)`
 
 ### Regex
-`regex_match(pat,s)` `regex_find(pat,s)` `regex_find_all(pat,s)` `regex_replace_all(pat,s,r)` `regex_split(pat,s)`
+`regex_match(pat,s)` `regex_find(pat,s)` `regex_find_all(pat,s)` `regex_captures(pat,s)` `regex_replace(pat,s,r)` `regex_replace_all(pat,s,r)` `regex_split(pat,s)` `regex_is_valid(pat)`
+
+### Compression
+`gzip_compress(data)` `gzip_decompress(data)` `zlib_compress(data)` `zlib_decompress(data)`
+
+### Hex Encoding
+`hex_encode(s)` `hex_decode(s)` `hex_encode_bytes(b)` `hex_decode_bytes(s)`
+
+### Hashing/UUID
+`hash_string(s)` `uuid_parse(s)`
+
+### Type Introspection
+`type_of(v)` `sizeof(v)` `int(v)` `float(v)`
+
+### Process/System (needs --allow-exec)
+`exec(cmd)` `pid()` `args()` `cwd()` `chdir(p)` `home_dir()` `temp_dir()`
+
+### Environment (needs --allow-env)
+`env_get(k)` `env_set(k,v)` `env_remove(k)` `env_vars()`
 
 ### Assertions
 `assert(cond)` `panic(msg)` `exit(code)`
+
+### Memory/FFI (needs --allow-unsafe)
+`alloc(size)` `alloc_zeroed(size)` `dealloc(ptr)` `mem_copy(dst,src,n)` `mem_set(ptr,val,n)` `ptr_null()` `ptr_is_null(p)` `ptr_addr(p)` `ptr_from_addr(n)` `ptr_offset(p,n)` `str_to_cstr(s)` `cstr_to_str(p)` `cstr_to_str_len(p,n)` `cstr_free(p)` `to_cint(n)` `from_cint(n)` `to_clong(n)` `from_clong(n)` `to_cfloat(x)` `from_cfloat(x)` `to_cdouble(x)` `from_cdouble(x)` `to_cuint(n)` `from_cuint(n)` `to_culong(n)` `from_culong(n)` `to_csize(n)` `from_csize(n)`
 
 ## Stdlib Modules
 
@@ -467,13 +516,12 @@ Import with `us`. These are FORMA functions that compose builtins.
 forma run <file>                        # run program
 forma run <file> --allow-all            # run with all capabilities (DO NOT use on untrusted code)
 forma run <file> --no-check-contracts   # disable contracts (enabled by default)
-forma run <file> --no-optimize         # disable MIR optimization pass
+forma run <file> --no-optimize          # disable MIR optimization pass
 forma check <file>                      # type check only
 forma check <file> --error-format json  # JSON errors
+forma check <file> --partial            # partial check (contracts only)
 forma explain <file> --format json      # contract intent in JSON
 forma explain <file> --examples=3 --seed 42
-# or: forma explain <file> --max-examples 3 --seed 42
-# explain --examples includes valid + invalid (precondition-violating) cases
 forma verify <path> --report --format human
 forma verify <path> --report --format json --examples 20 --seed 42
 forma verify <path> --report --max-steps 10000 --timeout 1000
@@ -484,6 +532,9 @@ forma build <file>                      # build native binary (LLVM)
 forma build <file> --no-optimize        # build without MIR optimization
 forma fmt <file>                        # format code
 forma repl                              # interactive REPL
+forma new <name>                        # create new project (forma.toml + src/main.forma)
+forma init                              # initialize project in current directory
+forma lsp                               # start LSP server for IDE support
 forma typeof <file> --position L:C      # type at position
 forma complete <file> --position L:C    # completions
 ```
