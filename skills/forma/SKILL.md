@@ -1,9 +1,8 @@
 ---
 name: forma
 description: >
-  FORMA programming language reference. Use when writing FORMA (.forma) code,
-  working on the FORMA compiler, or answering questions about FORMA syntax,
-  builtins, contracts, or CLI usage.
+  FORMA programming language reference. Use when writing FORMA (.forma) code
+  or answering questions about FORMA syntax, builtins, contracts, or CLI usage.
 ---
 
 # FORMA Language Skill
@@ -11,8 +10,6 @@ description: >
 FORMA is an indentation-based, AI-optimized systems programming language. It uses
 short keywords, design-by-contract, capability-based sandboxing, and a rich stdlib
 of 316+ builtins.
-
-For the complete builtin reference, read [docs/ai-reference.md](../../docs/ai-reference.md).
 
 ## Core Syntax
 
@@ -48,7 +45,24 @@ Collections: `[T]` list, `[T; N]` fixed, `{K: V}` map, `{T}` set, `(A, B)` tuple
 Special: `T?` Option, `T!E` Result, `&T` shared ref, `&mut T` mutable ref
 Async: `Task[T]`, `Future[T]`, `Sender[T]`, `Receiver[T]`, `Mutex[T]`
 
-## Function
+## Operators
+
+```
+Arithmetic:   + - * / %
+Comparison:   == != < <= > >=
+Logical:      && || !
+Bitwise:      & | ^ << >>
+Assignment:   := (bind)  = += -= *= /= %= (reassign/compound)
+Range:        .. (exclusive)  ..= (inclusive)
+Special:      ? (propagate Result error)
+              ?? (unwrap Option with default)
+              as (type cast)
+              -> (return type)  => (match arm)
+              :: (path)  . (field/method)
+              @ (contract attribute)
+```
+
+## Functions and Closures
 
 ```forma
 f name(a: Int, b: Int) -> Int
@@ -56,11 +70,15 @@ f name(a: Int, b: Int) -> Int
 
 f single_expr(a: Int, b: Int) -> Int = a + b
 
-as f async_fn() -> Str!Str
+as f async_fn() -> Str!Str                   # async function
     aw some_future()?
 
-f with_ref(ref data: [Int]) -> Int          # shared ref param
-f with_mut(ref mut data: [Int]) -> Unit     # mutable ref param
+f with_ref(ref data: [Int]) -> Int           # shared ref param
+f with_mut(ref mut data: [Int]) -> Unit      # mutable ref param
+
+# Closures (typed parameters required)
+doubled := map([1, 2, 3], |x: Int| x * 2)
+transform := |x: Int| -> Int x * 2 + 1
 ```
 
 ## Struct, Enum, Trait, Impl
@@ -130,11 +148,20 @@ f load(path: Str) -> Str!Str
 
 # Default with ?? (Option only)
 name := env_get("USER") ?? "unknown"
+val := str_to_int("abc") ?? 0
+
+# Unwrap with ! (panics on error)
+db := db_open("app.db")!
 
 # Match on Result/Option
 m result
     Ok(v) -> use(v)
     Err(e) -> handle(e)
+
+m str_to_int(s)
+    Some(n) if n > 0 -> Ok(n)
+    Some(_) -> Err("not positive")
+    None -> Err("not a number")
 ```
 
 ## Contracts (Design by Contract)
@@ -168,14 +195,11 @@ total := reduce([1, 2, 3], 0, |acc: Int, x: Int| acc + x)  # 6
 any([1, 2, 3], |x: Int| x > 2)                       # true
 all([1, 2, 3], |x: Int| x > 0)                       # true
 vec_sort([3, 1, 2])                                   # [1, 2, 3]
-```
 
-## Closures
-
-Closures require typed parameters:
-```forma
-|x: Int, y: Int| x + y
-|x: Int| -> Int x * 2
+# Option chaining
+map_opt(Some(5), |x: Int| x * 2)                     # Some(10)
+and_then(Some(5), |x: Int| if x > 0 then Some(x * 10) else None)  # Some(50)
+flatten(Some(Some(42)))                               # Some(42)
 ```
 
 ## Async
@@ -232,29 +256,28 @@ f main() -> Int                      # explicit exit code
 
 ```bash
 forma run <file>                        # run program
-forma run <file> --allow-all            # all capabilities (untrusted: use least-privilege)
+forma run <file> --allow-all            # all capabilities
 forma run <file> --allow-read --allow-network  # specific capabilities
 forma run <file> --no-check-contracts   # disable contract checking
-forma run <file> --no-optimize          # disable MIR optimization
 forma check <file>                      # type check only
 forma check <file> --error-format json  # JSON diagnostic output
 forma explain <file> --format json      # contract explanations
 forma verify <path> --report            # verify contracts with examples
 forma build <file>                      # build native binary (LLVM)
 forma fmt <file>                        # format source code
-forma grammar --format ebnf|json        # export language grammar
 forma new <name>                        # create new project
 forma init                              # init project in current dir
 forma repl                              # interactive REPL
-forma lsp                               # start LSP server
 ```
 
 Capability flags: `--allow-read`, `--allow-write`, `--allow-network`, `--allow-exec`,
 `--allow-env`, `--allow-unsafe`, `--allow-all`
 
-## Key Builtins (Summary)
+**Security:** Prefer least-privilege flags over `--allow-all`. The `--allow-exec`
+flag permits shell command execution and should be treated as full shell access.
+Do not use `--allow-all` on untrusted code.
 
-Full list in [docs/ai-reference.md](../../docs/ai-reference.md).
+## Key Builtins (Summary)
 
 **I/O:** `print(v)` `eprintln(v)` `str(v)` `debug(v)`
 **Math:** `abs(n)` `sqrt(x)` `pow(b,e)` `sin(x)` `cos(x)` `log(x)` `floor(x)` `ceil(x)` `round(x)`
@@ -262,7 +285,7 @@ Full list in [docs/ai-reference.md](../../docs/ai-reference.md).
 **Collection:** `len(c)` `vec_push(v,x)` `vec_pop(v)` `vec_get(v,i)` `map_get(m,k)` `map_insert(m,k,v)` `map_keys(m)`
 **Functional:** `map(arr,fn)` `filter(arr,fn)` `reduce(arr,init,fn)` `any(arr,fn)` `all(arr,fn)`
 **Option/Result:** `unwrap(v)` `unwrap_or(v,d)` `is_some(v)` `is_none(v)` `is_ok(v)` `is_err(v)` `map_opt(opt,fn)`
-**File:** `file_read(p)` `file_write(p,c)` `file_exists(p)` `dir_list(p)`
+**File:** `file_read(p)` `file_write(p,c)` `file_exists(p)` `file_append(p,c)` `dir_list(p)` `dir_create(p)`
 **JSON:** `json_parse(s)` `json_stringify(v)` `json_get(o,k)` `json_object()` `json_set(o,k,v)`
 **HTTP:** `http_get(url)` `http_post(url,body)` `http_serve(port,handler)` `http_response(code,body)`
 **DB:** `db_open(path)` `db_execute(db,sql)` `db_query(db,sql)` `db_close(db)`
@@ -270,6 +293,12 @@ Full list in [docs/ai-reference.md](../../docs/ai-reference.md).
 **Random:** `random()` `random_int(min,max)` `shuffle(list)`
 **Time:** `time_now()` `time_sleep(s)` `time_format(ts,fmt)`
 **Regex:** `regex_match(pat,s)` `regex_find_all(pat,s)` `regex_replace(pat,s,r)`
+**Path:** `path_join(a,b)` `path_parent(p)` `path_filename(p)` `path_extension(p)`
+**Process:** `exec(cmd)` `args()` `cwd()` `exit(code)`
+
+316+ builtins total across I/O, math, string, collection, file, JSON, HTTP, TCP, UDP,
+TLS, DNS, database, async, random, time, regex, compression, hashing, FFI, and more.
+Run `forma complete <file> --position 1:1` for a full list.
 
 ## Stdlib Modules
 
@@ -283,6 +312,27 @@ us std.map     # map_get_or, map_update
 ```
 
 ## Common Patterns
+
+### File I/O
+```forma
+f main()
+    # Read a file (returns Result — use ? or !)
+    content := file_read("input.txt")!
+    lines := str_split(content, "\n")
+    for line in lines
+        print(line)
+
+    # Write a file
+    file_write("output.txt", "hello world")!
+
+    # Append to a file
+    file_append("log.txt", f"entry: {time_now()}\n")!
+
+    # Check existence
+    if file_exists("config.json")
+        cfg := json_parse(file_read("config.json")!)
+        print(json_get_str(cfg, "name"))
+```
 
 ### HTTP Server
 ```forma
@@ -307,9 +357,22 @@ f main()
     db_close(db)
 ```
 
-### Option Chaining
+### Struct with Methods
 ```forma
-map_opt(Some(5), |x: Int| x * 2)                                    # Some(10)
-and_then(Some(5), |x: Int| if x > 0 then Some(x * 10) else None)   # Some(50)
-flatten(Some(Some(42)))                                              # Some(42)
+s Point
+    x: Float
+    y: Float
+
+i Point
+    f distance(&self) -> Float
+        sqrt(self.x * self.x + self.y * self.y)
+
+    f translate(&self, dx: Float, dy: Float) -> Point
+        Point { x: self.x + dx, y: self.y + dy }
+
+f main()
+    p := Point { x: 3.0, y: 4.0 }
+    print(f"distance: {p.distance()}")
+    p2 := p.translate(1.0, 2.0)
+    print(f"moved to: {p2.x}, {p2.y}")
 ```
